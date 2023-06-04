@@ -26,7 +26,7 @@ namespace Ryujinx.Ava.UI.Windows
 
         public ModManagerWindow(VirtualFileSystem virtualFileSystem, ulong titleId, string titleName)
         {
-            DataContext = ViewModel = new ModManagerViewModel();
+            DataContext = ViewModel = new ModManagerViewModel(titleId, titleName);
 
             InitializeComponent();
         }
@@ -78,7 +78,7 @@ namespace Ryujinx.Ava.UI.Windows
             {
                 if (button.DataContext is ModModel model)
                 {
-                    OpenHelper.LocateFile(model.ContainerPath);
+                    OpenHelper.LocateFile(model.Path);
                 }
             }
         }

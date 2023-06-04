@@ -17,14 +17,13 @@ namespace Ryujinx.Ava.UI.Models
             }
         }
 
-        public string ContainerPath { get; }
-        public string FullPath { get; }
-        public string FileName => Path.GetFileName(ContainerPath);
+        public string Path { get; }
+        public string Name { get; }
 
-        public ModModel(string containerPath, string fullPath, bool enabled)
+        public ModModel(string path, string name, bool enabled)
         {
-            ContainerPath = containerPath;
-            FullPath = fullPath;
+            Path = path;
+            Name = name;
             Enabled = enabled;
         }
     }

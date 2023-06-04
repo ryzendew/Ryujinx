@@ -92,7 +92,7 @@
                                     MaxLines="2"
                                     TextWrapping="Wrap"
                                     TextTrimming="CharacterEllipsis"
-                                    Text="{Binding FileName}" />
+                                    Text="{Binding Name}" />
                                 <StackPanel
                                     Grid.Column="1"
                                     Spacing="10"
