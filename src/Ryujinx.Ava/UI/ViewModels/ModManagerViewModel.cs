@@ -138,6 +138,8 @@ namespace Ryujinx.Ava.UI.ViewModels
                 Mods.Add(new ModModel(mod.Path.FullName, mod.Name, enabled));
             }
 
+            SelectedMods = new(Mods.Where(x => x.Enabled));
+
             Sort();
         }
 

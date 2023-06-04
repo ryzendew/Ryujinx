@@ -78,7 +78,7 @@ namespace Ryujinx.Ava.UI.Windows
             {
                 if (button.DataContext is ModModel model)
                 {
-                    OpenHelper.LocateFile(model.Path);
+                    OpenHelper.OpenFolder(model.Path);
                 }
             }
         }
