@@ -183,24 +183,37 @@ namespace Ryujinx.Ava.UI.ViewModels
             Sort();
         }
 
-        private void AddMod(string directory)
+        private void AddMod(DirectoryInfo directory)
         {
-            if (Directory.Exists(directory) && Mods.All(x => !x.Path.Contains(directory)))
+            var directories = Directory.GetDirectories(directory.ToString(), "*", SearchOption.AllDirectories);
+            var destinationDir = ModLoader.GetTitleDir(ModLoader.GetModsBasePath(), _titleId.ToString("x16"));
+
+            foreach (var dir in directories)
             {
-                using FileStream file = new(directory, FileMode.Open, FileAccess.Read);
+                string dirToCreate = dir.Replace(directory.Parent.ToString(), destinationDir);
 
-                try
-                {
-
-                }
-                catch (Exception ex)
+                // Mod already exists
+                if (Directory.Exists(dirToCreate))
                 {
                     Dispatcher.UIThread.Post(async () =>
                     {
-                        await ContentDialogHelper.CreateErrorDialog(LocaleManager.Instance.UpdateAndGetDynamicValue(LocaleKeys.DialogLoadModErrorMessage, ex.Message, directory));
+                        await ContentDialogHelper.CreateErrorDialog(LocaleManager.Instance.UpdateAndGetDynamicValue(LocaleKeys.DialogLoadModErrorMessage, "Director", dirToCreate));
                     });
+
+                    return;
                 }
+
+                Directory.CreateDirectory(dirToCreate);
             }
+
+            var files = Directory.GetFiles(directory.ToString(), "*", SearchOption.AllDirectories);
+
+            foreach (var file in files)
+            {
+                File.Copy(file, file.Replace(directory.Parent.ToString(), destinationDir), true);
+            }
+
+            LoadMods(_titleId);
         }
 
         public async void Add()
@@ -216,7 +229,7 @@ namespace Ryujinx.Ava.UI.ViewModels
 
                 if (directory != null)
                 {
-                    AddMod(directory);
+                    AddMod(new DirectoryInfo(directory));
                 }
             }
         }
