@@ -429,6 +429,7 @@
   "DlcManagerRemoveAllButton": "Remove All",
   "DlcManagerEnableAllButton": "Enable All",
   "DlcManagerDisableAllButton": "Disable All",
+  "ModManagerDeleteAllButton": "Delete All",
   "MenuBarOptionsChangeLanguage": "Change Language",
   "MenuBarShowFileTypes": "Show File Types",
   "CommonSort": "Sort",

@@ -61,13 +61,13 @@ namespace Ryujinx.Ava.UI.Windows
             ((ContentDialog)Parent).Hide();
         }
 
-        private void RemoveMod(object sender, RoutedEventArgs e)
+        private void DeleteMod(object sender, RoutedEventArgs e)
         {
             if (sender is Button button)
             {
                 if (button.DataContext is ModModel model)
                 {
-                    ViewModel.Remove(model);
+                    ViewModel.Delete(model);
                 }
             }
         }

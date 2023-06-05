@@ -109,6 +109,8 @@ namespace Ryujinx.Ava.UI.ViewModels
 
         private void LoadMods(ulong titleId)
         {
+            Mods.Clear();
+
             string modsBasePath = ModLoader.GetModsBasePath();
 
             var modCache = new ModLoader.ModCache();
@@ -176,8 +178,10 @@ namespace Ryujinx.Ava.UI.ViewModels
             JsonHelper.SerializeToFile(_modJsonPath, _modData, SerializerContext.ModMetadata);
         }
 
-        public void Remove(ModModel model)
+        public void Delete(ModModel model)
         {
+            Directory.Delete(model.Path, true);
+
             Mods.Remove(model);
             OnPropertyChanged(nameof(ModCount));
             Sort();
@@ -234,8 +238,13 @@ namespace Ryujinx.Ava.UI.ViewModels
             }
         }
 
-        public void RemoveAll()
+        public void DeleteAll()
         {
+            foreach (var mod in Mods)
+            {
+                Directory.Delete(mod.Path, true);
+            }
+
             Mods.Clear();
             OnPropertyChanged(nameof(ModCount));
             Sort();

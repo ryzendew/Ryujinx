@@ -116,7 +116,7 @@
                                         Padding="10"
                                         MinWidth="0"
                                         MinHeight="0"
-                                        Click="RemoveMod">
+                                        Click="DeleteMod">
                                         <ui:SymbolIcon
                                             Symbol="Cancel"
                                             HorizontalAlignment="Center"
@@ -152,8 +152,8 @@
                     Name="RemoveAllButton"
                     MinWidth="90"
                     Margin="5"
-                    Command="{ReflectionBinding RemoveAll}">
-                    <TextBlock Text="{locale:Locale DlcManagerRemoveAllButton}" />
+                    Command="{ReflectionBinding DeleteAll}">
+                    <TextBlock Text="{locale:Locale ModManagerDeleteAllButton}" />
                 </Button>
             </StackPanel>
             <StackPanel
