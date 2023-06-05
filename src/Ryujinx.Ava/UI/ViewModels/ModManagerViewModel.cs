@@ -109,33 +109,29 @@ namespace Ryujinx.Ava.UI.ViewModels
 
         private void LoadMods(ulong titleId)
         {
-            string modsBasePath = ModLoader.GetSdModsBasePath();
+            string modsBasePath = ModLoader.GetModsBasePath();
 
             var modCache = new ModLoader.ModCache();
             ModLoader.QueryContentsDir(modCache, new DirectoryInfo(Path.Combine(modsBasePath, "contents")), titleId);
 
             foreach (var mod in modCache.RomfsDirs)
             {
-                var enabled = _modData.Mods.Exists(x => x.Path == mod.Path.FullName);
-                Mods.Add(new ModModel(mod.Path.FullName, mod.Name, enabled));
+                Mods.Add(new ModModel(mod.Path.FullName, mod.Name, mod.Enabled));
             }
 
             foreach (var mod in modCache.RomfsContainers)
             {
-                var enabled = _modData.Mods.Exists(x => x.Path == mod.Path.FullName);
-                Mods.Add(new ModModel(mod.Path.FullName, mod.Name, enabled));
+                Mods.Add(new ModModel(mod.Path.FullName, mod.Name, mod.Enabled));
             }
 
             foreach (var mod in modCache.ExefsDirs)
             {
-                var enabled = _modData.Mods.Exists(x => x.Path == mod.Path.FullName);
-                Mods.Add(new ModModel(mod.Path.FullName, mod.Name, enabled));
+                Mods.Add(new ModModel(mod.Path.FullName, mod.Name, mod.Enabled));
             }
 
             foreach (var mod in modCache.ExefsContainers)
             {
-                var enabled = _modData.Mods.Exists(x => x.Path == mod.Path.FullName);
-                Mods.Add(new ModModel(mod.Path.FullName, mod.Name, enabled));
+                Mods.Add(new ModModel(mod.Path.FullName, mod.Name, mod.Enabled));
             }
 
             SelectedMods = new(Mods.Where(x => x.Enabled));
