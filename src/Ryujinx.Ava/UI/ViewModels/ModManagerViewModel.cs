@@ -118,7 +118,11 @@ namespace Ryujinx.Ava.UI.ViewModels
 
             foreach (var mod in modCache.RomfsDirs)
             {
-                Mods.Add(new ModModel(mod.Path.FullName, mod.Name, mod.Enabled));
+                var modModel = new ModModel(mod.Path.Parent.FullName, mod.Name, mod.Enabled);
+                if (Mods.All(x => x.Path != mod.Path.Parent.FullName))
+                {
+                    Mods.Add(modModel);
+                }
             }
 
             foreach (var mod in modCache.RomfsContainers)
@@ -128,7 +132,11 @@ namespace Ryujinx.Ava.UI.ViewModels
 
             foreach (var mod in modCache.ExefsDirs)
             {
-                Mods.Add(new ModModel(mod.Path.FullName, mod.Name, mod.Enabled));
+                var modModel = new ModModel(mod.Path.Parent.FullName, mod.Name, mod.Enabled);
+                if (Mods.All(x => x.Path != mod.Path.Parent.FullName))
+                {
+                    Mods.Add(modModel);
+                }
             }
 
             foreach (var mod in modCache.ExefsContainers)
