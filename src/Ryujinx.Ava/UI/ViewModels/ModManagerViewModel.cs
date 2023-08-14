@@ -19,18 +19,18 @@ namespace Ryujinx.Ava.UI.ViewModels
 {
     public class ModManagerViewModel : BaseModel
     {
-        public ModMetadata _modData;
-        public readonly string _modJsonPath;
+        private readonly ModMetadata _modData;
+        private readonly string _modJsonPath;
 
-        public AvaloniaList<ModModel> _mods = new();
-        public AvaloniaList<ModModel> _views = new();
-        public AvaloniaList<ModModel> _selectedMods = new();
+        private AvaloniaList<ModModel> _mods = new();
+        private AvaloniaList<ModModel> _views = new();
+        private AvaloniaList<ModModel> _selectedMods = new();
 
         private string _search;
-        private ulong _titleId { get; }
-        private IStorageProvider _storageProvider;
+        private ulong _titleId;
+        private readonly IStorageProvider _storageProvider;
 
-        private static readonly ModMetadataJsonSerializerContext SerializerContext = new(JsonHelper.GetDefaultSerializerOptions());
+        private static readonly ModMetadataJsonSerializerContext _serializerContext = new(JsonHelper.GetDefaultSerializerOptions());
 
         public AvaloniaList<ModModel> Mods
         {
@@ -93,7 +93,7 @@ namespace Ryujinx.Ava.UI.ViewModels
 
             try
             {
-                _modData = JsonHelper.DeserializeFromFile(_modJsonPath, SerializerContext.ModMetadata);
+                _modData = JsonHelper.DeserializeFromFile(_modJsonPath, _serializerContext.ModMetadata);
             }
             catch
             {
@@ -186,7 +186,7 @@ namespace Ryujinx.Ava.UI.ViewModels
                 });
             }
 
-            JsonHelper.SerializeToFile(_modJsonPath, _modData, SerializerContext.ModMetadata);
+            JsonHelper.SerializeToFile(_modJsonPath, _modData, _serializerContext.ModMetadata);
         }
 
         public void Delete(ModModel model)

@@ -38,7 +38,7 @@ namespace Ryujinx.HLE.HOS
         private const string AmsNroPatchDir = "nro_patches";
         private const string AmsKipPatchDir = "kip_patches";
 
-        private static readonly ModMetadataJsonSerializerContext SerializerContext = new(JsonHelper.GetDefaultSerializerOptions());
+        private static readonly ModMetadataJsonSerializerContext _serializerContext = new(JsonHelper.GetDefaultSerializerOptions());
 
         public readonly struct Mod<T> where T : FileSystemInfo
         {
@@ -169,7 +169,7 @@ namespace Ryujinx.HLE.HOS
 
             try
             {
-                ModData = JsonHelper.DeserializeFromFile(ModJsonPath, SerializerContext.ModMetadata);
+                ModData = JsonHelper.DeserializeFromFile(ModJsonPath, _serializerContext.ModMetadata);
             }
             catch
             {
@@ -275,7 +275,7 @@ namespace Ryujinx.HLE.HOS
 
             try
             {
-                ModData = JsonHelper.DeserializeFromFile(ModJsonPath, SerializerContext.ModMetadata);
+                ModData = JsonHelper.DeserializeFromFile(ModJsonPath, _serializerContext.ModMetadata);
             }
             catch
             {
