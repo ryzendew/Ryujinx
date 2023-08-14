@@ -8,10 +8,8 @@ using Ryujinx.Ava.Common.Locale;
 using Ryujinx.Ava.UI.Helpers;
 using Ryujinx.Ava.UI.Models;
 using Ryujinx.Common.Configuration;
-using Ryujinx.Common.Logging;
 using Ryujinx.Common.Utilities;
 using Ryujinx.HLE.HOS;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -19,7 +17,6 @@ namespace Ryujinx.Ava.UI.ViewModels
 {
     public class ModManagerViewModel : BaseModel
     {
-        private readonly ModMetadata _modData;
         private readonly string _modJsonPath;
 
         private AvaloniaList<ModModel> _mods = new();
@@ -91,28 +88,13 @@ namespace Ryujinx.Ava.UI.ViewModels
                 _storageProvider = desktop.MainWindow.StorageProvider;
             }
 
-            try
-            {
-                _modData = JsonHelper.DeserializeFromFile(_modJsonPath, _serializerContext.ModMetadata);
-            }
-            catch
-            {
-                Logger.Warning?.Print(LogClass.Application, $"Failed to deserialize mod data for {_titleId} at {_modJsonPath}");
-
-                _modData = new ModMetadata
-                {
-                    Mods = new List<Mod>()
-                };
-
-                Save();
-            }
-
             LoadMods(titleId);
         }
 
         private void LoadMods(ulong titleId)
         {
             Mods.Clear();
+            SelectedMods.Clear();
 
             string modsBasePath = ModLoader.GetModsBasePath();
 
@@ -175,11 +157,11 @@ namespace Ryujinx.Ava.UI.ViewModels
 
         public void Save()
         {
-            _modData.Mods.Clear();
+            ModMetadata modData = new();
 
             foreach (ModModel mod in SelectedMods)
             {
-                _modData.Mods.Add(new Mod
+                modData.Mods.Add(new Mod
                 {
                     Name = mod.Name,
                     Path = mod.Path,
@@ -187,7 +169,7 @@ namespace Ryujinx.Ava.UI.ViewModels
                 });
             }
 
-            JsonHelper.SerializeToFile(_modJsonPath, _modData, _serializerContext.ModMetadata);
+            JsonHelper.SerializeToFile(_modJsonPath, modData, _serializerContext.ModMetadata);
         }
 
         public void Delete(ModModel model)

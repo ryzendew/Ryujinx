@@ -164,16 +164,16 @@ namespace Ryujinx.HLE.HOS
         {
             System.Text.StringBuilder types = new();
 
-            string ModJsonPath = Path.Combine(AppDataManager.GamesDirPath, titleId, "mods.json");
-            ModMetadata? ModData = null;
+            string modJsonPath = Path.Combine(AppDataManager.GamesDirPath, titleId, "mods.json");
+            ModMetadata modMetadata = new();
 
             try
             {
-                ModData = JsonHelper.DeserializeFromFile(ModJsonPath, _serializerContext.ModMetadata);
+                modMetadata = JsonHelper.DeserializeFromFile(modJsonPath, _serializerContext.ModMetadata);
             }
             catch
             {
-                Logger.Warning?.Print(LogClass.ModLoader, $"Failed to deserialize mod data for {titleId} at {ModJsonPath}");
+                Logger.Warning?.Print(LogClass.ModLoader, $"Failed to deserialize mod data for {titleId} at {modJsonPath}");
             }
 
             foreach (var modDir in dir.EnumerateDirectories())
@@ -185,11 +185,12 @@ namespace Ryujinx.HLE.HOS
                 {
                     bool enabled;
 
-                    if (ModData.Value.Mods.Find(x => modDir.FullName.Contains(x.Path)) is Mod modData)
+                    try
                     {
+                        var modData = modMetadata.Mods.Find(x => modDir.FullName.Contains(x.Path));
                         enabled = modData.Enabled;
                     }
-                    else
+                    catch
                     {
                         // Mod is not in the list yet. New mods should be enabled by default.
                         enabled = true;
@@ -202,11 +203,12 @@ namespace Ryujinx.HLE.HOS
                 {
                     bool enabled;
 
-                    if (ModData.Value.Mods.Find(x => modDir.FullName.Contains(x.Path)) is Mod modData)
+                    try
                     {
+                        var modData = modMetadata.Mods.Find(x => modDir.FullName.Contains(x.Path));
                         enabled = modData.Enabled;
                     }
-                    else
+                    catch
                     {
                         // Mod is not in the list yet. New mods should be enabled by default.
                         enabled = true;
@@ -290,16 +292,16 @@ namespace Ryujinx.HLE.HOS
                 return;
             }
 
-            string ModJsonPath = Path.Combine(AppDataManager.GamesDirPath, titleId.ToString("x16"), "mods.json");
-            ModMetadata? ModData = null;
+            string modJsonPath = Path.Combine(AppDataManager.GamesDirPath, titleId.ToString("x16"), "mods.json");
+            ModMetadata modMetadata = new();
 
             try
             {
-                ModData = JsonHelper.DeserializeFromFile(ModJsonPath, _serializerContext.ModMetadata);
+                modMetadata = JsonHelper.DeserializeFromFile(modJsonPath, _serializerContext.ModMetadata);
             }
             catch
             {
-                Logger.Warning?.Print(LogClass.ModLoader, $"Failed to deserialize mod data for {titleId} at {ModJsonPath}");
+                Logger.Warning?.Print(LogClass.ModLoader, $"Failed to deserialize mod data for {titleId} at {modJsonPath}");
             }
 
             var fsFile = new FileInfo(Path.Combine(titleDir.FullName, RomfsContainer));
@@ -307,11 +309,12 @@ namespace Ryujinx.HLE.HOS
             {
                 bool enabled;
 
-                if (ModData.Value.Mods.Find(x => fsFile.FullName.Contains(x.Path)) is Mod mod)
+                try
                 {
-                    enabled = mod.Enabled;
+                    var modData = modMetadata.Mods.Find(x => fsFile.FullName.Contains(x.Path));
+                    enabled = modData.Enabled;
                 }
-                else
+                catch
                 {
                     // Mod is not in the list yet. New mods should be enabled by default.
                     enabled = true;
@@ -325,11 +328,12 @@ namespace Ryujinx.HLE.HOS
             {
                 bool enabled;
 
-                if (ModData.Value.Mods.Find(x => fsFile.FullName.Contains(x.Path)) is Mod mod)
+                try
                 {
-                    enabled = mod.Enabled;
+                    var modData = modMetadata.Mods.Find(x => fsFile.FullName.Contains(x.Path));
+                    enabled = modData.Enabled;
                 }
-                else
+                catch
                 {
                     // Mod is not in the list yet. New mods should be enabled by default.
                     enabled = true;
