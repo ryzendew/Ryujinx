@@ -24,21 +24,21 @@ namespace Ryujinx.Ava.UI.Windows
             InitializeComponent();
         }
 
-        public ModManagerWindow(VirtualFileSystem virtualFileSystem, ulong titleId, string titleName)
+        public ModManagerWindow(ulong titleId)
         {
-            DataContext = ViewModel = new ModManagerViewModel(titleId, titleName);
+            DataContext = ViewModel = new ModManagerViewModel(titleId);
 
             InitializeComponent();
         }
 
-        public static async Task Show(VirtualFileSystem virtualFileSystem, ulong titleId, string titleName)
+        public static async Task Show(ulong titleId, string titleName)
         {
             ContentDialog contentDialog = new()
             {
                 PrimaryButtonText = "",
                 SecondaryButtonText = "",
                 CloseButtonText = "",
-                Content = new ModManagerWindow(virtualFileSystem, titleId, titleName),
+                Content = new ModManagerWindow(titleId),
                 Title = string.Format(LocaleManager.Instance[LocaleKeys.ModWindowHeading], titleName, titleId.ToString("X16"))
             };
 

@@ -132,7 +132,7 @@ namespace Ryujinx.Ava.UI.Controls
 
             if (viewModel?.SelectedApplication != null)
             {
-                await ModManagerWindow.Show(viewModel.VirtualFileSystem, ulong.Parse(viewModel.SelectedApplication.TitleId, NumberStyles.HexNumber), viewModel.SelectedApplication.TitleName);
+                await ModManagerWindow.Show(ulong.Parse(viewModel.SelectedApplication.TitleId, NumberStyles.HexNumber), viewModel.SelectedApplication.TitleName);
             }
         }
 

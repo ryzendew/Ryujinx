@@ -1,6 +1,7 @@
+using Avalonia;
 using Avalonia.Collections;
-using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using DynamicData;
 using Ryujinx.Ava.Common.Locale;
@@ -10,7 +11,6 @@ using Ryujinx.Common.Configuration;
 using Ryujinx.Common.Logging;
 using Ryujinx.Common.Utilities;
 using Ryujinx.HLE.HOS;
-using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -26,10 +26,9 @@ namespace Ryujinx.Ava.UI.ViewModels
         public AvaloniaList<ModModel> _views = new();
         public AvaloniaList<ModModel> _selectedMods = new();
 
-        private ulong _titleId { get; }
-        private string _titleName { get; }
-
         private string _search;
+        private ulong _titleId { get; }
+        private IStorageProvider _storageProvider;
 
         private static readonly ModMetadataJsonSerializerContext SerializerContext = new(JsonHelper.GetDefaultSerializerOptions());
 
@@ -81,12 +80,16 @@ namespace Ryujinx.Ava.UI.ViewModels
             get => string.Format(LocaleManager.Instance[LocaleKeys.ModWindowHeading], Mods.Count);
         }
 
-        public ModManagerViewModel(ulong titleId, string titleName)
+        public ModManagerViewModel(ulong titleId)
         {
             _titleId = titleId;
-            _titleName = titleName;
 
             _modJsonPath = Path.Combine(AppDataManager.GamesDirPath, titleId.ToString("x16"), "mods.json");
+
+            if (Application.Current.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            {
+                _storageProvider = desktop.MainWindow.StorageProvider;
+            }
 
             try
             {
@@ -230,19 +233,14 @@ namespace Ryujinx.Ava.UI.ViewModels
 
         public async void Add()
         {
-            OpenFolderDialog dialog = new()
+            var result = await _storageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
             {
                 Title = LocaleManager.Instance[LocaleKeys.SelectModDialogTitle]
-            };
+            });
 
-            if (Avalonia.Application.Current.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            foreach (var folder in result)
             {
-                string directory = await dialog.ShowAsync(desktop.MainWindow);
-
-                if (directory != null)
-                {
-                    AddMod(new DirectoryInfo(directory));
-                }
+                AddMod(new DirectoryInfo(folder.Path.LocalPath));
             }
         }
 
