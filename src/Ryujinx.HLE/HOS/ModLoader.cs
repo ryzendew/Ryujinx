@@ -183,14 +183,14 @@ namespace Ryujinx.HLE.HOS
 
                 if (StrEquals(RomfsDir, modDir.Name))
                 {
-                    bool enabled = !ModData.HasValue || ModData.Value.Mods.Exists(x => x.Path == modDir.FullName);
+                    bool enabled = !ModData.HasValue || ModData.Value.Mods.Exists(x => modDir.FullName.Contains(x.Path));
 
                     mods.RomfsDirs.Add(mod = new Mod<DirectoryInfo>(dir.Name, modDir, enabled));
                     types.Append('R');
                 }
                 else if (StrEquals(ExefsDir, modDir.Name))
                 {
-                    bool enabled = !ModData.HasValue || ModData.Value.Mods.Exists(x => x.Path == modDir.FullName);
+                    bool enabled = !ModData.HasValue || ModData.Value.Mods.Exists(x => modDir.FullName.Contains(x.Path));
 
                     mods.ExefsDirs.Add(mod = new Mod<DirectoryInfo>(dir.Name, modDir, enabled));
                     types.Append('E');
