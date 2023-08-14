@@ -159,13 +159,13 @@ namespace Ryujinx.Ava.UI.ViewModels
         {
             ModMetadata modData = new();
 
-            foreach (ModModel mod in SelectedMods)
+            foreach (ModModel mod in Mods)
             {
                 modData.Mods.Add(new Mod
                 {
                     Name = mod.Name,
                     Path = mod.Path,
-                    Enabled = mod.Enabled,
+                    Enabled = SelectedMods.Contains(mod),
                 });
             }
 
