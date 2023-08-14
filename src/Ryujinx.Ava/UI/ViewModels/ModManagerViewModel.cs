@@ -27,7 +27,7 @@ namespace Ryujinx.Ava.UI.ViewModels
         private AvaloniaList<ModModel> _selectedMods = new();
 
         private string _search;
-        private ulong _titleId;
+        private readonly ulong _titleId;
         private readonly IStorageProvider _storageProvider;
 
         private static readonly ModMetadataJsonSerializerContext _serializerContext = new(JsonHelper.GetDefaultSerializerOptions());

@@ -39,7 +39,7 @@ namespace Ryujinx.Ava.UI.ViewModels
 
         private string _search;
         private readonly ulong _titleId;
-        private IStorageProvider _storageProvider;
+        private readonly IStorageProvider _storageProvider;
 
         private static readonly DownloadableContentJsonSerializerContext _serializerContext = new(JsonHelper.GetDefaultSerializerOptions());
 
