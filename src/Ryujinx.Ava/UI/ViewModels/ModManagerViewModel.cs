@@ -183,6 +183,7 @@ namespace Ryujinx.Ava.UI.ViewModels
                 {
                     Name = mod.Name,
                     Path = mod.Path,
+                    Enabled = mod.Enabled,
                 });
             }
 

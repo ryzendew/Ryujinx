@@ -183,14 +183,34 @@ namespace Ryujinx.HLE.HOS
 
                 if (StrEquals(RomfsDir, modDir.Name))
                 {
-                    bool enabled = !ModData.HasValue || ModData.Value.Mods.Exists(x => modDir.FullName.Contains(x.Path));
+                    bool enabled;
+
+                    if (ModData.Value.Mods.Find(x => modDir.FullName.Contains(x.Path)) is Mod modData)
+                    {
+                        enabled = modData.Enabled;
+                    }
+                    else
+                    {
+                        // Mod is not in the list yet. New mods should be enabled by default.
+                        enabled = true;
+                    }
 
                     mods.RomfsDirs.Add(mod = new Mod<DirectoryInfo>(dir.Name, modDir, enabled));
                     types.Append('R');
                 }
                 else if (StrEquals(ExefsDir, modDir.Name))
                 {
-                    bool enabled = !ModData.HasValue || ModData.Value.Mods.Exists(x => modDir.FullName.Contains(x.Path));
+                    bool enabled;
+
+                    if (ModData.Value.Mods.Find(x => modDir.FullName.Contains(x.Path)) is Mod modData)
+                    {
+                        enabled = modData.Enabled;
+                    }
+                    else
+                    {
+                        // Mod is not in the list yet. New mods should be enabled by default.
+                        enabled = true;
+                    }
 
                     mods.ExefsDirs.Add(mod = new Mod<DirectoryInfo>(dir.Name, modDir, enabled));
                     types.Append('E');
@@ -285,7 +305,17 @@ namespace Ryujinx.HLE.HOS
             var fsFile = new FileInfo(Path.Combine(titleDir.FullName, RomfsContainer));
             if (fsFile.Exists)
             {
-                bool enabled = !ModData.HasValue || ModData.Value.Mods.Exists(x => fsFile.FullName.Contains(x.Path));
+                bool enabled;
+
+                if (ModData.Value.Mods.Find(x => fsFile.FullName.Contains(x.Path)) is Mod mod)
+                {
+                    enabled = mod.Enabled;
+                }
+                else
+                {
+                    // Mod is not in the list yet. New mods should be enabled by default.
+                    enabled = true;
+                }
 
                 mods.RomfsContainers.Add(new Mod<FileInfo>($"<{titleDir.Name} RomFs>", fsFile, enabled));
             }
@@ -293,7 +323,17 @@ namespace Ryujinx.HLE.HOS
             fsFile = new FileInfo(Path.Combine(titleDir.FullName, ExefsContainer));
             if (fsFile.Exists)
             {
-                bool enabled = !ModData.HasValue || ModData.Value.Mods.Exists(x => fsFile.FullName.Contains(x.Path));
+                bool enabled;
+
+                if (ModData.Value.Mods.Find(x => fsFile.FullName.Contains(x.Path)) is Mod mod)
+                {
+                    enabled = mod.Enabled;
+                }
+                else
+                {
+                    // Mod is not in the list yet. New mods should be enabled by default.
+                    enabled = true;
+                }
 
                 mods.ExefsContainers.Add(new Mod<FileInfo>($"<{titleDir.Name} ExeFs>", fsFile, enabled));
             }

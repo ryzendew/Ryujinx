@@ -4,5 +4,6 @@ namespace Ryujinx.Common.Configuration
     {
         public string Name { get; set; }
         public string Path { get; set; }
+        public bool Enabled { get; set; }
     }
 }
