@@ -58,6 +58,7 @@ using InputManager = Ryujinx.Input.HLE.InputManager;
 using IRenderer = Ryujinx.Graphics.GAL.IRenderer;
 using Key = Ryujinx.Input.Key;
 using MouseButton = Ryujinx.Input.MouseButton;
+using PresentIntervalState = Ryujinx.Common.Configuration.PresentIntervalState;
 using ScalingFilter = Ryujinx.Common.Configuration.ScalingFilter;
 using Size = Avalonia.Size;
 using Switch = Ryujinx.HLE.Switch;
@@ -189,6 +190,9 @@ namespace Ryujinx.Ava
             ConfigurationState.Instance.Graphics.ScalingFilter.Event += UpdateScalingFilter;
             ConfigurationState.Instance.Graphics.ScalingFilterLevel.Event += UpdateScalingFilterLevel;
             ConfigurationState.Instance.Graphics.EnableColorSpacePassthrough.Event += UpdateColorSpacePassthrough;
+            ConfigurationState.Instance.Graphics.PresentIntervalState.Event += UpdatePresentIntervalState;
+            ConfigurationState.Instance.Graphics.CustomPresentInterval.Event += UpdateCustomPresentIntervalValue;
+            ConfigurationState.Instance.Graphics.EnableCustomPresentInterval.Event += UpdateCustomPresentIntervalEnabled;
 
             ConfigurationState.Instance.System.EnableInternetAccess.Event += UpdateEnableInternetAccessState;
             ConfigurationState.Instance.Multiplayer.LanInterfaceId.Event += UpdateLanInterfaceIdState;
@@ -234,6 +238,37 @@ namespace Ryujinx.Ava
         private void UpdateColorSpacePassthrough(object sender, ReactiveEventArgs<bool> e)
         {
             _renderer.Window?.SetColorSpacePassthrough((bool)ConfigurationState.Instance.Graphics.EnableColorSpacePassthrough.Value);
+        }
+
+        private void UpdatePresentIntervalState(object sender, ReactiveEventArgs<PresentIntervalState> e)
+        {
+            if (Device != null)
+            {
+                Device.PresentIntervalState = e.NewValue;
+                Device.UpdatePresentInterval();
+            }
+            //vulkan present mode may change in response, so recreate the swapchain
+            _renderer.Window?.ChangePresentIntervalState((Ryujinx.Graphics.GAL.PresentIntervalState)e.NewValue);
+            ConfigurationState.Instance.Graphics.PresentIntervalState.Value = e.NewValue;
+            ConfigurationState.Instance.ToFileFormat().SaveConfig(Program.ConfigurationPath);
+        }
+
+        private void UpdateCustomPresentIntervalValue(object sender, ReactiveEventArgs<int> e)
+        {
+            if (Device != null)
+            {
+                Device.TargetPresentInterval = e.NewValue;
+                Device.UpdatePresentInterval();
+            }
+        }
+
+        private void UpdateCustomPresentIntervalEnabled(object sender, ReactiveEventArgs<bool> e)
+        {
+            if (Device != null)
+            {
+                Device.CustomPresentIntervalEnabled = e.NewValue;
+                Device.UpdatePresentInterval();
+            }
         }
 
         private void ShowCursor()
@@ -515,6 +550,12 @@ namespace Ryujinx.Ava
             }
         }
 
+        public void UpdatePresentInterval(PresentIntervalState presentIntervalState)
+        {
+            PresentIntervalState oldState = ConfigurationState.Instance.Graphics.PresentIntervalState.Value;
+            UpdatePresentIntervalState(this, new ReactiveEventArgs<PresentIntervalState>(oldState, presentIntervalState));
+        }
+
         public async Task<bool> LoadGuestApplication()
         {
             InitializeSwitchInstance();
@@ -778,7 +819,7 @@ namespace Ryujinx.Ava
                                                      _viewModel.UiHandler,
                                                      (SystemLanguage)ConfigurationState.Instance.System.Language.Value,
                                                      (RegionCode)ConfigurationState.Instance.System.Region.Value,
-                                                     ConfigurationState.Instance.Graphics.EnableVsync,
+                                                     ConfigurationState.Instance.Graphics.PresentIntervalState,
                                                      ConfigurationState.Instance.System.EnableDockedMode,
                                                      ConfigurationState.Instance.System.EnablePtc,
                                                      ConfigurationState.Instance.System.EnableInternetAccess,
@@ -792,7 +833,8 @@ namespace Ryujinx.Ava
                                                      ConfigurationState.Instance.System.AudioVolume,
                                                      ConfigurationState.Instance.System.UseHypervisor,
                                                      ConfigurationState.Instance.Multiplayer.LanInterfaceId.Value,
-                                                     ConfigurationState.Instance.Multiplayer.Mode);
+                                                     ConfigurationState.Instance.Multiplayer.Mode,
+                                                     ConfigurationState.Instance.Graphics.CustomPresentInterval.Value);
 
             Device = new Switch(configuration);
         }
@@ -918,7 +960,7 @@ namespace Ryujinx.Ava
                 Device.Gpu.InitializeShaderCache(_gpuCancellationTokenSource.Token);
                 Translator.IsReadyForTranslation.Set();
 
-                _renderer.Window.ChangeVSyncMode(Device.EnableDeviceVsync);
+                _renderer.Window.ChangePresentIntervalState((Ryujinx.Graphics.GAL.PresentIntervalState)Device.PresentIntervalState);
 
                 while (_isActive)
                 {
@@ -966,6 +1008,7 @@ namespace Ryujinx.Ava
         {
             // Run a status update only when a frame is to be drawn. This prevents from updating the ui and wasting a render when no frame is queued.
             string dockedMode = ConfigurationState.Instance.System.EnableDockedMode ? LocaleManager.Instance[LocaleKeys.Docked] : LocaleManager.Instance[LocaleKeys.Handheld];
+            string presentIntervalState = Device.PresentIntervalState.ToString();
 
             if (GraphicsConfig.ResScale != 1)
             {
@@ -973,7 +1016,7 @@ namespace Ryujinx.Ava
             }
 
             StatusUpdatedEvent?.Invoke(this, new StatusUpdatedEventArgs(
-                Device.EnableDeviceVsync,
+                presentIntervalState,
                 LocaleManager.Instance[LocaleKeys.VolumeShort] + $": {(int)(Device.GetVolume() * 100)}%",
                 ConfigurationState.Instance.Graphics.GraphicsBackend.Value == GraphicsBackend.Vulkan ? "Vulkan" : "OpenGL",
                 dockedMode,
@@ -1065,9 +1108,40 @@ namespace Ryujinx.Ava
                 {
                     switch (currentHotkeyState)
                     {
-                        case KeyboardHotkeyState.ToggleVSync:
-                            Device.EnableDeviceVsync = !Device.EnableDeviceVsync;
-
+                        //todo default
+                        case KeyboardHotkeyState.TogglePresentIntervalState:
+                            PresentIntervalState oldState = Device.PresentIntervalState;
+                            PresentIntervalState newState;
+                            if (oldState == PresentIntervalState.Switch)
+                            {
+                                newState = PresentIntervalState.Unbounded;
+                            }
+                            else if (oldState == PresentIntervalState.Unbounded)
+                            {
+                                if (ConfigurationState.Instance.Graphics.EnableCustomPresentInterval)
+                                {
+                                    newState = PresentIntervalState.Custom;
+                                }
+                                else
+                                {
+                                    newState = PresentIntervalState.Switch;
+                                }
+                            }
+                            else
+                            {
+                                newState = PresentIntervalState.Switch;
+                            }
+                            UpdatePresentIntervalState(this, new ReactiveEventArgs<PresentIntervalState>(oldState, newState));
+                            _viewModel.ShowCustomPresentIntervalPicker =
+                                (newState == PresentIntervalState.Custom);
+                            break;
+                        case KeyboardHotkeyState.CustomPresentIntervalDecrement:
+                            Device.DecrementCustomPresentInterval();
+                            _viewModel.CustomPresentInterval -= 1;
+                            break;
+                        case KeyboardHotkeyState.CustomPresentIntervalIncrement:
+                            Device.IncrementCustomPresentInterval();
+                            _viewModel.CustomPresentInterval += 1;
                             break;
                         case KeyboardHotkeyState.Screenshot:
                             ScreenshotRequested = true;
@@ -1154,9 +1228,9 @@ namespace Ryujinx.Ava
         {
             KeyboardHotkeyState state = KeyboardHotkeyState.None;
 
-            if (_keyboardInterface.IsPressed((Key)ConfigurationState.Instance.Hid.Hotkeys.Value.ToggleVsync))
+            if (_keyboardInterface.IsPressed((Key)ConfigurationState.Instance.Hid.Hotkeys.Value.PresentIntervalState))
             {
-                state = KeyboardHotkeyState.ToggleVSync;
+                state = KeyboardHotkeyState.TogglePresentIntervalState;
             }
             else if (_keyboardInterface.IsPressed((Key)ConfigurationState.Instance.Hid.Hotkeys.Value.Screenshot))
             {
@@ -1189,6 +1263,14 @@ namespace Ryujinx.Ava
             else if (_keyboardInterface.IsPressed((Key)ConfigurationState.Instance.Hid.Hotkeys.Value.VolumeDown))
             {
                 state = KeyboardHotkeyState.VolumeDown;
+            }
+            else if (_keyboardInterface.IsPressed((Key)ConfigurationState.Instance.Hid.Hotkeys.Value.CustomPresentIntervalIncrement))
+            {
+                state = KeyboardHotkeyState.CustomPresentIntervalIncrement;
+            }
+            else if (_keyboardInterface.IsPressed((Key)ConfigurationState.Instance.Hid.Hotkeys.Value.CustomPresentIntervalDecrement))
+            {
+                state = KeyboardHotkeyState.CustomPresentIntervalDecrement;
             }
 
             return state;
