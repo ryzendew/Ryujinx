@@ -467,9 +467,24 @@ namespace Ryujinx.Ui.Common.Configuration
             public ReactiveObject<string> ShadersDumpPath { get; private set; }
 
             /// <summary>
-            /// Enables or disables Vertical Sync
+            /// Toggles VSync on or off. Deprecated, included for GTK compatibility.
             /// </summary>
             public ReactiveObject<bool> EnableVsync { get; private set; }
+
+            /// <summary>
+            /// Toggles the present interval mode. Options are Switch (60Hz), Unbounded (previously Vsync off), and Custom, if enabled.
+            /// </summary>
+            public ReactiveObject<PresentIntervalState> PresentIntervalState { get; private set; }
+
+            /// <summary>
+            /// Enables or disables the custom present interval mode.
+            /// </summary>
+            public ReactiveObject<bool> EnableCustomPresentInterval { get; private set; }
+
+            /// <summary>
+            /// Changes the custom present interval.
+            /// </summary>
+            public ReactiveObject<int> CustomPresentInterval { get; private set; }
 
             /// <summary>
             /// Enables or disables Shader cache
@@ -529,8 +544,14 @@ namespace Ryujinx.Ui.Common.Configuration
                 AspectRatio = new ReactiveObject<AspectRatio>();
                 AspectRatio.Event += static (sender, e) => LogValueChange(e, nameof(AspectRatio));
                 ShadersDumpPath = new ReactiveObject<string>();
+                PresentIntervalState = new ReactiveObject<PresentIntervalState>();
+                PresentIntervalState.Event += static (sender, e) => LogValueChange(e, nameof(PresentIntervalState));
+                EnableCustomPresentInterval = new ReactiveObject<bool>();
+                EnableCustomPresentInterval.Event += static (sender, e) => LogValueChange(e, nameof(EnableCustomPresentInterval));
                 EnableVsync = new ReactiveObject<bool>();
                 EnableVsync.Event += static (sender, e) => LogValueChange(e, nameof(EnableVsync));
+                CustomPresentInterval = new ReactiveObject<int>();
+                CustomPresentInterval.Event += static (sender, e) => LogValueChange(e, nameof(CustomPresentInterval));
                 EnableShaderCache = new ReactiveObject<bool>();
                 EnableShaderCache.Event += static (sender, e) => LogValueChange(e, nameof(EnableShaderCache));
                 EnableTextureRecompression = new ReactiveObject<bool>();
@@ -678,6 +699,9 @@ namespace Ryujinx.Ui.Common.Configuration
                 ShowConfirmExit = ShowConfirmExit,
                 HideCursor = HideCursor,
                 EnableVsync = Graphics.EnableVsync,
+                PresentIntervalState = Graphics.PresentIntervalState,
+                EnableCustomPresentInterval = Graphics.EnableCustomPresentInterval,
+                CustomPresentInterval = Graphics.CustomPresentInterval,
                 EnableShaderCache = Graphics.EnableShaderCache,
                 EnableTextureRecompression = Graphics.EnableTextureRecompression,
                 EnableMacroHLE = Graphics.EnableMacroHLE,
@@ -785,6 +809,9 @@ namespace Ryujinx.Ui.Common.Configuration
             ShowConfirmExit.Value = true;
             HideCursor.Value = HideCursorMode.Never;
             Graphics.EnableVsync.Value = true;
+            Graphics.PresentIntervalState.Value = PresentIntervalState.Switch;
+            Graphics.CustomPresentInterval.Value = 120;
+            Graphics.EnableCustomPresentInterval.Value = false;
             Graphics.EnableShaderCache.Value = true;
             Graphics.EnableTextureRecompression.Value = false;
             Graphics.EnableMacroHLE.Value = true;
@@ -843,7 +870,7 @@ namespace Ryujinx.Ui.Common.Configuration
             Hid.EnableMouse.Value = false;
             Hid.Hotkeys.Value = new KeyboardHotkeys
             {
-                ToggleVsync = Key.F1,
+                PresentIntervalState = Key.F1,
                 ToggleMute = Key.F2,
                 Screenshot = Key.F8,
                 ShowUi = Key.F4,
@@ -978,7 +1005,7 @@ namespace Ryujinx.Ui.Common.Configuration
 
                 configurationFileFormat.Hotkeys = new KeyboardHotkeys
                 {
-                    ToggleVsync = Key.F1,
+                    PresentIntervalState = Key.F1,
                 };
 
                 configurationFileUpdated = true;
@@ -1172,7 +1199,7 @@ namespace Ryujinx.Ui.Common.Configuration
 
                 configurationFileFormat.Hotkeys = new KeyboardHotkeys
                 {
-                    ToggleVsync = Key.F1,
+                    PresentIntervalState = Key.F1,
                     Screenshot = Key.F8,
                 };
 
@@ -1185,7 +1212,7 @@ namespace Ryujinx.Ui.Common.Configuration
 
                 configurationFileFormat.Hotkeys = new KeyboardHotkeys
                 {
-                    ToggleVsync = Key.F1,
+                    PresentIntervalState = Key.F1,
                     Screenshot = Key.F8,
                     ShowUi = Key.F4,
                 };
@@ -1228,7 +1255,7 @@ namespace Ryujinx.Ui.Common.Configuration
 
                 configurationFileFormat.Hotkeys = new KeyboardHotkeys
                 {
-                    ToggleVsync = configurationFileFormat.Hotkeys.ToggleVsync,
+                    PresentIntervalState = Key.F1,
                     Screenshot = configurationFileFormat.Hotkeys.Screenshot,
                     ShowUi = configurationFileFormat.Hotkeys.ShowUi,
                     Pause = Key.F5,
@@ -1243,7 +1270,7 @@ namespace Ryujinx.Ui.Common.Configuration
 
                 configurationFileFormat.Hotkeys = new KeyboardHotkeys
                 {
-                    ToggleVsync = configurationFileFormat.Hotkeys.ToggleVsync,
+                    PresentIntervalState = Key.F1,
                     Screenshot = configurationFileFormat.Hotkeys.Screenshot,
                     ShowUi = configurationFileFormat.Hotkeys.ShowUi,
                     Pause = configurationFileFormat.Hotkeys.Pause,
@@ -1317,7 +1344,7 @@ namespace Ryujinx.Ui.Common.Configuration
 
                 configurationFileFormat.Hotkeys = new KeyboardHotkeys
                 {
-                    ToggleVsync = configurationFileFormat.Hotkeys.ToggleVsync,
+                    PresentIntervalState = Key.F1,
                     Screenshot = configurationFileFormat.Hotkeys.Screenshot,
                     ShowUi = configurationFileFormat.Hotkeys.ShowUi,
                     Pause = configurationFileFormat.Hotkeys.Pause,
@@ -1346,7 +1373,7 @@ namespace Ryujinx.Ui.Common.Configuration
 
                 configurationFileFormat.Hotkeys = new KeyboardHotkeys
                 {
-                    ToggleVsync = configurationFileFormat.Hotkeys.ToggleVsync,
+                    PresentIntervalState = Key.F1,
                     Screenshot = configurationFileFormat.Hotkeys.Screenshot,
                     ShowUi = configurationFileFormat.Hotkeys.ShowUi,
                     Pause = configurationFileFormat.Hotkeys.Pause,
@@ -1434,6 +1461,32 @@ namespace Ryujinx.Ui.Common.Configuration
                 configurationFileUpdated = true;
             }
 
+            if (configurationFileFormat.Version < 49)
+            {
+                Ryujinx.Common.Logging.Logger.Warning?.Print(LogClass.Application, $"Outdated configuration version {configurationFileFormat.Version}, migrating to version 49.");
+
+                configurationFileFormat.PresentIntervalState = PresentIntervalState.Switch;
+                configurationFileFormat.EnableCustomPresentInterval = false;
+
+                configurationFileFormat.Hotkeys = new KeyboardHotkeys
+                {
+                    PresentIntervalState = Key.F1,
+                    Screenshot = configurationFileFormat.Hotkeys.Screenshot,
+                    ShowUi = configurationFileFormat.Hotkeys.ShowUi,
+                    Pause = configurationFileFormat.Hotkeys.Pause,
+                    ToggleMute = configurationFileFormat.Hotkeys.ToggleMute,
+                    ResScaleUp = configurationFileFormat.Hotkeys.ResScaleUp,
+                    ResScaleDown = configurationFileFormat.Hotkeys.ResScaleDown,
+                    VolumeUp = configurationFileFormat.Hotkeys.VolumeUp,
+                    VolumeDown = configurationFileFormat.Hotkeys.VolumeDown,
+                    CustomPresentIntervalIncrement = Key.Unbound,
+                    CustomPresentIntervalDecrement = Key.Unbound,
+                };
+                configurationFileFormat.CustomPresentInterval = 90;
+
+                configurationFileUpdated = true;
+            }
+
             Logger.EnableFileLog.Value = configurationFileFormat.EnableFileLog;
             Graphics.ResScale.Value = configurationFileFormat.ResScale;
             Graphics.ResScaleCustom.Value = configurationFileFormat.ResScaleCustom;
@@ -1465,7 +1518,10 @@ namespace Ryujinx.Ui.Common.Configuration
             CheckUpdatesOnStart.Value = configurationFileFormat.CheckUpdatesOnStart;
             ShowConfirmExit.Value = configurationFileFormat.ShowConfirmExit;
             HideCursor.Value = configurationFileFormat.HideCursor;
-            Graphics.EnableVsync.Value = configurationFileFormat.EnableVsync;
+            Graphics.EnableVsync.Value = configurationFileFormat.PresentIntervalState == PresentIntervalState.Switch;
+            Graphics.PresentIntervalState.Value = configurationFileFormat.PresentIntervalState;
+            Graphics.EnableCustomPresentInterval.Value = configurationFileFormat.EnableCustomPresentInterval;
+            Graphics.CustomPresentInterval.Value = configurationFileFormat.CustomPresentInterval;
             Graphics.EnableShaderCache.Value = configurationFileFormat.EnableShaderCache;
             Graphics.EnableTextureRecompression.Value = configurationFileFormat.EnableTextureRecompression;
             Graphics.EnableMacroHLE.Value = configurationFileFormat.EnableMacroHLE;
