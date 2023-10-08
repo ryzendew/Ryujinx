@@ -1295,7 +1295,7 @@ namespace Ryujinx.Ava.UI.ViewModels
                         PresentIntervalStateColor = new SolidColorBrush((Color)color);
                     }
 
-                    PresentIntervalStateText = args.PresentIntervalState;
+                    PresentIntervalStateText = args.PresentIntervalState == "Custom" ? "Custom" : "VSync";
                     ShowCustomPresentIntervalPicker =
                         args.PresentIntervalState == PresentIntervalState.Custom.ToString();
                     DockedStatusText = args.DockedMode;
