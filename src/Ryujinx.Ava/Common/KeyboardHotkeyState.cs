@@ -3,7 +3,7 @@
     public enum KeyboardHotkeyState
     {
         None,
-        ToggleVSync,
+        TogglePresentIntervalState,
         Screenshot,
         ShowUi,
         Pause,
@@ -12,5 +12,7 @@
         ResScaleDown,
         VolumeUp,
         VolumeDown,
+        CustomPresentIntervalIncrement,
+        CustomPresentIntervalDecrement,
     }
 }
