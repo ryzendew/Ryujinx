@@ -8,6 +8,7 @@ using Ryujinx.Common.Configuration;
 using Ryujinx.Common.Logging;
 using Ryujinx.HLE.Loaders.Executables;
 using Ryujinx.Memory;
+using System;
 using System.Linq;
 using static Ryujinx.HLE.HOS.ModLoader;
 
@@ -85,11 +86,8 @@ namespace Ryujinx.HLE.Loaders.Processes.Extensions
             bool enablePtc = device.System.EnablePtc && !modLoadResult.Modified;
             if (!enablePtc)
             {
-                Logger.Warning?.Print(LogClass.Ptc, $"Detected unsupported ExeFs modifications. PTC disabled.");
+                Logger.Warning?.Print(LogClass.Ptc, "Detected unsupported ExeFs modifications. PTC disabled.");
             }
-
-            // We allow it for nx-hbloader because it can be used to launch homebrew.
-            bool allowCodeMemoryForJit = programId == 0x010000000000100DUL || isHomebrew;
 
             string programName = "";
 
@@ -99,7 +97,7 @@ namespace Ryujinx.HLE.Loaders.Processes.Extensions
 
                 if (string.IsNullOrWhiteSpace(programName))
                 {
-                    programName = nacpData.Value.Title.ItemsRo.ToArray().FirstOrDefault(x => x.Name[0] != 0).NameString.ToString();
+                    programName = Array.Find(nacpData.Value.Title.ItemsRo.ToArray(), x => x.Name[0] != 0).NameString.ToString();
                 }
             }
 
@@ -116,9 +114,9 @@ namespace Ryujinx.HLE.Loaders.Processes.Extensions
                 device,
                 device.System.KernelContext,
                 metaLoader,
-                nacpData.Value,
+                nacpData,
                 enablePtc,
-                allowCodeMemoryForJit,
+                true,
                 programName,
                 metaLoader.GetProgramId(),
                 null,

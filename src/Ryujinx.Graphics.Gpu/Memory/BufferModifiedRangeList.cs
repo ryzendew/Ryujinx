@@ -1,5 +1,4 @@
-﻿using Ryujinx.Common.Logging;
-using Ryujinx.Common.Pools;
+﻿using Ryujinx.Common.Pools;
 using Ryujinx.Memory.Range;
 using System;
 using System.Collections.Generic;
@@ -71,14 +70,14 @@ namespace Ryujinx.Graphics.Gpu.Memory
     {
         private const int BackingInitialSize = 8;
 
-        private GpuContext _context;
-        private Buffer _parent;
-        private Action<ulong, ulong> _flushAction;
+        private readonly GpuContext _context;
+        private readonly Buffer _parent;
+        private readonly Action<ulong, ulong> _flushAction;
 
         private List<BufferMigration> _sources;
         private BufferMigration _migrationTarget;
 
-        private object _lock = new object();
+        private readonly object _lock = new();
 
         /// <summary>
         /// Whether the modified range list has any entries or not.
@@ -125,7 +124,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
                 for (int i = 0; i < count; i++)
                 {
                     BufferModifiedRange overlap = overlaps[i];
-                    
+
                     if (overlap.Address > address)
                     {
                         // The start of the remaining region is uncovered by this overlap. Call the action for it.

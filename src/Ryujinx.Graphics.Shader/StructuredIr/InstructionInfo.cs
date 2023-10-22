@@ -19,12 +19,13 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
             }
         }
 
-        private static InstInfo[] _infoTbl;
+        private static readonly InstInfo[] _infoTbl;
 
         static InstructionInfo()
         {
             _infoTbl = new InstInfo[(int)Instruction.Count];
 
+#pragma warning disable IDE0055 // Disable formatting
             //  Inst                                  Destination type      Source 1 type          Source 2 type          Source 3 type          Source 4 type
             Add(Instruction.AtomicAdd,                AggregateType.U32,    AggregateType.S32,     AggregateType.S32,     AggregateType.U32);
             Add(Instruction.AtomicAnd,                AggregateType.U32,    AggregateType.S32,     AggregateType.S32,     AggregateType.U32);
@@ -90,11 +91,6 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
             Add(Instruction.ImageAtomic,              AggregateType.S32);
             Add(Instruction.IsNan,                    AggregateType.Bool,   AggregateType.Scalar);
             Add(Instruction.Load,                     AggregateType.FP32);
-            Add(Instruction.LoadConstant,             AggregateType.FP32,   AggregateType.S32,     AggregateType.S32);
-            Add(Instruction.LoadGlobal,               AggregateType.U32,    AggregateType.S32,     AggregateType.S32);
-            Add(Instruction.LoadLocal,                AggregateType.U32,    AggregateType.S32);
-            Add(Instruction.LoadShared,               AggregateType.U32,    AggregateType.S32);
-            Add(Instruction.LoadStorage,              AggregateType.U32,    AggregateType.S32,     AggregateType.S32);
             Add(Instruction.Lod,                      AggregateType.FP32);
             Add(Instruction.LogarithmB2,              AggregateType.Scalar, AggregateType.Scalar);
             Add(Instruction.LogicalAnd,               AggregateType.Bool,   AggregateType.Bool,    AggregateType.Bool);
@@ -105,6 +101,7 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
             Add(Instruction.MaximumU32,               AggregateType.U32,    AggregateType.U32,     AggregateType.U32);
             Add(Instruction.Minimum,                  AggregateType.Scalar, AggregateType.Scalar,  AggregateType.Scalar);
             Add(Instruction.MinimumU32,               AggregateType.U32,    AggregateType.U32,     AggregateType.U32);
+            Add(Instruction.Modulo,                   AggregateType.Scalar, AggregateType.Scalar,  AggregateType.Scalar);
             Add(Instruction.Multiply,                 AggregateType.Scalar, AggregateType.Scalar,  AggregateType.Scalar);
             Add(Instruction.MultiplyHighS32,          AggregateType.S32,    AggregateType.S32,     AggregateType.S32);
             Add(Instruction.MultiplyHighU32,          AggregateType.U32,    AggregateType.U32,     AggregateType.U32);
@@ -112,29 +109,23 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
             Add(Instruction.PackDouble2x32,           AggregateType.FP64,   AggregateType.U32,     AggregateType.U32);
             Add(Instruction.PackHalf2x16,             AggregateType.U32,    AggregateType.FP32,    AggregateType.FP32);
             Add(Instruction.ReciprocalSquareRoot,     AggregateType.Scalar, AggregateType.Scalar);
+            Add(Instruction.Return,                   AggregateType.Void,   AggregateType.U32);
             Add(Instruction.Round,                    AggregateType.Scalar, AggregateType.Scalar);
             Add(Instruction.ShiftLeft,                AggregateType.S32,    AggregateType.S32,     AggregateType.S32);
             Add(Instruction.ShiftRightS32,            AggregateType.S32,    AggregateType.S32,     AggregateType.S32);
             Add(Instruction.ShiftRightU32,            AggregateType.U32,    AggregateType.U32,     AggregateType.S32);
-            Add(Instruction.Shuffle,                  AggregateType.FP32,   AggregateType.FP32,    AggregateType.U32,     AggregateType.U32,     AggregateType.Bool);
-            Add(Instruction.ShuffleDown,              AggregateType.FP32,   AggregateType.FP32,    AggregateType.U32,     AggregateType.U32,     AggregateType.Bool);
-            Add(Instruction.ShuffleUp,                AggregateType.FP32,   AggregateType.FP32,    AggregateType.U32,     AggregateType.U32,     AggregateType.Bool);
-            Add(Instruction.ShuffleXor,               AggregateType.FP32,   AggregateType.FP32,    AggregateType.U32,     AggregateType.U32,     AggregateType.Bool);
+            Add(Instruction.Shuffle,                  AggregateType.FP32,   AggregateType.FP32,    AggregateType.U32);
+            Add(Instruction.ShuffleDown,              AggregateType.FP32,   AggregateType.FP32,    AggregateType.U32);
+            Add(Instruction.ShuffleUp,                AggregateType.FP32,   AggregateType.FP32,    AggregateType.U32);
+            Add(Instruction.ShuffleXor,               AggregateType.FP32,   AggregateType.FP32,    AggregateType.U32);
             Add(Instruction.Sine,                     AggregateType.Scalar, AggregateType.Scalar);
             Add(Instruction.SquareRoot,               AggregateType.Scalar, AggregateType.Scalar);
             Add(Instruction.Store,                    AggregateType.Void);
-            Add(Instruction.StoreGlobal,              AggregateType.Void,   AggregateType.S32,     AggregateType.S32,     AggregateType.U32);
-            Add(Instruction.StoreLocal,               AggregateType.Void,   AggregateType.S32,     AggregateType.U32);
-            Add(Instruction.StoreShared,              AggregateType.Void,   AggregateType.S32,     AggregateType.U32);
-            Add(Instruction.StoreShared16,            AggregateType.Void,   AggregateType.S32,     AggregateType.U32);
-            Add(Instruction.StoreShared8,             AggregateType.Void,   AggregateType.S32,     AggregateType.U32);
-            Add(Instruction.StoreStorage,             AggregateType.Void,   AggregateType.S32,     AggregateType.S32,     AggregateType.U32);
-            Add(Instruction.StoreStorage16,           AggregateType.Void,   AggregateType.S32,     AggregateType.S32,     AggregateType.U32);
-            Add(Instruction.StoreStorage8,            AggregateType.Void,   AggregateType.S32,     AggregateType.S32,     AggregateType.U32);
             Add(Instruction.Subtract,                 AggregateType.Scalar, AggregateType.Scalar,  AggregateType.Scalar);
             Add(Instruction.SwizzleAdd,               AggregateType.FP32,   AggregateType.FP32,    AggregateType.FP32,    AggregateType.S32);
             Add(Instruction.TextureSample,            AggregateType.FP32);
-            Add(Instruction.TextureSize,              AggregateType.S32,    AggregateType.S32,     AggregateType.S32);
+            Add(Instruction.TextureQuerySamples,      AggregateType.S32,    AggregateType.S32);
+            Add(Instruction.TextureQuerySize,         AggregateType.S32,    AggregateType.S32,     AggregateType.S32);
             Add(Instruction.Truncate,                 AggregateType.Scalar, AggregateType.Scalar);
             Add(Instruction.UnpackDouble2x32,         AggregateType.U32,    AggregateType.FP64);
             Add(Instruction.UnpackHalf2x16,           AggregateType.FP32,   AggregateType.U32);
@@ -142,6 +133,7 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
             Add(Instruction.VoteAll,                  AggregateType.Bool,   AggregateType.Bool);
             Add(Instruction.VoteAllEqual,             AggregateType.Bool,   AggregateType.Bool);
             Add(Instruction.VoteAny,                  AggregateType.Bool,   AggregateType.Bool);
+#pragma warning restore IDE0055
         }
 
         private static void Add(Instruction inst, AggregateType destType, params AggregateType[] srcTypes)
@@ -166,7 +158,7 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
             {
                 return AggregateType.FP32;
             }
-            else if (inst == Instruction.Call || inst == Instruction.Load || inst == Instruction.Store)
+            else if (inst == Instruction.Call || inst == Instruction.Load || inst == Instruction.Store || inst.IsAtomic())
             {
                 return AggregateType.S32;
             }

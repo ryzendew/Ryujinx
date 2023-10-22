@@ -12,11 +12,11 @@ namespace Ryujinx.Audio.Renderer.Device
         /// </summary>
         public static readonly VirtualDevice[] Devices = new VirtualDevice[5]
         {
-            new VirtualDevice("AudioStereoJackOutput", 2, true),
-            new VirtualDevice("AudioBuiltInSpeakerOutput", 2, false),
-            new VirtualDevice("AudioTvOutput", 6, false),
-            new VirtualDevice("AudioUsbDeviceOutput", 2, true),
-            new VirtualDevice("AudioExternalOutput", 6, true),
+            new("AudioStereoJackOutput", 2, true),
+            new("AudioBuiltInSpeakerOutput", 2, false),
+            new("AudioTvOutput", 6, false),
+            new("AudioUsbDeviceOutput", 2, true),
+            new("AudioExternalOutput", 6, true),
         };
 
         /// <summary>
@@ -45,7 +45,7 @@ namespace Ryujinx.Audio.Renderer.Device
         /// <param name="name">The name of the <see cref="VirtualDevice"/>.</param>
         /// <param name="channelCount">The count of channels supported by the <see cref="VirtualDevice"/>.</param>
         /// <param name="isExternalOutput">Indicate if the <see cref="VirtualDevice"/> is provided by an external interface.</param>
-        private VirtualDevice(string name, uint channelCount, bool isExternalOutput)
+        public VirtualDevice(string name, uint channelCount, bool isExternalOutput)
         {
             Name = name;
             ChannelCount = channelCount;

@@ -33,14 +33,14 @@ namespace Ryujinx.Graphics.OpenGL.Image
                     info.BorderColor.Red,
                     info.BorderColor.Green,
                     info.BorderColor.Blue,
-                    info.BorderColor.Alpha
+                    info.BorderColor.Alpha,
                 };
 
                 GL.SamplerParameter(Handle, SamplerParameterName.TextureBorderColor, borderColor);
             }
 
-            GL.SamplerParameter(Handle, SamplerParameterName.TextureMinLod,  info.MinLod);
-            GL.SamplerParameter(Handle, SamplerParameterName.TextureMaxLod,  info.MaxLod);
+            GL.SamplerParameter(Handle, SamplerParameterName.TextureMinLod, info.MinLod);
+            GL.SamplerParameter(Handle, SamplerParameterName.TextureMaxLod, info.MaxLod);
             GL.SamplerParameter(Handle, SamplerParameterName.TextureLodBias, info.MipLodBias);
 
             GL.SamplerParameter(Handle, SamplerParameterName.TextureMaxAnisotropyExt, info.MaxAnisotropy);

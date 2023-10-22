@@ -1,10 +1,11 @@
-﻿using Ryujinx.Graphics.GAL;
+﻿using Ryujinx.Common.Logging;
+using Ryujinx.Graphics.GAL;
 using Silk.NET.Vulkan;
 using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using VkFormat = Silk.NET.Vulkan.Format;
 using VkBuffer = Silk.NET.Vulkan.Buffer;
+using VkFormat = Silk.NET.Vulkan.Format;
 
 namespace Ryujinx.Graphics.Vulkan
 {
@@ -72,12 +73,12 @@ namespace Ryujinx.Graphics.Vulkan
                 usage |= BufferUsageFlags.IndirectBufferBit;
             }
 
-            var bufferCreateInfo = new BufferCreateInfo()
+            var bufferCreateInfo = new BufferCreateInfo
             {
                 SType = StructureType.BufferCreateInfo,
                 Size = (ulong)size,
                 Usage = usage,
-                SharingMode = SharingMode.Exclusive
+                SharingMode = SharingMode.Exclusive,
             };
 
             gd.Api.CreateBuffer(_device, in bufferCreateInfo, null, out var buffer).ThrowOnError();
@@ -95,17 +96,33 @@ namespace Ryujinx.Graphics.Vulkan
             return Unsafe.As<ulong, BufferHandle>(ref handle64);
         }
 
-        public BufferHandle CreateWithHandle(VulkanRenderer gd, int size, BufferAllocationType baseType = BufferAllocationType.HostMapped, BufferHandle storageHint = default)
+        public BufferHandle CreateWithHandle(
+            VulkanRenderer gd,
+            int size,
+            BufferAllocationType baseType = BufferAllocationType.HostMapped,
+            BufferHandle storageHint = default,
+            bool forceMirrors = false)
         {
-            return CreateWithHandle(gd, size, out _, baseType, storageHint);
+            return CreateWithHandle(gd, size, out _, baseType, storageHint, forceMirrors);
         }
 
-        public BufferHandle CreateWithHandle(VulkanRenderer gd, int size, out BufferHolder holder, BufferAllocationType baseType = BufferAllocationType.HostMapped, BufferHandle storageHint = default)
+        public BufferHandle CreateWithHandle(
+            VulkanRenderer gd,
+            int size,
+            out BufferHolder holder,
+            BufferAllocationType baseType = BufferAllocationType.HostMapped,
+            BufferHandle storageHint = default,
+            bool forceMirrors = false)
         {
             holder = Create(gd, size, baseType: baseType, storageHint: storageHint);
             if (holder == null)
             {
                 return BufferHandle.Null;
+            }
+
+            if (forceMirrors)
+            {
+                holder.UseMirrors();
             }
 
             BufferCount++;
@@ -124,12 +141,12 @@ namespace Ryujinx.Graphics.Vulkan
                 usage |= BufferUsageFlags.IndirectBufferBit;
             }
 
-            var bufferCreateInfo = new BufferCreateInfo()
+            var bufferCreateInfo = new BufferCreateInfo
             {
                 SType = StructureType.BufferCreateInfo,
                 Size = (ulong)Environment.SystemPageSize,
                 Usage = usage,
-                SharingMode = SharingMode.Exclusive
+                SharingMode = SharingMode.Exclusive,
             };
 
             gd.Api.CreateBuffer(_device, in bufferCreateInfo, null, out var buffer).ThrowOnError();
@@ -159,12 +176,12 @@ namespace Ryujinx.Graphics.Vulkan
                 usage |= BufferUsageFlags.IndirectBufferBit;
             }
 
-            var bufferCreateInfo = new BufferCreateInfo()
+            var bufferCreateInfo = new BufferCreateInfo
             {
                 SType = StructureType.BufferCreateInfo,
                 Size = (ulong)size,
                 Usage = usage,
-                SharingMode = SharingMode.Exclusive
+                SharingMode = SharingMode.Exclusive,
             };
 
             gd.Api.CreateBuffer(_device, in bufferCreateInfo, null, out var buffer).ThrowOnError();
@@ -180,7 +197,7 @@ namespace Ryujinx.Graphics.Vulkan
                     BufferAllocationType.HostMapped => DefaultBufferMemoryFlags,
                     BufferAllocationType.DeviceLocal => DeviceLocalBufferMemoryFlags,
                     BufferAllocationType.DeviceLocalMapped => DeviceLocalMappedBufferMemoryFlags,
-                    _ => DefaultBufferMemoryFlags
+                    _ => DefaultBufferMemoryFlags,
                 };
 
                 // If an allocation with this memory type fails, fall back to the previous one.
@@ -206,7 +223,7 @@ namespace Ryujinx.Graphics.Vulkan
             return (buffer, allocation, type);
         }
 
-        public unsafe BufferHolder Create(
+        public BufferHolder Create(
             VulkanRenderer gd,
             int size,
             bool forConditionalRendering = false,
@@ -251,6 +268,8 @@ namespace Ryujinx.Graphics.Vulkan
 
                 return holder;
             }
+
+            Logger.Error?.Print(LogClass.Gpu, $"Failed to create buffer with size 0x{size:X} and type \"{baseType}\".");
 
             return null;
         }

@@ -13,28 +13,24 @@ namespace Ryujinx.Graphics.OpenGL.Queries
         public CounterType Type { get; }
         public bool Disposed { get; private set; }
 
-        private readonly Pipeline _pipeline;
-
-        private Queue<CounterQueueEvent> _events = new Queue<CounterQueueEvent>();
+        private readonly Queue<CounterQueueEvent> _events = new();
         private CounterQueueEvent _current;
 
         private ulong _accumulatedCounter;
         private int _waiterCount;
 
-        private object _lock = new object();
+        private readonly object _lock = new();
 
-        private Queue<BufferedQuery> _queryPool;
-        private AutoResetEvent _queuedEvent = new AutoResetEvent(false);
-        private AutoResetEvent _wakeSignal = new AutoResetEvent(false);
-        private AutoResetEvent _eventConsumed = new AutoResetEvent(false);
+        private readonly Queue<BufferedQuery> _queryPool;
+        private readonly AutoResetEvent _queuedEvent = new(false);
+        private readonly AutoResetEvent _wakeSignal = new(false);
+        private readonly AutoResetEvent _eventConsumed = new(false);
 
-        private Thread _consumerThread;
+        private readonly Thread _consumerThread;
 
-        internal CounterQueue(Pipeline pipeline, CounterType type)
+        internal CounterQueue(CounterType type)
         {
             Type = type;
-
-            _pipeline = pipeline;
 
             QueryTarget glType = GetTarget(Type);
 
@@ -107,7 +103,7 @@ namespace Ryujinx.Graphics.OpenGL.Queries
             }
         }
 
-        public CounterQueueEvent QueueReport(EventHandler<ulong> resultHandler, ulong lastDrawIndex, bool hostReserved)
+        public CounterQueueEvent QueueReport(EventHandler<ulong> resultHandler, float divisor, ulong lastDrawIndex, bool hostReserved)
         {
             CounterQueueEvent result;
             ulong draws = lastDrawIndex - _current.DrawIndex;
@@ -123,7 +119,7 @@ namespace Ryujinx.Graphics.OpenGL.Queries
                     _current.ReserveForHostAccess();
                 }
 
-                _current.Complete(draws > 0, _pipeline.GetCounterDivisor(Type));
+                _current.Complete(draws > 0, divisor);
                 _events.Enqueue(_current);
 
                 _current.OnResult += resultHandler;
@@ -148,14 +144,13 @@ namespace Ryujinx.Graphics.OpenGL.Queries
 
         private static QueryTarget GetTarget(CounterType type)
         {
-            switch (type)
+            return type switch
             {
-                case CounterType.SamplesPassed: return QueryTarget.SamplesPassed;
-                case CounterType.PrimitivesGenerated: return QueryTarget.PrimitivesGenerated;
-                case CounterType.TransformFeedbackPrimitivesWritten: return QueryTarget.TransformFeedbackPrimitivesWritten;
-            }
-
-            return QueryTarget.SamplesPassed;
+                CounterType.SamplesPassed => QueryTarget.SamplesPassed,
+                CounterType.PrimitivesGenerated => QueryTarget.PrimitivesGenerated,
+                CounterType.TransformFeedbackPrimitivesWritten => QueryTarget.TransformFeedbackPrimitivesWritten,
+                _ => QueryTarget.SamplesPassed,
+            };
         }
 
         public void Flush(bool blocking)

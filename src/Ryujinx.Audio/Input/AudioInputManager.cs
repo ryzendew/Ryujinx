@@ -14,17 +14,17 @@ namespace Ryujinx.Audio.Input
     /// </summary>
     public class AudioInputManager : IDisposable
     {
-        private object _lock = new object();
+        private readonly object _lock = new();
 
         /// <summary>
         /// Lock used for session allocation.
         /// </summary>
-        private object _sessionLock = new object();
+        private readonly object _sessionLock = new();
 
         /// <summary>
         /// The session ids allocation table.
         /// </summary>
-        private int[] _sessionIds;
+        private readonly int[] _sessionIds;
 
         /// <summary>
         /// The device driver.
@@ -39,7 +39,7 @@ namespace Ryujinx.Audio.Input
         /// <summary>
         /// The <see cref="AudioInputSystem"/> session instances.
         /// </summary>
-        private AudioInputSystem[] _sessions;
+        private readonly AudioInputSystem[] _sessions;
 
         /// <summary>
         /// The count of active sessions.
@@ -166,6 +166,7 @@ namespace Ryujinx.Audio.Input
         /// </summary>
         /// <param name="filtered">If true, filter disconnected devices</param>
         /// <returns>The list of all audio inputs name</returns>
+#pragma warning disable CA1822 // Mark member as static
         public string[] ListAudioIns(bool filtered)
         {
             if (filtered)
@@ -173,8 +174,9 @@ namespace Ryujinx.Audio.Input
                 // TODO: Detect if the driver supports audio input
             }
 
-            return new string[] { Constants.DefaultDeviceInputName };
+            return new[] { Constants.DefaultDeviceInputName };
         }
+#pragma warning restore CA1822
 
         /// <summary>
         /// Open a new <see cref="AudioInputSystem"/>.
@@ -205,7 +207,7 @@ namespace Ryujinx.Audio.Input
 
             IHardwareDeviceSession deviceSession = _deviceDriver.OpenDeviceSession(IHardwareDeviceDriver.Direction.Input, memoryManager, sampleFormat, parameter.SampleRate, parameter.ChannelCount);
 
-            AudioInputSystem audioIn = new AudioInputSystem(this, _lock, deviceSession, _sessionsBufferEvents[sessionId]);
+            AudioInputSystem audioIn = new(this, _lock, deviceSession, _sessionsBufferEvents[sessionId]);
 
             ResultCode result = audioIn.Initialize(inputDeviceName, sampleFormat, ref parameter, sessionId);
 
@@ -238,6 +240,8 @@ namespace Ryujinx.Audio.Input
 
         public void Dispose()
         {
+            GC.SuppressFinalize(this);
+
             if (Interlocked.CompareExchange(ref _disposeState, 1, 0) == 0)
             {
                 Dispose(true);

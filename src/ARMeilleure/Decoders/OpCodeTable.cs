@@ -13,7 +13,7 @@ namespace ARMeilleure.Decoders
 
         private readonly struct InstInfo
         {
-            public int Mask  { get; }
+            public int Mask { get; }
             public int Value { get; }
 
             public InstDescriptor Inst { get; }
@@ -22,24 +22,25 @@ namespace ARMeilleure.Decoders
 
             public InstInfo(int mask, int value, InstDescriptor inst, MakeOp makeOp)
             {
-                Mask   = mask;
-                Value  = value;
-                Inst   = inst;
+                Mask = mask;
+                Value = value;
+                Inst = inst;
                 MakeOp = makeOp;
             }
         }
 
-        private static List<InstInfo> AllInstA32 = new();
-        private static List<InstInfo> AllInstT32 = new();
-        private static List<InstInfo> AllInstA64 = new();
+        private static readonly List<InstInfo> _allInstA32 = new();
+        private static readonly List<InstInfo> _allInstT32 = new();
+        private static readonly List<InstInfo> _allInstA64 = new();
 
-        private static InstInfo[][] InstA32FastLookup = new InstInfo[FastLookupSize][];
-        private static InstInfo[][] InstT32FastLookup = new InstInfo[FastLookupSize][];
-        private static InstInfo[][] InstA64FastLookup = new InstInfo[FastLookupSize][];
+        private static readonly InstInfo[][] _instA32FastLookup = new InstInfo[FastLookupSize][];
+        private static readonly InstInfo[][] _instT32FastLookup = new InstInfo[FastLookupSize][];
+        private static readonly InstInfo[][] _instA64FastLookup = new InstInfo[FastLookupSize][];
 
         static OpCodeTable()
         {
-#region "OpCode Table (AArch64)"
+#pragma warning disable IDE0055 // Disable formatting
+            #region "OpCode Table (AArch64)"
             // Base
             SetA64("x0011010000xxxxx000000xxxxxxxxxx", InstName.Adc,             InstEmit.Adc,             OpCodeAluRs.Create);
             SetA64("x0111010000xxxxx000000xxxxxxxxxx", InstName.Adcs,            InstEmit.Adcs,            OpCodeAluRs.Create);
@@ -329,6 +330,7 @@ namespace ARMeilleure.Decoders
             SetA64("011111100x110000110010xxxxxxxxxx", InstName.Fmaxnmp_S,       InstEmit.Fmaxnmp_S,       OpCodeSimd.Create);
             SetA64("0>1011100<1xxxxx110001xxxxxxxxxx", InstName.Fmaxnmp_V,       InstEmit.Fmaxnmp_V,       OpCodeSimdReg.Create);
             SetA64("0110111000110000110010xxxxxxxxxx", InstName.Fmaxnmv_V,       InstEmit.Fmaxnmv_V,       OpCodeSimd.Create);
+            SetA64("011111100x110000111110xxxxxxxxxx", InstName.Fmaxp_S,         InstEmit.Fmaxp_S,         OpCodeSimd.Create);
             SetA64("0>1011100<1xxxxx111101xxxxxxxxxx", InstName.Fmaxp_V,         InstEmit.Fmaxp_V,         OpCodeSimdReg.Create);
             SetA64("0110111000110000111110xxxxxxxxxx", InstName.Fmaxv_V,         InstEmit.Fmaxv_V,         OpCodeSimd.Create);
             SetA64("000111100x1xxxxx010110xxxxxxxxxx", InstName.Fmin_S,          InstEmit.Fmin_S,          OpCodeSimdReg.Create);
@@ -338,6 +340,7 @@ namespace ARMeilleure.Decoders
             SetA64("011111101x110000110010xxxxxxxxxx", InstName.Fminnmp_S,       InstEmit.Fminnmp_S,       OpCodeSimd.Create);
             SetA64("0>1011101<1xxxxx110001xxxxxxxxxx", InstName.Fminnmp_V,       InstEmit.Fminnmp_V,       OpCodeSimdReg.Create);
             SetA64("0110111010110000110010xxxxxxxxxx", InstName.Fminnmv_V,       InstEmit.Fminnmv_V,       OpCodeSimd.Create);
+            SetA64("011111101x110000111110xxxxxxxxxx", InstName.Fminp_S,         InstEmit.Fminp_S,         OpCodeSimd.Create);
             SetA64("0>1011101<1xxxxx111101xxxxxxxxxx", InstName.Fminp_V,         InstEmit.Fminp_V,         OpCodeSimdReg.Create);
             SetA64("0110111010110000111110xxxxxxxxxx", InstName.Fminv_V,         InstEmit.Fminv_V,         OpCodeSimd.Create);
             SetA64("010111111xxxxxxx0001x0xxxxxxxxxx", InstName.Fmla_Se,         InstEmit.Fmla_Se,         OpCodeSimdRegElemF.Create);
@@ -638,9 +641,9 @@ namespace ARMeilleure.Decoders
             SetA64("0x001110<<100001001010xxxxxxxxxx", InstName.Xtn_V,           InstEmit.Xtn_V,           OpCodeSimd.Create);
             SetA64("0>001110<<0xxxxx001110xxxxxxxxxx", InstName.Zip1_V,          InstEmit.Zip1_V,          OpCodeSimdReg.Create);
             SetA64("0>001110<<0xxxxx011110xxxxxxxxxx", InstName.Zip2_V,          InstEmit.Zip2_V,          OpCodeSimdReg.Create);
-#endregion
+            #endregion
 
-#region "OpCode Table (AArch32, A32)"
+            #region "OpCode Table (AArch32, A32)"
             // Base
             SetA32("<<<<0010101xxxxxxxxxxxxxxxxxxxxx", InstName.Adc,     InstEmit32.Adc,     OpCode32AluImm.Create);
             SetA32("<<<<0000101xxxxxxxxxxxxxxxx0xxxx", InstName.Adc,     InstEmit32.Adc,     OpCode32AluRsImm.Create);
@@ -882,177 +885,178 @@ namespace ARMeilleure.Decoders
             SetVfp("<<<<11100x11xxxxxxxx101xx1x0xxxx", InstName.Vsub,   InstEmit32.Vsub_S,   OpCode32SimdRegS.Create,        OpCode32SimdRegS.CreateT32);
 
             // ASIMD
-            SetAsimd("111100111x110000xxx0001101x0xxx0", InstName.Aesd_V,      InstEmit32.Aesd_V,      OpCode32Simd.Create,            OpCode32Simd.CreateT32);
-            SetAsimd("111100111x110000xxx0001100x0xxx0", InstName.Aese_V,      InstEmit32.Aese_V,      OpCode32Simd.Create,            OpCode32Simd.CreateT32);
-            SetAsimd("111100111x110000xxx0001111x0xxx0", InstName.Aesimc_V,    InstEmit32.Aesimc_V,    OpCode32Simd.Create,            OpCode32Simd.CreateT32);
-            SetAsimd("111100111x110000xxx0001110x0xxx0", InstName.Aesmc_V,     InstEmit32.Aesmc_V,     OpCode32Simd.Create,            OpCode32Simd.CreateT32);
-            SetAsimd("111100110x00xxx0xxx01100x1x0xxx0", InstName.Sha256h_V,   InstEmit32.Sha256h_V,   OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100110x01xxx0xxx01100x1x0xxx0", InstName.Sha256h2_V,  InstEmit32.Sha256h2_V,  OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100111x111010xxx0001111x0xxx0", InstName.Sha256su0_V, InstEmit32.Sha256su0_V, OpCode32Simd.Create,            OpCode32Simd.CreateT32);
-            SetAsimd("111100110x10xxx0xxx01100x1x0xxx0", InstName.Sha256su1_V, InstEmit32.Sha256su1_V, OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("1111001x0x<<xxxxxxxx0111xxx0xxxx", InstName.Vabd,        InstEmit32.Vabd_I,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("1111001x1x<<xxxxxxxx0111x0x0xxxx", InstName.Vabdl,       InstEmit32.Vabdl_I,     OpCode32SimdRegLong.Create,     OpCode32SimdRegLong.CreateT32);
-            SetAsimd("111100111x11<<01xxxx00110xx0xxxx", InstName.Vabs,        InstEmit32.Vabs_V,      OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
-            SetAsimd("111100111x111001xxxx01110xx0xxxx", InstName.Vabs,        InstEmit32.Vabs_V,      OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
-            SetAsimd("111100100xxxxxxxxxxx1000xxx0xxxx", InstName.Vadd,        InstEmit32.Vadd_I,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100100x00xxxxxxxx1101xxx0xxxx", InstName.Vadd,        InstEmit32.Vadd_V,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("1111001x1x<<xxxxxxx00000x0x0xxxx", InstName.Vaddl,       InstEmit32.Vaddl_I,     OpCode32SimdRegLong.Create,     OpCode32SimdRegLong.CreateT32);
-            SetAsimd("1111001x1x<<xxxxxxx00001x0x0xxxx", InstName.Vaddw,       InstEmit32.Vaddw_I,     OpCode32SimdRegWide.Create,     OpCode32SimdRegWide.CreateT32);
-            SetAsimd("111100100x00xxxxxxxx0001xxx1xxxx", InstName.Vand,        InstEmit32.Vand_I,      OpCode32SimdBinary.Create,      OpCode32SimdBinary.CreateT32);
-            SetAsimd("111100100x01xxxxxxxx0001xxx1xxxx", InstName.Vbic,        InstEmit32.Vbic_I,      OpCode32SimdBinary.Create,      OpCode32SimdBinary.CreateT32);
-            SetAsimd("1111001x1x000xxxxxxx<<x10x11xxxx", InstName.Vbic,        InstEmit32.Vbic_II,     OpCode32SimdImm.Create,         OpCode32SimdImm.CreateT32);
-            SetAsimd("111100110x11xxxxxxxx0001xxx1xxxx", InstName.Vbif,        InstEmit32.Vbif,        OpCode32SimdBinary.Create,      OpCode32SimdBinary.CreateT32);
-            SetAsimd("111100110x10xxxxxxxx0001xxx1xxxx", InstName.Vbit,        InstEmit32.Vbit,        OpCode32SimdBinary.Create,      OpCode32SimdBinary.CreateT32);
-            SetAsimd("111100110x01xxxxxxxx0001xxx1xxxx", InstName.Vbsl,        InstEmit32.Vbsl,        OpCode32SimdBinary.Create,      OpCode32SimdBinary.CreateT32);
-            SetAsimd("111100110x<<xxxxxxxx1000xxx1xxxx", InstName.Vceq,        InstEmit32.Vceq_I,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100100x00xxxxxxxx1110xxx0xxxx", InstName.Vceq,        InstEmit32.Vceq_V,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100111x11xx01xxxx0x010xx0xxxx", InstName.Vceq,        InstEmit32.Vceq_Z,      OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
-            SetAsimd("1111001x0x<<xxxxxxxx0011xxx1xxxx", InstName.Vcge,        InstEmit32.Vcge_I,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100110x00xxxxxxxx1110xxx0xxxx", InstName.Vcge,        InstEmit32.Vcge_V,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100111x11xx01xxxx0x001xx0xxxx", InstName.Vcge,        InstEmit32.Vcge_Z,      OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
-            SetAsimd("1111001x0x<<xxxxxxxx0011xxx0xxxx", InstName.Vcgt,        InstEmit32.Vcgt_I,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100110x10xxxxxxxx1110xxx0xxxx", InstName.Vcgt,        InstEmit32.Vcgt_V,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100111x11xx01xxxx0x000xx0xxxx", InstName.Vcgt,        InstEmit32.Vcgt_Z,      OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
-            SetAsimd("111100111x11xx01xxxx0x011xx0xxxx", InstName.Vcle,        InstEmit32.Vcle_Z,      OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
-            SetAsimd("111100111x11xx01xxxx0x100xx0xxxx", InstName.Vclt,        InstEmit32.Vclt_Z,      OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
-            SetAsimd("111100111x110000xxxx01010xx0xxxx", InstName.Vcnt,        InstEmit32.Vcnt,        OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
-            SetAsimd("111100111x111011xxxx011xxxx0xxxx", InstName.Vcvt,        InstEmit32.Vcvt_V,      OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32); // FP and integer, vector.
-            SetAsimd("111100111x11xxxxxxxx11000xx0xxxx", InstName.Vdup,        InstEmit32.Vdup_1,      OpCode32SimdDupElem.Create,     OpCode32SimdDupElem.CreateT32);
-            SetAsimd("111100110x00xxxxxxxx0001xxx1xxxx", InstName.Veor,        InstEmit32.Veor_I,      OpCode32SimdBinary.Create,      OpCode32SimdBinary.CreateT32);
-            SetAsimd("111100101x11xxxxxxxxxxxxxxx0xxxx", InstName.Vext,        InstEmit32.Vext,        OpCode32SimdExt.Create,         OpCode32SimdExt.CreateT32);
-            SetAsimd("111100100x00xxxxxxxx1100xxx1xxxx", InstName.Vfma,        InstEmit32.Vfma_V,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100100x10xxxxxxxx1100xxx1xxxx", InstName.Vfms,        InstEmit32.Vfms_V,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("1111001x0x<<xxxxxxxx0000xxx0xxxx", InstName.Vhadd,       InstEmit32.Vhadd,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111101001x10xxxxxxxx0000xxx0xxxx", InstName.Vld1,        InstEmit32.Vld1,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101001x10xxxxxxxx0100xx0xxxxx", InstName.Vld1,        InstEmit32.Vld1,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101001x10xxxxxxxx1000x000xxxx", InstName.Vld1,        InstEmit32.Vld1,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101001x10xxxxxxxx1000x011xxxx", InstName.Vld1,        InstEmit32.Vld1,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101001x10xxxxxxxx110000x0xxxx", InstName.Vld1,        InstEmit32.Vld1,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101001x10xxxxxxxx110001xxxxxx", InstName.Vld1,        InstEmit32.Vld1,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101001x10xxxxxxxx110010xxxxxx", InstName.Vld1,        InstEmit32.Vld1,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101000x10xxxxxxxx0111xx0xxxxx", InstName.Vld1,        InstEmit32.Vld1,        OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 1.
-            SetAsimd("111101000x10xxxxxxxx1010xx<<xxxx", InstName.Vld1,        InstEmit32.Vld1,        OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 2.
-            SetAsimd("111101000x10xxxxxxxx0110xx0xxxxx", InstName.Vld1,        InstEmit32.Vld1,        OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 3.
-            SetAsimd("111101000x10xxxxxxxx0010xxxxxxxx", InstName.Vld1,        InstEmit32.Vld1,        OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 4.
-            SetAsimd("111101001x10xxxxxxxx0x01xxxxxxxx", InstName.Vld2,        InstEmit32.Vld2,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101001x10xxxxxxxx1001xx0xxxxx", InstName.Vld2,        InstEmit32.Vld2,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101001x10xxxxxxxx1101<<xxxxxx", InstName.Vld2,        InstEmit32.Vld2,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101000x10xxxxxxxx100x<<0xxxxx", InstName.Vld2,        InstEmit32.Vld2,        OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 1, inc = 1/2 (itype).
-            SetAsimd("111101000x10xxxxxxxx100x<<10xxxx", InstName.Vld2,        InstEmit32.Vld2,        OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 1, inc = 1/2 (itype).
-            SetAsimd("111101000x10xxxxxxxx0011<<xxxxxx", InstName.Vld2,        InstEmit32.Vld2,        OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 2, inc = 2.
-            SetAsimd("111101001x10xxxxxxxx0x10xxx0xxxx", InstName.Vld3,        InstEmit32.Vld3,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101001x10xxxxxxxx1010xx00xxxx", InstName.Vld3,        InstEmit32.Vld3,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101001x10xxxxxxxx1110<<x0xxxx", InstName.Vld3,        InstEmit32.Vld3,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101000x10xxxxxxxx010x<<0xxxxx", InstName.Vld3,        InstEmit32.Vld3,        OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Inc = 1/2 (itype).
-            SetAsimd("111101001x10xxxxxxxx0x11xxxxxxxx", InstName.Vld4,        InstEmit32.Vld4,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101001x10xxxxxxxx1011xx<<xxxx", InstName.Vld4,        InstEmit32.Vld4,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101001x10xxxxxxxx1111<<x>xxxx", InstName.Vld4,        InstEmit32.Vld4,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101000x10xxxxxxxx000x<<xxxxxx", InstName.Vld4,        InstEmit32.Vld4,        OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Inc = 1/2 (itype).
-            SetAsimd("1111001x0x<<xxxxxxxx0110xxx0xxxx", InstName.Vmax,        InstEmit32.Vmax_I,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100100x00xxxxxxxx1111xxx0xxxx", InstName.Vmax,        InstEmit32.Vmax_V,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("1111001x0x<<xxxxxxxx0110xxx1xxxx", InstName.Vmin,        InstEmit32.Vmin_I,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100100x10xxxxxxxx1111xxx0xxxx", InstName.Vmin,        InstEmit32.Vmin_V,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100110x0xxxxxxxxx1111xxx1xxxx", InstName.Vmaxnm,      InstEmit32.Vmaxnm_V,    OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100110x1xxxxxxxxx1111xxx1xxxx", InstName.Vminnm,      InstEmit32.Vminnm_V,    OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("1111001x1x<<xxxxxxxx000xx1x0xxxx", InstName.Vmla,        InstEmit32.Vmla_1,      OpCode32SimdRegElem.Create,     OpCode32SimdRegElem.CreateT32);
-            SetAsimd("111100100xxxxxxxxxxx1001xxx0xxxx", InstName.Vmla,        InstEmit32.Vmla_I,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100100x00xxxxxxxx1101xxx1xxxx", InstName.Vmla,        InstEmit32.Vmla_V,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("1111001x1x<<xxxxxxx01000x0x0xxxx", InstName.Vmlal,       InstEmit32.Vmlal_I,     OpCode32SimdRegLong.Create,     OpCode32SimdRegLong.CreateT32);
-            SetAsimd("1111001x1x<<xxxxxxxx010xx1x0xxxx", InstName.Vmls,        InstEmit32.Vmls_1,      OpCode32SimdRegElem.Create,     OpCode32SimdRegElem.CreateT32);
-            SetAsimd("111100100x10xxxxxxxx1101xxx1xxxx", InstName.Vmls,        InstEmit32.Vmls_V,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100110xxxxxxxxxxx1001xxx0xxxx", InstName.Vmls,        InstEmit32.Vmls_I,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("1111001x1x<<xxxxxxx01010x0x0xxxx", InstName.Vmlsl,       InstEmit32.Vmlsl_I,     OpCode32SimdRegLong.Create,     OpCode32SimdRegLong.CreateT32);
-            SetAsimd("1111001x1x000xxxxxxx0xx00x01xxxx", InstName.Vmov,        InstEmit32.Vmov_I,      OpCode32SimdImm.Create,         OpCode32SimdImm.CreateT32); // D/Q vector I32.
-            SetAsimd("1111001x1x000xxxxxxx10x00x01xxxx", InstName.Vmov,        InstEmit32.Vmov_I,      OpCode32SimdImm.Create,         OpCode32SimdImm.CreateT32); // D/Q I16.
-            SetAsimd("1111001x1x000xxxxxxx11xx0x01xxxx", InstName.Vmov,        InstEmit32.Vmov_I,      OpCode32SimdImm.Create,         OpCode32SimdImm.CreateT32); // D/Q (dt - from cmode).
-            SetAsimd("1111001x1x000xxxxxxx11100x11xxxx", InstName.Vmov,        InstEmit32.Vmov_I,      OpCode32SimdImm.Create,         OpCode32SimdImm.CreateT32); // D/Q I64.
-            SetAsimd("1111001x1x001000xxx0101000x1xxxx", InstName.Vmovl,       InstEmit32.Vmovl,       OpCode32SimdLong.Create,        OpCode32SimdLong.CreateT32);
-            SetAsimd("1111001x1x010000xxx0101000x1xxxx", InstName.Vmovl,       InstEmit32.Vmovl,       OpCode32SimdLong.Create,        OpCode32SimdLong.CreateT32);
-            SetAsimd("1111001x1x100000xxx0101000x1xxxx", InstName.Vmovl,       InstEmit32.Vmovl,       OpCode32SimdLong.Create,        OpCode32SimdLong.CreateT32);
-            SetAsimd("111100111x11<<10xxxx001000x0xxx0", InstName.Vmovn,       InstEmit32.Vmovn,       OpCode32SimdMovn.Create,        OpCode32SimdMovn.CreateT32);
-            SetAsimd("1111001x1x<<xxxxxxxx100xx1x0xxxx", InstName.Vmul,        InstEmit32.Vmul_1,      OpCode32SimdRegElem.Create,     OpCode32SimdRegElem.CreateT32);
-            SetAsimd("111100100x<<xxxxxxxx1001xxx1xxxx", InstName.Vmul,        InstEmit32.Vmul_I,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100110x00xxxxxxxx1001xxx1xxxx", InstName.Vmul,        InstEmit32.Vmul_I,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100110x00xxxxxxxx1101xxx1xxxx", InstName.Vmul,        InstEmit32.Vmul_V,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("1111001x1x<<xxxxxxx01010x1x0xxxx", InstName.Vmull,       InstEmit32.Vmull_1,     OpCode32SimdRegElemLong.Create, OpCode32SimdRegElemLong.CreateT32);
-            SetAsimd("1111001x1x<<xxxxxxx01100x0x0xxxx", InstName.Vmull,       InstEmit32.Vmull_I,     OpCode32SimdRegLong.Create,     OpCode32SimdRegLong.CreateT32);
-            SetAsimd("111100101xx0xxxxxxx01110x0x0xxxx", InstName.Vmull,       InstEmit32.Vmull_I,     OpCode32SimdRegLong.Create,     OpCode32SimdRegLong.CreateT32); // P8/P64
-            SetAsimd("111100111x110000xxxx01011xx0xxxx", InstName.Vmvn,        InstEmit32.Vmvn_I,      OpCode32SimdBinary.Create,      OpCode32SimdBinary.CreateT32);
-            SetAsimd("1111001x1x000xxxxxxx0xx00x11xxxx", InstName.Vmvn,        InstEmit32.Vmvn_II,     OpCode32SimdImm.Create,         OpCode32SimdImm.CreateT32); // D/Q vector I32.
-            SetAsimd("1111001x1x000xxxxxxx10x00x11xxxx", InstName.Vmvn,        InstEmit32.Vmvn_II,     OpCode32SimdImm.Create,         OpCode32SimdImm.CreateT32);
-            SetAsimd("1111001x1x000xxxxxxx110x0x11xxxx", InstName.Vmvn,        InstEmit32.Vmvn_II,     OpCode32SimdImm.Create,         OpCode32SimdImm.CreateT32);
-            SetAsimd("111100111x11<<01xxxx00111xx0xxxx", InstName.Vneg,        InstEmit32.Vneg_V,      OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
-            SetAsimd("111100111x111001xxxx01111xx0xxxx", InstName.Vneg,        InstEmit32.Vneg_V,      OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
-            SetAsimd("111100100x11xxxxxxxx0001xxx1xxxx", InstName.Vorn,        InstEmit32.Vorn_I,      OpCode32SimdBinary.Create,      OpCode32SimdBinary.CreateT32);
-            SetAsimd("111100100x10xxxxxxxx0001xxx1xxxx", InstName.Vorr,        InstEmit32.Vorr_I,      OpCode32SimdBinary.Create,      OpCode32SimdBinary.CreateT32);
-            SetAsimd("1111001x1x000xxxxxxx<<x10x01xxxx", InstName.Vorr,        InstEmit32.Vorr_II,     OpCode32SimdImm.Create,         OpCode32SimdImm.CreateT32);
-            SetAsimd("111100100x<<xxxxxxxx1011x0x1xxxx", InstName.Vpadd,       InstEmit32.Vpadd_I,     OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100110x00xxxxxxxx1101x0x0xxxx", InstName.Vpadd,       InstEmit32.Vpadd_V,     OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100111x11<<00xxxx0010xxx0xxxx", InstName.Vpaddl,      InstEmit32.Vpaddl,      OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
-            SetAsimd("1111001x0x<<xxxxxxxx1010x0x0xxxx", InstName.Vpmax,       InstEmit32.Vpmax_I,     OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100110x00xxxxxxxx1111x0x0xxxx", InstName.Vpmax,       InstEmit32.Vpmax_V,     OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("1111001x0x<<xxxxxxxx1010x0x1xxxx", InstName.Vpmin,       InstEmit32.Vpmin_I,     OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100110x10xxxxxxxx1111x0x0xxxx", InstName.Vpmin,       InstEmit32.Vpmin_V,     OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("1111001x0xxxxxxxxxxx0000xxx1xxxx", InstName.Vqadd,       InstEmit32.Vqadd,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100100x01xxxxxxxx1011xxx0xxxx", InstName.Vqdmulh,     InstEmit32.Vqdmulh,     OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100100x10xxxxxxxx1011xxx0xxxx", InstName.Vqdmulh,     InstEmit32.Vqdmulh,     OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100111x11<<10xxxx00101xx0xxx0", InstName.Vqmovn,      InstEmit32.Vqmovn,      OpCode32SimdMovn.Create,        OpCode32SimdMovn.CreateT32);
-            SetAsimd("111100111x11<<10xxxx001001x0xxx0", InstName.Vqmovun,     InstEmit32.Vqmovun,     OpCode32SimdMovn.Create,        OpCode32SimdMovn.CreateT32);
-            SetAsimd("1111001x1x>>>xxxxxxx100101x1xxx0", InstName.Vqrshrn,     InstEmit32.Vqrshrn,     OpCode32SimdShImmNarrow.Create, OpCode32SimdShImmNarrow.CreateT32);
-            SetAsimd("111100111x>>>xxxxxxx100001x1xxx0", InstName.Vqrshrun,    InstEmit32.Vqrshrun,    OpCode32SimdShImmNarrow.Create, OpCode32SimdShImmNarrow.CreateT32);
-            SetAsimd("1111001x1x>>>xxxxxxx100100x1xxx0", InstName.Vqshrn,      InstEmit32.Vqshrn,      OpCode32SimdShImmNarrow.Create, OpCode32SimdShImmNarrow.CreateT32);
-            SetAsimd("111100111x>>>xxxxxxx100000x1xxx0", InstName.Vqshrun,     InstEmit32.Vqshrun,     OpCode32SimdShImmNarrow.Create, OpCode32SimdShImmNarrow.CreateT32);
-            SetAsimd("1111001x0xxxxxxxxxxx0010xxx1xxxx", InstName.Vqsub,       InstEmit32.Vqsub,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100111x111011xxxx010x0xx0xxxx", InstName.Vrecpe,      InstEmit32.Vrecpe,      OpCode32SimdSqrte.Create,       OpCode32SimdSqrte.CreateT32);
-            SetAsimd("111100100x00xxxxxxxx1111xxx1xxxx", InstName.Vrecps,      InstEmit32.Vrecps,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100111x11xx00xxxx000<<xx0xxxx", InstName.Vrev,        InstEmit32.Vrev,        OpCode32SimdRev.Create,         OpCode32SimdRev.CreateT32);
-            SetAsimd("1111001x0x<<xxxxxxxx0001xxx0xxxx", InstName.Vrhadd,      InstEmit32.Vrhadd,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100111x111010xxxx01010xx0xxxx", InstName.Vrinta,      InstEmit32.Vrinta_V,    OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
-            SetAsimd("111100111x111010xxxx01101xx0xxxx", InstName.Vrintm,      InstEmit32.Vrintm_V,    OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
-            SetAsimd("111100111x111010xxxx01000xx0xxxx", InstName.Vrintn,      InstEmit32.Vrintn_V,    OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
-            SetAsimd("111100111x111010xxxx01111xx0xxxx", InstName.Vrintp,      InstEmit32.Vrintp_V,    OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
-            SetAsimd("1111001x1x>>>xxxxxxx0010>xx1xxxx", InstName.Vrshr,       InstEmit32.Vrshr,       OpCode32SimdShImm.Create,       OpCode32SimdShImm.CreateT32);
-            SetAsimd("111100101x>>>xxxxxxx100001x1xxx0", InstName.Vrshrn,      InstEmit32.Vrshrn,      OpCode32SimdShImmNarrow.Create, OpCode32SimdShImmNarrow.CreateT32);
-            SetAsimd("111100111x111011xxxx010x1xx0xxxx", InstName.Vrsqrte,     InstEmit32.Vrsqrte,     OpCode32SimdSqrte.Create,       OpCode32SimdSqrte.CreateT32);
-            SetAsimd("111100100x10xxxxxxxx1111xxx1xxxx", InstName.Vrsqrts,     InstEmit32.Vrsqrts,     OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("1111001x1x>>>xxxxxxx0011>xx1xxxx", InstName.Vrsra,       InstEmit32.Vrsra,       OpCode32SimdShImm.Create,       OpCode32SimdShImm.CreateT32);
-            SetAsimd("111100101x>>>xxxxxxx0101>xx1xxxx", InstName.Vshl,        InstEmit32.Vshl,        OpCode32SimdShImm.Create,       OpCode32SimdShImm.CreateT32);
-            SetAsimd("1111001x0xxxxxxxxxxx0100xxx0xxxx", InstName.Vshl,        InstEmit32.Vshl_I,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("1111001x1x>>>xxxxxxx101000x1xxxx", InstName.Vshll,       InstEmit32.Vshll,       OpCode32SimdShImmLong.Create,   OpCode32SimdShImmLong.CreateT32); // A1 encoding.
-            SetAsimd("1111001x1x>>>xxxxxxx0000>xx1xxxx", InstName.Vshr,        InstEmit32.Vshr,        OpCode32SimdShImm.Create,       OpCode32SimdShImm.CreateT32);
-            SetAsimd("111100101x>>>xxxxxxx100000x1xxx0", InstName.Vshrn,       InstEmit32.Vshrn,       OpCode32SimdShImmNarrow.Create, OpCode32SimdShImmNarrow.CreateT32);
-            SetAsimd("1111001x1x>>>xxxxxxx0001>xx1xxxx", InstName.Vsra,        InstEmit32.Vsra,        OpCode32SimdShImm.Create,       OpCode32SimdShImm.CreateT32);
-            SetAsimd("111101001x00xxxxxxxx0000xxx0xxxx", InstName.Vst1,        InstEmit32.Vst1,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101001x00xxxxxxxx0100xx0xxxxx", InstName.Vst1,        InstEmit32.Vst1,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101001x00xxxxxxxx1000x000xxxx", InstName.Vst1,        InstEmit32.Vst1,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101001x00xxxxxxxx1000x011xxxx", InstName.Vst1,        InstEmit32.Vst1,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101000x00xxxxxxxx0111xx0xxxxx", InstName.Vst1,        InstEmit32.Vst1,        OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 1.
-            SetAsimd("111101000x00xxxxxxxx1010xx<<xxxx", InstName.Vst1,        InstEmit32.Vst1,        OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 2.
-            SetAsimd("111101000x00xxxxxxxx0110xx0xxxxx", InstName.Vst1,        InstEmit32.Vst1,        OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 3.
-            SetAsimd("111101000x00xxxxxxxx0010xxxxxxxx", InstName.Vst1,        InstEmit32.Vst1,        OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 4.
-            SetAsimd("111101001x00xxxxxxxx0x01xxxxxxxx", InstName.Vst2,        InstEmit32.Vst2,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101001x00xxxxxxxx1001xx0xxxxx", InstName.Vst2,        InstEmit32.Vst2,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101000x00xxxxxxxx100x<<0xxxxx", InstName.Vst2,        InstEmit32.Vst2,        OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 1, inc = 1/2 (itype).
-            SetAsimd("111101000x00xxxxxxxx100x<<10xxxx", InstName.Vst2,        InstEmit32.Vst2,        OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 1, inc = 1/2 (itype).
-            SetAsimd("111101000x00xxxxxxxx0011<<xxxxxx", InstName.Vst2,        InstEmit32.Vst2,        OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 2, inc = 2.
-            SetAsimd("111101001x00xxxxxxxx0x10xxx0xxxx", InstName.Vst3,        InstEmit32.Vst3,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101001x00xxxxxxxx1010xx00xxxx", InstName.Vst3,        InstEmit32.Vst3,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101000x00xxxxxxxx010x<<0xxxxx", InstName.Vst3,        InstEmit32.Vst3,        OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Inc = 1/2 (itype).
-            SetAsimd("111101001x00xxxxxxxx0x11xxxxxxxx", InstName.Vst4,        InstEmit32.Vst4,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101001x00xxxxxxxx1011xx<<xxxx", InstName.Vst4,        InstEmit32.Vst4,        OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
-            SetAsimd("111101000x00xxxxxxxx000x<<xxxxxx", InstName.Vst4,        InstEmit32.Vst4,        OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Inc = 1/2 (itype).
-            SetAsimd("111100110xxxxxxxxxxx1000xxx0xxxx", InstName.Vsub,        InstEmit32.Vsub_I,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100100x10xxxxxxxx1101xxx0xxxx", InstName.Vsub,        InstEmit32.Vsub_V,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("1111001x1x<<xxxxxxx00010x0x0xxxx", InstName.Vsubl,       InstEmit32.Vsubl_I,     OpCode32SimdRegLong.Create,     OpCode32SimdRegLong.CreateT32);
-            SetAsimd("1111001x1x<<xxxxxxx00011x0x0xxxx", InstName.Vsubw,       InstEmit32.Vsubw_I,     OpCode32SimdRegWide.Create,     OpCode32SimdRegWide.CreateT32);
-            SetAsimd("111100111x11xxxxxxxx10xxxxx0xxxx", InstName.Vtbl,        InstEmit32.Vtbl,        OpCode32SimdTbl.Create,         OpCode32SimdTbl.CreateT32);
-            SetAsimd("111100111x11<<10xxxx00001xx0xxxx", InstName.Vtrn,        InstEmit32.Vtrn,        OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
-            SetAsimd("111100100x<<xxxxxxxx1000xxx1xxxx", InstName.Vtst,        InstEmit32.Vtst,        OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
-            SetAsimd("111100111x11<<10xxxx00010xx0xxxx", InstName.Vuzp,        InstEmit32.Vuzp,        OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
-            SetAsimd("111100111x11<<10xxxx00011xx0xxxx", InstName.Vzip,        InstEmit32.Vzip,        OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
-#endregion
+            SetAsimd("111100111x110000xxx0001101x0xxx0", InstName.Aesd_V,      InstEmit32.Aesd_V,       OpCode32Simd.Create,            OpCode32Simd.CreateT32);
+            SetAsimd("111100111x110000xxx0001100x0xxx0", InstName.Aese_V,      InstEmit32.Aese_V,       OpCode32Simd.Create,            OpCode32Simd.CreateT32);
+            SetAsimd("111100111x110000xxx0001111x0xxx0", InstName.Aesimc_V,    InstEmit32.Aesimc_V,     OpCode32Simd.Create,            OpCode32Simd.CreateT32);
+            SetAsimd("111100111x110000xxx0001110x0xxx0", InstName.Aesmc_V,     InstEmit32.Aesmc_V,      OpCode32Simd.Create,            OpCode32Simd.CreateT32);
+            SetAsimd("111100110x00xxx0xxx01100x1x0xxx0", InstName.Sha256h_V,   InstEmit32.Sha256h_V,    OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100110x01xxx0xxx01100x1x0xxx0", InstName.Sha256h2_V,  InstEmit32.Sha256h2_V,   OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100111x111010xxx0001111x0xxx0", InstName.Sha256su0_V, InstEmit32.Sha256su0_V,  OpCode32Simd.Create,            OpCode32Simd.CreateT32);
+            SetAsimd("111100110x10xxx0xxx01100x1x0xxx0", InstName.Sha256su1_V, InstEmit32.Sha256su1_V,  OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("1111001x0x<<xxxxxxxx0111xxx0xxxx", InstName.Vabd,        InstEmit32.Vabd_I,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("1111001x1x<<xxxxxxxx0111x0x0xxxx", InstName.Vabdl,       InstEmit32.Vabdl_I,      OpCode32SimdRegLong.Create,     OpCode32SimdRegLong.CreateT32);
+            SetAsimd("111100111x11<<01xxxx00110xx0xxxx", InstName.Vabs,        InstEmit32.Vabs_V,       OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
+            SetAsimd("111100111x111001xxxx01110xx0xxxx", InstName.Vabs,        InstEmit32.Vabs_V,       OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
+            SetAsimd("111100100xxxxxxxxxxx1000xxx0xxxx", InstName.Vadd,        InstEmit32.Vadd_I,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100100x00xxxxxxxx1101xxx0xxxx", InstName.Vadd,        InstEmit32.Vadd_V,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("1111001x1x<<xxxxxxx00000x0x0xxxx", InstName.Vaddl,       InstEmit32.Vaddl_I,      OpCode32SimdRegLong.Create,     OpCode32SimdRegLong.CreateT32);
+            SetAsimd("1111001x1x<<xxxxxxx00001x0x0xxxx", InstName.Vaddw,       InstEmit32.Vaddw_I,      OpCode32SimdRegWide.Create,     OpCode32SimdRegWide.CreateT32);
+            SetAsimd("111100100x00xxxxxxxx0001xxx1xxxx", InstName.Vand,        InstEmit32.Vand_I,       OpCode32SimdBinary.Create,      OpCode32SimdBinary.CreateT32);
+            SetAsimd("111100100x01xxxxxxxx0001xxx1xxxx", InstName.Vbic,        InstEmit32.Vbic_I,       OpCode32SimdBinary.Create,      OpCode32SimdBinary.CreateT32);
+            SetAsimd("1111001x1x000xxxxxxx<<x10x11xxxx", InstName.Vbic,        InstEmit32.Vbic_II,      OpCode32SimdImm.Create,         OpCode32SimdImm.CreateT32);
+            SetAsimd("111100110x11xxxxxxxx0001xxx1xxxx", InstName.Vbif,        InstEmit32.Vbif,         OpCode32SimdBinary.Create,      OpCode32SimdBinary.CreateT32);
+            SetAsimd("111100110x10xxxxxxxx0001xxx1xxxx", InstName.Vbit,        InstEmit32.Vbit,         OpCode32SimdBinary.Create,      OpCode32SimdBinary.CreateT32);
+            SetAsimd("111100110x01xxxxxxxx0001xxx1xxxx", InstName.Vbsl,        InstEmit32.Vbsl,         OpCode32SimdBinary.Create,      OpCode32SimdBinary.CreateT32);
+            SetAsimd("111100110x<<xxxxxxxx1000xxx1xxxx", InstName.Vceq,        InstEmit32.Vceq_I,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100100x00xxxxxxxx1110xxx0xxxx", InstName.Vceq,        InstEmit32.Vceq_V,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100111x11xx01xxxx0x010xx0xxxx", InstName.Vceq,        InstEmit32.Vceq_Z,       OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
+            SetAsimd("1111001x0x<<xxxxxxxx0011xxx1xxxx", InstName.Vcge,        InstEmit32.Vcge_I,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100110x00xxxxxxxx1110xxx0xxxx", InstName.Vcge,        InstEmit32.Vcge_V,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100111x11xx01xxxx0x001xx0xxxx", InstName.Vcge,        InstEmit32.Vcge_Z,       OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
+            SetAsimd("1111001x0x<<xxxxxxxx0011xxx0xxxx", InstName.Vcgt,        InstEmit32.Vcgt_I,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100110x10xxxxxxxx1110xxx0xxxx", InstName.Vcgt,        InstEmit32.Vcgt_V,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100111x11xx01xxxx0x000xx0xxxx", InstName.Vcgt,        InstEmit32.Vcgt_Z,       OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
+            SetAsimd("111100111x11xx01xxxx0x011xx0xxxx", InstName.Vcle,        InstEmit32.Vcle_Z,       OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
+            SetAsimd("111100111x11xx01xxxx0x100xx0xxxx", InstName.Vclt,        InstEmit32.Vclt_Z,       OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
+            SetAsimd("111100111x110000xxxx01010xx0xxxx", InstName.Vcnt,        InstEmit32.Vcnt,         OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
+            SetAsimd("111100111x111011xxxx011xxxx0xxxx", InstName.Vcvt,        InstEmit32.Vcvt_V,       OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32); // FP and integer, vector.
+            SetAsimd("1111001x1x1xxxxxxxxx111x0xx1xxxx", InstName.Vcvt,        InstEmit32.Vcvt_V_Fixed, OpCode32SimdCvtFFixed.Create,   OpCode32SimdCvtFFixed.CreateT32); // Between floating point and fixed point, vector.
+            SetAsimd("111100111x11xxxxxxxx11000xx0xxxx", InstName.Vdup,        InstEmit32.Vdup_1,       OpCode32SimdDupElem.Create,     OpCode32SimdDupElem.CreateT32);
+            SetAsimd("111100110x00xxxxxxxx0001xxx1xxxx", InstName.Veor,        InstEmit32.Veor_I,       OpCode32SimdBinary.Create,      OpCode32SimdBinary.CreateT32);
+            SetAsimd("111100101x11xxxxxxxxxxxxxxx0xxxx", InstName.Vext,        InstEmit32.Vext,         OpCode32SimdExt.Create,         OpCode32SimdExt.CreateT32);
+            SetAsimd("111100100x00xxxxxxxx1100xxx1xxxx", InstName.Vfma,        InstEmit32.Vfma_V,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100100x10xxxxxxxx1100xxx1xxxx", InstName.Vfms,        InstEmit32.Vfms_V,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("1111001x0x<<xxxxxxxx0000xxx0xxxx", InstName.Vhadd,       InstEmit32.Vhadd,        OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111101001x10xxxxxxxx0000xxx0xxxx", InstName.Vld1,        InstEmit32.Vld1,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101001x10xxxxxxxx0100xx0xxxxx", InstName.Vld1,        InstEmit32.Vld1,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101001x10xxxxxxxx1000x000xxxx", InstName.Vld1,        InstEmit32.Vld1,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101001x10xxxxxxxx1000x011xxxx", InstName.Vld1,        InstEmit32.Vld1,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101001x10xxxxxxxx110000x0xxxx", InstName.Vld1,        InstEmit32.Vld1,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101001x10xxxxxxxx110001xxxxxx", InstName.Vld1,        InstEmit32.Vld1,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101001x10xxxxxxxx110010xxxxxx", InstName.Vld1,        InstEmit32.Vld1,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101000x10xxxxxxxx0111xx0xxxxx", InstName.Vld1,        InstEmit32.Vld1,         OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 1.
+            SetAsimd("111101000x10xxxxxxxx1010xx<<xxxx", InstName.Vld1,        InstEmit32.Vld1,         OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 2.
+            SetAsimd("111101000x10xxxxxxxx0110xx0xxxxx", InstName.Vld1,        InstEmit32.Vld1,         OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 3.
+            SetAsimd("111101000x10xxxxxxxx0010xxxxxxxx", InstName.Vld1,        InstEmit32.Vld1,         OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 4.
+            SetAsimd("111101001x10xxxxxxxx0x01xxxxxxxx", InstName.Vld2,        InstEmit32.Vld2,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101001x10xxxxxxxx1001xx0xxxxx", InstName.Vld2,        InstEmit32.Vld2,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101001x10xxxxxxxx1101<<xxxxxx", InstName.Vld2,        InstEmit32.Vld2,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101000x10xxxxxxxx100x<<0xxxxx", InstName.Vld2,        InstEmit32.Vld2,         OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 1, inc = 1/2 (itype).
+            SetAsimd("111101000x10xxxxxxxx100x<<10xxxx", InstName.Vld2,        InstEmit32.Vld2,         OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 1, inc = 1/2 (itype).
+            SetAsimd("111101000x10xxxxxxxx0011<<xxxxxx", InstName.Vld2,        InstEmit32.Vld2,         OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 2, inc = 2.
+            SetAsimd("111101001x10xxxxxxxx0x10xxx0xxxx", InstName.Vld3,        InstEmit32.Vld3,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101001x10xxxxxxxx1010xx00xxxx", InstName.Vld3,        InstEmit32.Vld3,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101001x10xxxxxxxx1110<<x0xxxx", InstName.Vld3,        InstEmit32.Vld3,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101000x10xxxxxxxx010x<<0xxxxx", InstName.Vld3,        InstEmit32.Vld3,         OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Inc = 1/2 (itype).
+            SetAsimd("111101001x10xxxxxxxx0x11xxxxxxxx", InstName.Vld4,        InstEmit32.Vld4,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101001x10xxxxxxxx1011xx<<xxxx", InstName.Vld4,        InstEmit32.Vld4,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101001x10xxxxxxxx1111<<x>xxxx", InstName.Vld4,        InstEmit32.Vld4,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101000x10xxxxxxxx000x<<xxxxxx", InstName.Vld4,        InstEmit32.Vld4,         OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Inc = 1/2 (itype).
+            SetAsimd("1111001x0x<<xxxxxxxx0110xxx0xxxx", InstName.Vmax,        InstEmit32.Vmax_I,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100100x00xxxxxxxx1111xxx0xxxx", InstName.Vmax,        InstEmit32.Vmax_V,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("1111001x0x<<xxxxxxxx0110xxx1xxxx", InstName.Vmin,        InstEmit32.Vmin_I,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100100x10xxxxxxxx1111xxx0xxxx", InstName.Vmin,        InstEmit32.Vmin_V,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100110x0xxxxxxxxx1111xxx1xxxx", InstName.Vmaxnm,      InstEmit32.Vmaxnm_V,     OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100110x1xxxxxxxxx1111xxx1xxxx", InstName.Vminnm,      InstEmit32.Vminnm_V,     OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("1111001x1x<<xxxxxxxx000xx1x0xxxx", InstName.Vmla,        InstEmit32.Vmla_1,       OpCode32SimdRegElem.Create,     OpCode32SimdRegElem.CreateT32);
+            SetAsimd("111100100xxxxxxxxxxx1001xxx0xxxx", InstName.Vmla,        InstEmit32.Vmla_I,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100100x00xxxxxxxx1101xxx1xxxx", InstName.Vmla,        InstEmit32.Vmla_V,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("1111001x1x<<xxxxxxx01000x0x0xxxx", InstName.Vmlal,       InstEmit32.Vmlal_I,      OpCode32SimdRegLong.Create,     OpCode32SimdRegLong.CreateT32);
+            SetAsimd("1111001x1x<<xxxxxxxx010xx1x0xxxx", InstName.Vmls,        InstEmit32.Vmls_1,       OpCode32SimdRegElem.Create,     OpCode32SimdRegElem.CreateT32);
+            SetAsimd("111100100x10xxxxxxxx1101xxx1xxxx", InstName.Vmls,        InstEmit32.Vmls_V,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100110xxxxxxxxxxx1001xxx0xxxx", InstName.Vmls,        InstEmit32.Vmls_I,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("1111001x1x<<xxxxxxx01010x0x0xxxx", InstName.Vmlsl,       InstEmit32.Vmlsl_I,      OpCode32SimdRegLong.Create,     OpCode32SimdRegLong.CreateT32);
+            SetAsimd("1111001x1x000xxxxxxx0xx00x01xxxx", InstName.Vmov,        InstEmit32.Vmov_I,       OpCode32SimdImm.Create,         OpCode32SimdImm.CreateT32); // D/Q vector I32.
+            SetAsimd("1111001x1x000xxxxxxx10x00x01xxxx", InstName.Vmov,        InstEmit32.Vmov_I,       OpCode32SimdImm.Create,         OpCode32SimdImm.CreateT32); // D/Q I16.
+            SetAsimd("1111001x1x000xxxxxxx11xx0x01xxxx", InstName.Vmov,        InstEmit32.Vmov_I,       OpCode32SimdImm.Create,         OpCode32SimdImm.CreateT32); // D/Q (dt - from cmode).
+            SetAsimd("1111001x1x000xxxxxxx11100x11xxxx", InstName.Vmov,        InstEmit32.Vmov_I,       OpCode32SimdImm.Create,         OpCode32SimdImm.CreateT32); // D/Q I64.
+            SetAsimd("1111001x1x001000xxx0101000x1xxxx", InstName.Vmovl,       InstEmit32.Vmovl,        OpCode32SimdLong.Create,        OpCode32SimdLong.CreateT32);
+            SetAsimd("1111001x1x010000xxx0101000x1xxxx", InstName.Vmovl,       InstEmit32.Vmovl,        OpCode32SimdLong.Create,        OpCode32SimdLong.CreateT32);
+            SetAsimd("1111001x1x100000xxx0101000x1xxxx", InstName.Vmovl,       InstEmit32.Vmovl,        OpCode32SimdLong.Create,        OpCode32SimdLong.CreateT32);
+            SetAsimd("111100111x11<<10xxxx001000x0xxx0", InstName.Vmovn,       InstEmit32.Vmovn,        OpCode32SimdMovn.Create,        OpCode32SimdMovn.CreateT32);
+            SetAsimd("1111001x1x<<xxxxxxxx100xx1x0xxxx", InstName.Vmul,        InstEmit32.Vmul_1,       OpCode32SimdRegElem.Create,     OpCode32SimdRegElem.CreateT32);
+            SetAsimd("111100100x<<xxxxxxxx1001xxx1xxxx", InstName.Vmul,        InstEmit32.Vmul_I,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100110x00xxxxxxxx1001xxx1xxxx", InstName.Vmul,        InstEmit32.Vmul_I,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100110x00xxxxxxxx1101xxx1xxxx", InstName.Vmul,        InstEmit32.Vmul_V,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("1111001x1x<<xxxxxxx01010x1x0xxxx", InstName.Vmull,       InstEmit32.Vmull_1,      OpCode32SimdRegElemLong.Create, OpCode32SimdRegElemLong.CreateT32);
+            SetAsimd("1111001x1x<<xxxxxxx01100x0x0xxxx", InstName.Vmull,       InstEmit32.Vmull_I,      OpCode32SimdRegLong.Create,     OpCode32SimdRegLong.CreateT32);
+            SetAsimd("111100101xx0xxxxxxx01110x0x0xxxx", InstName.Vmull,       InstEmit32.Vmull_I,      OpCode32SimdRegLong.Create,     OpCode32SimdRegLong.CreateT32); // P8/P64
+            SetAsimd("111100111x110000xxxx01011xx0xxxx", InstName.Vmvn,        InstEmit32.Vmvn_I,       OpCode32SimdBinary.Create,      OpCode32SimdBinary.CreateT32);
+            SetAsimd("1111001x1x000xxxxxxx0xx00x11xxxx", InstName.Vmvn,        InstEmit32.Vmvn_II,      OpCode32SimdImm.Create,         OpCode32SimdImm.CreateT32); // D/Q vector I32.
+            SetAsimd("1111001x1x000xxxxxxx10x00x11xxxx", InstName.Vmvn,        InstEmit32.Vmvn_II,      OpCode32SimdImm.Create,         OpCode32SimdImm.CreateT32);
+            SetAsimd("1111001x1x000xxxxxxx110x0x11xxxx", InstName.Vmvn,        InstEmit32.Vmvn_II,      OpCode32SimdImm.Create,         OpCode32SimdImm.CreateT32);
+            SetAsimd("111100111x11<<01xxxx00111xx0xxxx", InstName.Vneg,        InstEmit32.Vneg_V,       OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
+            SetAsimd("111100111x111001xxxx01111xx0xxxx", InstName.Vneg,        InstEmit32.Vneg_V,       OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
+            SetAsimd("111100100x11xxxxxxxx0001xxx1xxxx", InstName.Vorn,        InstEmit32.Vorn_I,       OpCode32SimdBinary.Create,      OpCode32SimdBinary.CreateT32);
+            SetAsimd("111100100x10xxxxxxxx0001xxx1xxxx", InstName.Vorr,        InstEmit32.Vorr_I,       OpCode32SimdBinary.Create,      OpCode32SimdBinary.CreateT32);
+            SetAsimd("1111001x1x000xxxxxxx<<x10x01xxxx", InstName.Vorr,        InstEmit32.Vorr_II,      OpCode32SimdImm.Create,         OpCode32SimdImm.CreateT32);
+            SetAsimd("111100100x<<xxxxxxxx1011x0x1xxxx", InstName.Vpadd,       InstEmit32.Vpadd_I,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100110x00xxxxxxxx1101x0x0xxxx", InstName.Vpadd,       InstEmit32.Vpadd_V,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100111x11<<00xxxx0010xxx0xxxx", InstName.Vpaddl,      InstEmit32.Vpaddl,       OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
+            SetAsimd("1111001x0x<<xxxxxxxx1010x0x0xxxx", InstName.Vpmax,       InstEmit32.Vpmax_I,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100110x00xxxxxxxx1111x0x0xxxx", InstName.Vpmax,       InstEmit32.Vpmax_V,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("1111001x0x<<xxxxxxxx1010x0x1xxxx", InstName.Vpmin,       InstEmit32.Vpmin_I,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100110x10xxxxxxxx1111x0x0xxxx", InstName.Vpmin,       InstEmit32.Vpmin_V,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("1111001x0xxxxxxxxxxx0000xxx1xxxx", InstName.Vqadd,       InstEmit32.Vqadd,        OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100100x01xxxxxxxx1011xxx0xxxx", InstName.Vqdmulh,     InstEmit32.Vqdmulh,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100100x10xxxxxxxx1011xxx0xxxx", InstName.Vqdmulh,     InstEmit32.Vqdmulh,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100111x11<<10xxxx00101xx0xxx0", InstName.Vqmovn,      InstEmit32.Vqmovn,       OpCode32SimdMovn.Create,        OpCode32SimdMovn.CreateT32);
+            SetAsimd("111100111x11<<10xxxx001001x0xxx0", InstName.Vqmovun,     InstEmit32.Vqmovun,      OpCode32SimdMovn.Create,        OpCode32SimdMovn.CreateT32);
+            SetAsimd("1111001x1x>>>xxxxxxx100101x1xxx0", InstName.Vqrshrn,     InstEmit32.Vqrshrn,      OpCode32SimdShImmNarrow.Create, OpCode32SimdShImmNarrow.CreateT32);
+            SetAsimd("111100111x>>>xxxxxxx100001x1xxx0", InstName.Vqrshrun,    InstEmit32.Vqrshrun,     OpCode32SimdShImmNarrow.Create, OpCode32SimdShImmNarrow.CreateT32);
+            SetAsimd("1111001x1x>>>xxxxxxx100100x1xxx0", InstName.Vqshrn,      InstEmit32.Vqshrn,       OpCode32SimdShImmNarrow.Create, OpCode32SimdShImmNarrow.CreateT32);
+            SetAsimd("111100111x>>>xxxxxxx100000x1xxx0", InstName.Vqshrun,     InstEmit32.Vqshrun,      OpCode32SimdShImmNarrow.Create, OpCode32SimdShImmNarrow.CreateT32);
+            SetAsimd("1111001x0xxxxxxxxxxx0010xxx1xxxx", InstName.Vqsub,       InstEmit32.Vqsub,        OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100111x111011xxxx010x0xx0xxxx", InstName.Vrecpe,      InstEmit32.Vrecpe,       OpCode32SimdSqrte.Create,       OpCode32SimdSqrte.CreateT32);
+            SetAsimd("111100100x00xxxxxxxx1111xxx1xxxx", InstName.Vrecps,      InstEmit32.Vrecps,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100111x11xx00xxxx000<<xx0xxxx", InstName.Vrev,        InstEmit32.Vrev,         OpCode32SimdRev.Create,         OpCode32SimdRev.CreateT32);
+            SetAsimd("1111001x0x<<xxxxxxxx0001xxx0xxxx", InstName.Vrhadd,      InstEmit32.Vrhadd,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100111x111010xxxx01010xx0xxxx", InstName.Vrinta,      InstEmit32.Vrinta_V,     OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
+            SetAsimd("111100111x111010xxxx01101xx0xxxx", InstName.Vrintm,      InstEmit32.Vrintm_V,     OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
+            SetAsimd("111100111x111010xxxx01000xx0xxxx", InstName.Vrintn,      InstEmit32.Vrintn_V,     OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
+            SetAsimd("111100111x111010xxxx01111xx0xxxx", InstName.Vrintp,      InstEmit32.Vrintp_V,     OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
+            SetAsimd("1111001x1x>>>xxxxxxx0010>xx1xxxx", InstName.Vrshr,       InstEmit32.Vrshr,        OpCode32SimdShImm.Create,       OpCode32SimdShImm.CreateT32);
+            SetAsimd("111100101x>>>xxxxxxx100001x1xxx0", InstName.Vrshrn,      InstEmit32.Vrshrn,       OpCode32SimdShImmNarrow.Create, OpCode32SimdShImmNarrow.CreateT32);
+            SetAsimd("111100111x111011xxxx010x1xx0xxxx", InstName.Vrsqrte,     InstEmit32.Vrsqrte,      OpCode32SimdSqrte.Create,       OpCode32SimdSqrte.CreateT32);
+            SetAsimd("111100100x10xxxxxxxx1111xxx1xxxx", InstName.Vrsqrts,     InstEmit32.Vrsqrts,      OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("1111001x1x>>>xxxxxxx0011>xx1xxxx", InstName.Vrsra,       InstEmit32.Vrsra,        OpCode32SimdShImm.Create,       OpCode32SimdShImm.CreateT32);
+            SetAsimd("111100101x>>>xxxxxxx0101>xx1xxxx", InstName.Vshl,        InstEmit32.Vshl,         OpCode32SimdShImm.Create,       OpCode32SimdShImm.CreateT32);
+            SetAsimd("1111001x0xxxxxxxxxxx0100xxx0xxxx", InstName.Vshl,        InstEmit32.Vshl_I,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("1111001x1x>>>xxxxxxx101000x1xxxx", InstName.Vshll,       InstEmit32.Vshll,        OpCode32SimdShImmLong.Create,   OpCode32SimdShImmLong.CreateT32); // A1 encoding.
+            SetAsimd("1111001x1x>>>xxxxxxx0000>xx1xxxx", InstName.Vshr,        InstEmit32.Vshr,         OpCode32SimdShImm.Create,       OpCode32SimdShImm.CreateT32);
+            SetAsimd("111100101x>>>xxxxxxx100000x1xxx0", InstName.Vshrn,       InstEmit32.Vshrn,        OpCode32SimdShImmNarrow.Create, OpCode32SimdShImmNarrow.CreateT32);
+            SetAsimd("1111001x1x>>>xxxxxxx0001>xx1xxxx", InstName.Vsra,        InstEmit32.Vsra,         OpCode32SimdShImm.Create,       OpCode32SimdShImm.CreateT32);
+            SetAsimd("111101001x00xxxxxxxx0000xxx0xxxx", InstName.Vst1,        InstEmit32.Vst1,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101001x00xxxxxxxx0100xx0xxxxx", InstName.Vst1,        InstEmit32.Vst1,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101001x00xxxxxxxx1000x000xxxx", InstName.Vst1,        InstEmit32.Vst1,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101001x00xxxxxxxx1000x011xxxx", InstName.Vst1,        InstEmit32.Vst1,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101000x00xxxxxxxx0111xx0xxxxx", InstName.Vst1,        InstEmit32.Vst1,         OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 1.
+            SetAsimd("111101000x00xxxxxxxx1010xx<<xxxx", InstName.Vst1,        InstEmit32.Vst1,         OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 2.
+            SetAsimd("111101000x00xxxxxxxx0110xx0xxxxx", InstName.Vst1,        InstEmit32.Vst1,         OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 3.
+            SetAsimd("111101000x00xxxxxxxx0010xxxxxxxx", InstName.Vst1,        InstEmit32.Vst1,         OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 4.
+            SetAsimd("111101001x00xxxxxxxx0x01xxxxxxxx", InstName.Vst2,        InstEmit32.Vst2,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101001x00xxxxxxxx1001xx0xxxxx", InstName.Vst2,        InstEmit32.Vst2,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101000x00xxxxxxxx100x<<0xxxxx", InstName.Vst2,        InstEmit32.Vst2,         OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 1, inc = 1/2 (itype).
+            SetAsimd("111101000x00xxxxxxxx100x<<10xxxx", InstName.Vst2,        InstEmit32.Vst2,         OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 1, inc = 1/2 (itype).
+            SetAsimd("111101000x00xxxxxxxx0011<<xxxxxx", InstName.Vst2,        InstEmit32.Vst2,         OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Regs = 2, inc = 2.
+            SetAsimd("111101001x00xxxxxxxx0x10xxx0xxxx", InstName.Vst3,        InstEmit32.Vst3,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101001x00xxxxxxxx1010xx00xxxx", InstName.Vst3,        InstEmit32.Vst3,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101000x00xxxxxxxx010x<<0xxxxx", InstName.Vst3,        InstEmit32.Vst3,         OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Inc = 1/2 (itype).
+            SetAsimd("111101001x00xxxxxxxx0x11xxxxxxxx", InstName.Vst4,        InstEmit32.Vst4,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101001x00xxxxxxxx1011xx<<xxxx", InstName.Vst4,        InstEmit32.Vst4,         OpCode32SimdMemSingle.Create,   OpCode32SimdMemSingle.CreateT32);
+            SetAsimd("111101000x00xxxxxxxx000x<<xxxxxx", InstName.Vst4,        InstEmit32.Vst4,         OpCode32SimdMemPair.Create,     OpCode32SimdMemPair.CreateT32); // Inc = 1/2 (itype).
+            SetAsimd("111100110xxxxxxxxxxx1000xxx0xxxx", InstName.Vsub,        InstEmit32.Vsub_I,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100100x10xxxxxxxx1101xxx0xxxx", InstName.Vsub,        InstEmit32.Vsub_V,       OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("1111001x1x<<xxxxxxx00010x0x0xxxx", InstName.Vsubl,       InstEmit32.Vsubl_I,      OpCode32SimdRegLong.Create,     OpCode32SimdRegLong.CreateT32);
+            SetAsimd("1111001x1x<<xxxxxxx00011x0x0xxxx", InstName.Vsubw,       InstEmit32.Vsubw_I,      OpCode32SimdRegWide.Create,     OpCode32SimdRegWide.CreateT32);
+            SetAsimd("111100111x11xxxxxxxx10xxxxx0xxxx", InstName.Vtbl,        InstEmit32.Vtbl,         OpCode32SimdTbl.Create,         OpCode32SimdTbl.CreateT32);
+            SetAsimd("111100111x11<<10xxxx00001xx0xxxx", InstName.Vtrn,        InstEmit32.Vtrn,         OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
+            SetAsimd("111100100x<<xxxxxxxx1000xxx1xxxx", InstName.Vtst,        InstEmit32.Vtst,         OpCode32SimdReg.Create,         OpCode32SimdReg.CreateT32);
+            SetAsimd("111100111x11<<10xxxx00010xx0xxxx", InstName.Vuzp,        InstEmit32.Vuzp,         OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
+            SetAsimd("111100111x11<<10xxxx00011xx0xxxx", InstName.Vzip,        InstEmit32.Vzip,         OpCode32SimdCmpZ.Create,        OpCode32SimdCmpZ.CreateT32);
+            #endregion
 
-#region "OpCode Table (AArch32, T16)"
+            #region "OpCode Table (AArch32, T16)"
             SetT16("000<<xxxxxxxxxxx", InstName.Mov,    InstEmit32.Mov,     OpCodeT16ShiftImm.Create);
             SetT16("0001100xxxxxxxxx", InstName.Add,    InstEmit32.Add,     OpCodeT16AddSubReg.Create);
             SetT16("0001101xxxxxxxxx", InstName.Sub,    InstEmit32.Sub,     OpCodeT16AddSubReg.Create);
@@ -1129,9 +1133,9 @@ namespace ARMeilleure.Decoders
             SetT16("1101<<<xxxxxxxxx", InstName.B,      InstEmit32.B,       OpCodeT16BImm8.Create);
             SetT16("11011111xxxxxxxx", InstName.Svc,    InstEmit32.Svc,     OpCodeT16Exception.Create);
             SetT16("11100xxxxxxxxxxx", InstName.B,      InstEmit32.B,       OpCodeT16BImm11.Create);
-#endregion
+            #endregion
 
-#region "OpCode Table (AArch32, T32)"
+            #region "OpCode Table (AArch32, T32)"
             // Base
             SetT32("11101011010xxxxx0xxxxxxxxxxxxxxx", InstName.Adc,      InstEmit32.Adc,      OpCodeT32AluRsImm.Create);
             SetT32("11110x01010xxxxx0xxxxxxxxxxxxxxx", InstName.Adc,      InstEmit32.Adc,      OpCodeT32AluImm.Create);
@@ -1297,14 +1301,15 @@ namespace ARMeilleure.Decoders
             SetT32("11110011101011111000000000000010", InstName.Wfe,      InstEmit32.Nop,      OpCodeT32.Create);
             SetT32("11110011101011111000000000000011", InstName.Wfi,      InstEmit32.Nop,      OpCodeT32.Create);
             SetT32("11110011101011111000000000000001", InstName.Yield,    InstEmit32.Nop,      OpCodeT32.Create);
-#endregion
+            #endregion
 
-            FillFastLookupTable(InstA32FastLookup, AllInstA32, ToFastLookupIndexA);
-            FillFastLookupTable(InstT32FastLookup, AllInstT32, ToFastLookupIndexT);
-            FillFastLookupTable(InstA64FastLookup, AllInstA64, ToFastLookupIndexA);
+            FillFastLookupTable(_instA32FastLookup, _allInstA32, ToFastLookupIndexA);
+            FillFastLookupTable(_instT32FastLookup, _allInstT32, ToFastLookupIndexT);
+            FillFastLookupTable(_instA64FastLookup, _allInstA64, ToFastLookupIndexA);
+#pragma warning restore IDE0055
         }
 
-        private static void FillFastLookupTable(InstInfo[][] table, List<InstInfo> allInsts, Func<int, int> ToFastLookupIndex)
+        private static void FillFastLookupTable(InstInfo[][] table, List<InstInfo> allInsts, Func<int, int> toFastLookupIndex)
         {
             List<InstInfo>[] temp = new List<InstInfo>[FastLookupSize];
 
@@ -1315,8 +1320,8 @@ namespace ARMeilleure.Decoders
 
             foreach (InstInfo inst in allInsts)
             {
-                int mask  = ToFastLookupIndex(inst.Mask);
-                int value = ToFastLookupIndex(inst.Value);
+                int mask = toFastLookupIndex(inst.Mask);
+                int value = toFastLookupIndex(inst.Value);
 
                 for (int index = 0; index < temp.Length; index++)
                 {
@@ -1335,22 +1340,21 @@ namespace ARMeilleure.Decoders
 
         private static void SetA32(string encoding, InstName name, InstEmitter emitter, MakeOp makeOp)
         {
-            Set(encoding, AllInstA32, new InstDescriptor(name, emitter), makeOp);
+            Set(encoding, _allInstA32, new InstDescriptor(name, emitter), makeOp);
         }
 
         private static void SetT16(string encoding, InstName name, InstEmitter emitter, MakeOp makeOp)
         {
             encoding = "xxxxxxxxxxxxxxxx" + encoding;
-            Set(encoding, AllInstT32, new InstDescriptor(name, emitter), makeOp);
+            Set(encoding, _allInstT32, new InstDescriptor(name, emitter), makeOp);
         }
 
         private static void SetT32(string encoding, InstName name, InstEmitter emitter, MakeOp makeOp)
         {
             string reversedEncoding = $"{encoding.AsSpan(16)}{encoding.AsSpan(0, 16)}";
-            MakeOp reversedMakeOp =
-                (inst, address, opCode)
+            OpCode ReversedMakeOp(InstDescriptor inst, ulong address, int opCode)
                     => makeOp(inst, address, (int)BitOperations.RotateRight((uint)opCode, 16));
-            Set(reversedEncoding, AllInstT32, new InstDescriptor(name, emitter), reversedMakeOp);
+            Set(reversedEncoding, _allInstT32, new InstDescriptor(name, emitter), ReversedMakeOp);
         }
 
         private static void SetVfp(string encoding, InstName name, InstEmitter emitter, MakeOp makeOpA32, MakeOp makeOpT32)
@@ -1395,12 +1399,12 @@ namespace ARMeilleure.Decoders
 
         private static void SetA64(string encoding, InstName name, InstEmitter emitter, MakeOp makeOp)
         {
-            Set(encoding, AllInstA64, new InstDescriptor(name, emitter), makeOp);
+            Set(encoding, _allInstA64, new InstDescriptor(name, emitter), makeOp);
         }
 
         private static void Set(string encoding, List<InstInfo> list, InstDescriptor inst, MakeOp makeOp)
         {
-            int bit   = encoding.Length - 1;
+            int bit = encoding.Length - 1;
             int value = 0;
             int xMask = 0;
             int xBits = 0;
@@ -1439,7 +1443,7 @@ namespace ARMeilleure.Decoders
                 }
                 else if (chr != '0')
                 {
-                    throw new ArgumentException(nameof(encoding));
+                    throw new ArgumentException($"Invalid encoding: {encoding}", nameof(encoding));
                 }
             }
 
@@ -1470,17 +1474,17 @@ namespace ARMeilleure.Decoders
 
         public static (InstDescriptor inst, MakeOp makeOp) GetInstA32(int opCode)
         {
-            return GetInstFromList(InstA32FastLookup[ToFastLookupIndexA(opCode)], opCode);
+            return GetInstFromList(_instA32FastLookup[ToFastLookupIndexA(opCode)], opCode);
         }
 
         public static (InstDescriptor inst, MakeOp makeOp) GetInstT32(int opCode)
         {
-            return GetInstFromList(InstT32FastLookup[ToFastLookupIndexT(opCode)], opCode);
+            return GetInstFromList(_instT32FastLookup[ToFastLookupIndexT(opCode)], opCode);
         }
 
         public static (InstDescriptor inst, MakeOp makeOp) GetInstA64(int opCode)
         {
-            return GetInstFromList(InstA64FastLookup[ToFastLookupIndexA(opCode)], opCode);
+            return GetInstFromList(_instA64FastLookup[ToFastLookupIndexA(opCode)], opCode);
         }
 
         private static (InstDescriptor inst, MakeOp makeOp) GetInstFromList(InstInfo[] insts, int opCode)

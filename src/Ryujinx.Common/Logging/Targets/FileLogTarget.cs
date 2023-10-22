@@ -1,14 +1,15 @@
-﻿using System;
+﻿using Ryujinx.Common.Logging.Formatters;
+using System;
 using System.IO;
 using System.Linq;
 
-namespace Ryujinx.Common.Logging
+namespace Ryujinx.Common.Logging.Targets
 {
     public class FileLogTarget : ILogTarget
     {
-        private readonly StreamWriter  _logWriter;
+        private readonly StreamWriter _logWriter;
         private readonly ILogFormatter _formatter;
-        private readonly string        _name;
+        private readonly string _name;
 
         string ILogTarget.Name { get => _name; }
 
@@ -19,7 +20,7 @@ namespace Ryujinx.Common.Logging
         public FileLogTarget(string path, string name, FileShare fileShare, FileMode fileMode)
         {
             // Ensure directory is present
-            DirectoryInfo logDir = new DirectoryInfo(Path.Combine(path, "Logs"));
+            DirectoryInfo logDir = new(Path.Combine(path, "Logs"));
             logDir.Create();
 
             // Clean up old logs, should only keep 3
@@ -32,9 +33,9 @@ namespace Ryujinx.Common.Logging
             string version = ReleaseInformation.GetVersion();
 
             // Get path for the current time
-            path = Path.Combine(logDir.FullName, $"Ryujinx_{version}_{DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss")}.log");
+            path = Path.Combine(logDir.FullName, $"Ryujinx_{version}_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.log");
 
-            _name      = name;
+            _name = name;
             _logWriter = new StreamWriter(File.Open(path, fileMode, FileAccess.Write, fileShare));
             _formatter = new DefaultLogFormatter();
         }
@@ -47,6 +48,7 @@ namespace Ryujinx.Common.Logging
 
         public void Dispose()
         {
+            GC.SuppressFinalize(this);
             _logWriter.WriteLine("---- End of Log ----");
             _logWriter.Flush();
             _logWriter.Dispose();

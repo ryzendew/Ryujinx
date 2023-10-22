@@ -165,6 +165,12 @@ namespace Ryujinx.Horizon.Sdk.Sf.Cmif
 
                     entry.Owner = null;
                     obj = entry.Obj;
+
+                    if (obj.ServiceObject is IDisposable disposableObj)
+                    {
+                        disposableObj.Dispose();
+                    }
+
                     entry.Obj = null;
                     _entries.Remove(entry.Node);
                     entry.Node = null;
@@ -205,7 +211,7 @@ namespace Ryujinx.Horizon.Sdk.Sf.Cmif
         private readonly EntryManager _entryManager;
         private readonly object _entryOwnerLock;
         private readonly HashSet<Domain> _domains;
-        private int _maxDomains;
+        private readonly int _maxDomains;
 
         public ServerDomainManager(int entryCount, int maxDomains)
         {

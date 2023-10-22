@@ -1,11 +1,11 @@
 using Gtk;
 using Ryujinx.HLE.FileSystem;
 using Ryujinx.HLE.HOS;
+using Ryujinx.Ui.App.Common;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-
 using GUI = Gtk.Builder.ObjectAttribute;
 
 namespace Ryujinx.Ui.Windows
@@ -15,27 +15,29 @@ namespace Ryujinx.Ui.Windows
         private readonly string _enabledCheatsPath;
         private readonly bool _noCheatsFound;
 
-#pragma warning disable CS0649, IDE0044
-        [GUI] Label    _baseTitleInfoLabel;
+#pragma warning disable CS0649, IDE0044 // Field is never assigned to, Add readonly modifier
+        [GUI] Label _baseTitleInfoLabel;
+        [GUI] TextView _buildIdTextView;
         [GUI] TreeView _cheatTreeView;
-        [GUI] Button   _saveButton;
+        [GUI] Button _saveButton;
 #pragma warning restore CS0649, IDE0044
 
-        public CheatWindow(VirtualFileSystem virtualFileSystem, ulong titleId, string titleName) : this(new Builder("Ryujinx.Ui.Windows.CheatWindow.glade"), virtualFileSystem, titleId, titleName) { }
+        public CheatWindow(VirtualFileSystem virtualFileSystem, ulong titleId, string titleName, string titlePath) : this(new Builder("Ryujinx.Ui.Windows.CheatWindow.glade"), virtualFileSystem, titleId, titleName, titlePath) { }
 
-        private CheatWindow(Builder builder, VirtualFileSystem virtualFileSystem, ulong titleId, string titleName) : base(builder.GetRawOwnedObject("_cheatWindow"))
+        private CheatWindow(Builder builder, VirtualFileSystem virtualFileSystem, ulong titleId, string titleName, string titlePath) : base(builder.GetRawOwnedObject("_cheatWindow"))
         {
             builder.Autoconnect(this);
             _baseTitleInfoLabel.Text = $"Cheats Available for {titleName} [{titleId:X16}]";
+            _buildIdTextView.Buffer.Text = $"BuildId: {ApplicationData.GetApplicationBuildId(virtualFileSystem, titlePath)}";
 
-            string modsBasePath  = virtualFileSystem.ModLoader.GetModsBasePath();
-            string titleModsPath = virtualFileSystem.ModLoader.GetTitleDir(modsBasePath, titleId.ToString("X16"));
+            string modsBasePath = ModLoader.GetModsBasePath();
+            string titleModsPath = ModLoader.GetTitleDir(modsBasePath, titleId.ToString("X16"));
 
             _enabledCheatsPath = System.IO.Path.Combine(titleModsPath, "cheats", "enabled.txt");
 
             _cheatTreeView.Model = new TreeStore(typeof(bool), typeof(string), typeof(string), typeof(string));
 
-            CellRendererToggle enableToggle = new CellRendererToggle();
+            CellRendererToggle enableToggle = new();
             enableToggle.Toggled += (sender, args) =>
             {
                 _cheatTreeView.Model.GetIter(out TreeIter treeIter, new TreePath(args.Path));
@@ -59,7 +61,7 @@ namespace Ryujinx.Ui.Windows
             var buildIdColumn = _cheatTreeView.AppendColumn("Build Id", new CellRendererText(), "text", 3);
             buildIdColumn.Visible = false;
 
-            string[] enabled = { };
+            string[] enabled = Array.Empty<string>();
 
             if (File.Exists(_enabledCheatsPath))
             {
@@ -87,7 +89,7 @@ namespace Ryujinx.Ui.Windows
                     parentIter = ((TreeStore)_cheatTreeView.Model).AppendValues(false, buildId, parentPath, "");
                 }
 
-                string cleanName = cheat.Name.Substring(1, cheat.Name.Length - 8);
+                string cleanName = cheat.Name[1..^7];
                 ((TreeStore)_cheatTreeView.Model).AppendValues(parentIter, enabled.Contains($"{buildId}-{cheat.Name}"), cleanName, "", buildId);
 
                 cheatAdded++;
@@ -113,7 +115,7 @@ namespace Ryujinx.Ui.Windows
                 return;
             }
 
-            List<string> enabledCheats = new List<string>();
+            List<string> enabledCheats = new();
 
             if (_cheatTreeView.Model.GetIterFirst(out TreeIter parentIter))
             {

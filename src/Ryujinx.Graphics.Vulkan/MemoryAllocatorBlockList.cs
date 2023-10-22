@@ -3,6 +3,7 @@ using Silk.NET.Vulkan;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 
 namespace Ryujinx.Graphics.Vulkan
 {
@@ -43,7 +44,7 @@ namespace Ryujinx.Graphics.Vulkan
                 Size = size;
                 _freeRanges = new List<Range>
                 {
-                    new Range(0, size)
+                    new Range(0, size),
                 };
             }
 
@@ -53,7 +54,7 @@ namespace Ryujinx.Graphics.Vulkan
                 {
                     var range = _freeRanges[i];
 
-                    ulong alignedOffset = BitUtils.AlignUp<ulong>(range.Offset, alignment);
+                    ulong alignedOffset = BitUtils.AlignUp(range.Offset, alignment);
                     ulong sizeDelta = alignedOffset - range.Offset;
                     ulong usableSize = range.Size - sizeDelta;
 
@@ -166,6 +167,8 @@ namespace Ryujinx.Graphics.Vulkan
 
         private readonly int _blockAlignment;
 
+        private readonly ReaderWriterLockSlim _lock;
+
         public MemoryAllocatorBlockList(Vk api, Device device, int memoryTypeIndex, int blockAlignment, bool forBuffer)
         {
             _blocks = new List<Block>();
@@ -174,6 +177,7 @@ namespace Ryujinx.Graphics.Vulkan
             MemoryTypeIndex = memoryTypeIndex;
             ForBuffer = forBuffer;
             _blockAlignment = blockAlignment;
+            _lock = new(LockRecursionPolicy.NoRecursion);
         }
 
         public unsafe MemoryAllocation Allocate(ulong size, ulong alignment, bool map)
@@ -184,27 +188,36 @@ namespace Ryujinx.Graphics.Vulkan
                 throw new ArgumentOutOfRangeException(nameof(alignment), $"Invalid alignment 0x{alignment:X}.");
             }
 
-            for (int i = 0; i < _blocks.Count; i++)
-            {
-                var block = _blocks[i];
+            _lock.EnterReadLock();
 
-                if (block.Mapped == map && block.Size >= size)
+            try
+            {
+                for (int i = 0; i < _blocks.Count; i++)
                 {
-                    ulong offset = block.Allocate(size, alignment);
-                    if (offset != InvalidOffset)
+                    var block = _blocks[i];
+
+                    if (block.Mapped == map && block.Size >= size)
                     {
-                        return new MemoryAllocation(this, block, block.Memory, GetHostPointer(block, offset), offset, size);
+                        ulong offset = block.Allocate(size, alignment);
+                        if (offset != InvalidOffset)
+                        {
+                            return new MemoryAllocation(this, block, block.Memory, GetHostPointer(block, offset), offset, size);
+                        }
                     }
                 }
             }
+            finally
+            {
+                _lock.ExitReadLock();
+            }
 
-            ulong blockAlignedSize = BitUtils.AlignUp<ulong>(size, (ulong)_blockAlignment);
+            ulong blockAlignedSize = BitUtils.AlignUp(size, (ulong)_blockAlignment);
 
-            var memoryAllocateInfo = new MemoryAllocateInfo()
+            var memoryAllocateInfo = new MemoryAllocateInfo
             {
                 SType = StructureType.MemoryAllocateInfo,
                 AllocationSize = blockAlignedSize,
-                MemoryTypeIndex = (uint)MemoryTypeIndex
+                MemoryTypeIndex = (uint)MemoryTypeIndex,
             };
 
             _api.AllocateMemory(_device, memoryAllocateInfo, null, out var deviceMemory).ThrowOnError();
@@ -213,12 +226,9 @@ namespace Ryujinx.Graphics.Vulkan
 
             if (map)
             {
-                unsafe
-                {
-                    void* pointer = null;
-                    _api.MapMemory(_device, deviceMemory, 0, blockAlignedSize, 0, ref pointer).ThrowOnError();
-                    hostPointer = (IntPtr)pointer;
-                }
+                void* pointer = null;
+                _api.MapMemory(_device, deviceMemory, 0, blockAlignedSize, 0, ref pointer).ThrowOnError();
+                hostPointer = (IntPtr)pointer;
             }
 
             var newBlock = new Block(deviceMemory, hostPointer, blockAlignedSize);
@@ -238,22 +248,31 @@ namespace Ryujinx.Graphics.Vulkan
                 return IntPtr.Zero;
             }
 
-            return (IntPtr)((nuint)(nint)block.HostPointer + offset);
+            return (IntPtr)((nuint)block.HostPointer + offset);
         }
 
-        public unsafe void Free(Block block, ulong offset, ulong size)
+        public void Free(Block block, ulong offset, ulong size)
         {
             block.Free(offset, size);
 
             if (block.IsTotallyFree())
             {
-                for (int i = 0; i < _blocks.Count; i++)
+                _lock.EnterWriteLock();
+
+                try
                 {
-                    if (_blocks[i] == block)
+                    for (int i = 0; i < _blocks.Count; i++)
                     {
-                        _blocks.RemoveAt(i);
-                        break;
+                        if (_blocks[i] == block)
+                        {
+                            _blocks.RemoveAt(i);
+                            break;
+                        }
                     }
+                }
+                finally
+                {
+                    _lock.ExitWriteLock();
                 }
 
                 block.Destroy(_api, _device);
@@ -262,16 +281,25 @@ namespace Ryujinx.Graphics.Vulkan
 
         private void InsertBlock(Block block)
         {
-            int index = _blocks.BinarySearch(block);
-            if (index < 0)
-            {
-                index = ~index;
-            }
+            _lock.EnterWriteLock();
 
-            _blocks.Insert(index, block);
+            try
+            {
+                int index = _blocks.BinarySearch(block);
+                if (index < 0)
+                {
+                    index = ~index;
+                }
+
+                _blocks.Insert(index, block);
+            }
+            finally
+            {
+                _lock.ExitWriteLock();
+            }
         }
 
-        public unsafe void Dispose()
+        public void Dispose()
         {
             for (int i = 0; i < _blocks.Count; i++)
             {

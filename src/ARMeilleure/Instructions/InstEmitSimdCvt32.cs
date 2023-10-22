@@ -5,7 +5,6 @@ using ARMeilleure.Translation;
 using System;
 using System.Diagnostics;
 using System.Reflection;
-
 using static ARMeilleure.Instructions.InstEmitHelper;
 using static ARMeilleure.Instructions.InstEmitSimdHelper;
 using static ARMeilleure.Instructions.InstEmitSimdHelper32;
@@ -115,6 +114,35 @@ namespace ARMeilleure.Instructions
             }
         }
 
+        public static void Vcvt_V_Fixed(ArmEmitterContext context)
+        {
+            OpCode32SimdCvtFFixed op = (OpCode32SimdCvtFFixed)context.CurrOp;
+
+            var toFixed = op.Opc == 1;
+            int fracBits = op.Fbits;
+            var unsigned = op.U;
+
+            if (toFixed) // F32 to S32 or U32 (fixed)
+            {
+                EmitVectorUnaryOpF32(context, (op1) =>
+                {
+                    var scaledValue = context.Multiply(op1, ConstF(MathF.Pow(2f, fracBits)));
+                    MethodInfo info = unsigned ? typeof(SoftFallback).GetMethod(nameof(SoftFallback.SatF32ToU32)) : typeof(SoftFallback).GetMethod(nameof(SoftFallback.SatF32ToS32));
+
+                    return context.Call(info, scaledValue);
+                });
+            }
+            else // S32 or U32 (fixed) to F32
+            {
+                EmitVectorUnaryOpI32(context, (op1) =>
+                {
+                    var floatValue = unsigned ? context.ConvertToFPUI(OperandType.FP32, op1) : context.ConvertToFP(OperandType.FP32, op1);
+
+                    return context.Multiply(floatValue, ConstF(1f / MathF.Pow(2f, fracBits)));
+                }, !unsigned);
+            }
+        }
+
         public static void Vcvt_FD(ArmEmitterContext context)
         {
             OpCode32SimdS op = (OpCode32SimdS)context.CurrOp;
@@ -165,7 +193,7 @@ namespace ARMeilleure.Instructions
                     {
                         Operand m = GetVecA32(op.Vm >> 1);
 
-                        Operand toConvert = InstEmitSimdHelper32Arm64.EmitExtractScalar(context, m, op.Vm, doubleSize);
+                        Operand toConvert = InstEmitSimdHelper32Arm64.EmitExtractScalar(context, m, op.Vm, true);
 
                         Intrinsic inst = (unsigned ? Intrinsic.Arm64FcvtzuGp : Intrinsic.Arm64FcvtzsGp) | Intrinsic.Arm64VDouble;
 
@@ -175,7 +203,7 @@ namespace ARMeilleure.Instructions
                     }
                     else
                     {
-                        InstEmitSimdHelper32Arm64.EmitScalarUnaryOpF32(context, unsigned ? Intrinsic.Arm64FcvtzuS : Intrinsic.Arm64FcvtzsS);
+                        InstEmitSimdHelper32Arm64.EmitScalarUnaryOpF32(context, unsigned ? Intrinsic.Arm64FcvtzuS : Intrinsic.Arm64FcvtzsS, false);
                     }
                 }
                 else if (!roundWithFpscr && Optimizations.UseSse41)
@@ -217,33 +245,22 @@ namespace ARMeilleure.Instructions
             string name = nameof(Math.Round);
 
             MethodInfo info = (op.Size & 1) == 0
-                ? typeof(MathF).GetMethod(name, new Type[] { typeof(float),  typeof(MidpointRounding) })
-                : typeof(Math). GetMethod(name, new Type[] { typeof(double), typeof(MidpointRounding) });
+                ? typeof(MathF).GetMethod(name, new Type[] { typeof(float), typeof(MidpointRounding) })
+                : typeof(Math).GetMethod(name, new Type[] { typeof(double), typeof(MidpointRounding) });
 
             return context.Call(info, n, Const((int)roundMode));
         }
 
         private static FPRoundingMode RMToRoundMode(int rm)
         {
-            FPRoundingMode roundMode;
-            switch (rm)
+            return rm switch
             {
-                case 0b00:
-                    roundMode = FPRoundingMode.ToNearestAway;
-                    break;
-                case 0b01:
-                    roundMode = FPRoundingMode.ToNearest;
-                    break;
-                case 0b10:
-                    roundMode = FPRoundingMode.TowardsPlusInfinity;
-                    break;
-                case 0b11:
-                    roundMode = FPRoundingMode.TowardsMinusInfinity;
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(rm));
-            }
-            return roundMode;
+                0b00 => FPRoundingMode.ToNearestAway,
+                0b01 => FPRoundingMode.ToNearest,
+                0b10 => FPRoundingMode.TowardsPlusInfinity,
+                0b11 => FPRoundingMode.TowardsMinusInfinity,
+                _ => throw new ArgumentOutOfRangeException(nameof(rm)),
+            };
         }
 
         // VCVTA/M/N/P (floating-point).
@@ -260,28 +277,68 @@ namespace ARMeilleure.Instructions
 
             if (Optimizations.UseAdvSimd)
             {
-                if (unsigned)
+                bool doubleSize = floatSize == OperandType.FP64;
+
+                if (doubleSize)
                 {
-                    inst = rm switch {
-                        0b00 => Intrinsic.Arm64FcvtauS,
-                        0b01 => Intrinsic.Arm64FcvtnuS,
-                        0b10 => Intrinsic.Arm64FcvtpuS,
-                        0b11 => Intrinsic.Arm64FcvtmuS,
-                        _ => throw new ArgumentOutOfRangeException(nameof(rm))
-                    };
+                    Operand m = GetVecA32(op.Vm >> 1);
+
+                    Operand toConvert = InstEmitSimdHelper32Arm64.EmitExtractScalar(context, m, op.Vm, true);
+
+                    if (unsigned)
+                    {
+                        inst = rm switch
+                        {
+                            0b00 => Intrinsic.Arm64FcvtauGp,
+                            0b01 => Intrinsic.Arm64FcvtnuGp,
+                            0b10 => Intrinsic.Arm64FcvtpuGp,
+                            0b11 => Intrinsic.Arm64FcvtmuGp,
+                            _ => throw new InvalidOperationException($"{nameof(rm)} contains an invalid value: {rm}"),
+                        };
+                    }
+                    else
+                    {
+                        inst = rm switch
+                        {
+                            0b00 => Intrinsic.Arm64FcvtasGp,
+                            0b01 => Intrinsic.Arm64FcvtnsGp,
+                            0b10 => Intrinsic.Arm64FcvtpsGp,
+                            0b11 => Intrinsic.Arm64FcvtmsGp,
+                            _ => throw new InvalidOperationException($"{nameof(rm)} contains an invalid value: {rm}"),
+                        };
+                    }
+
+                    Operand asInteger = context.AddIntrinsicInt(inst | Intrinsic.Arm64VDouble, toConvert);
+
+                    InsertScalar(context, op.Vd, asInteger);
                 }
                 else
                 {
-                    inst = rm switch {
-                        0b00 => Intrinsic.Arm64FcvtasS,
-                        0b01 => Intrinsic.Arm64FcvtnsS,
-                        0b10 => Intrinsic.Arm64FcvtpsS,
-                        0b11 => Intrinsic.Arm64FcvtmsS,
-                        _ => throw new ArgumentOutOfRangeException(nameof(rm))
-                    };
-                }
+                    if (unsigned)
+                    {
+                        inst = rm switch
+                        {
+                            0b00 => Intrinsic.Arm64FcvtauS,
+                            0b01 => Intrinsic.Arm64FcvtnuS,
+                            0b10 => Intrinsic.Arm64FcvtpuS,
+                            0b11 => Intrinsic.Arm64FcvtmuS,
+                            _ => throw new InvalidOperationException($"{nameof(rm)} contains an invalid value: {rm}"),
+                        };
+                    }
+                    else
+                    {
+                        inst = rm switch
+                        {
+                            0b00 => Intrinsic.Arm64FcvtasS,
+                            0b01 => Intrinsic.Arm64FcvtnsS,
+                            0b10 => Intrinsic.Arm64FcvtpsS,
+                            0b11 => Intrinsic.Arm64FcvtmsS,
+                            _ => throw new InvalidOperationException($"{nameof(rm)} contains an invalid value: {rm}"),
+                        };
+                    }
 
-                InstEmitSimdHelper32Arm64.EmitScalarUnaryOpF32(context, inst);
+                    InstEmitSimdHelper32Arm64.EmitScalarUnaryOpF32(context, inst);
+                }
             }
             else if (Optimizations.UseSse41)
             {
@@ -396,12 +453,13 @@ namespace ARMeilleure.Instructions
 
             if (Optimizations.UseAdvSimd)
             {
-                Intrinsic inst = rm switch {
+                Intrinsic inst = rm switch
+                {
                     0b00 => Intrinsic.Arm64FrintaS,
                     0b01 => Intrinsic.Arm64FrintnS,
                     0b10 => Intrinsic.Arm64FrintpS,
                     0b11 => Intrinsic.Arm64FrintmS,
-                    _ => throw new ArgumentOutOfRangeException(nameof(rm))
+                    _ => throw new InvalidOperationException($"{nameof(rm)} contains an invalid value: {rm}"),
                 };
 
                 InstEmitSimdHelper32Arm64.EmitScalarUnaryOpF32(context, inst);

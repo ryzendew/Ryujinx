@@ -1,9 +1,7 @@
 ﻿using Ryujinx.Graphics.Device;
-using Ryujinx.Graphics.GAL;
 using Ryujinx.Graphics.Gpu.Engine.InlineToMemory;
 using Ryujinx.Graphics.Gpu.Engine.Threed;
 using Ryujinx.Graphics.Gpu.Engine.Types;
-using Ryujinx.Graphics.Gpu.Image;
 using Ryujinx.Graphics.Gpu.Shader;
 using Ryujinx.Graphics.Shader;
 using System;
@@ -39,7 +37,7 @@ namespace Ryujinx.Graphics.Gpu.Engine.Compute
             {
                 { nameof(ComputeClassState.LaunchDma), new RwCallback(LaunchDma, null) },
                 { nameof(ComputeClassState.LoadInlineData), new RwCallback(LoadInlineData, null) },
-                { nameof(ComputeClassState.SendSignalingPcasB), new RwCallback(SendSignalingPcasB, null) }
+                { nameof(ComputeClassState.SendSignalingPcasB), new RwCallback(SendSignalingPcasB, null) },
             });
 
             _i2mClass = new InlineToMemoryClass(context, channel, initializeState: false);
@@ -128,12 +126,12 @@ namespace Ryujinx.Graphics.Gpu.Engine.Compute
             ulong samplerPoolGpuVa = ((ulong)_state.State.SetTexSamplerPoolAOffsetUpper << 32) | _state.State.SetTexSamplerPoolB;
             ulong texturePoolGpuVa = ((ulong)_state.State.SetTexHeaderPoolAOffsetUpper << 32) | _state.State.SetTexHeaderPoolB;
 
-            GpuChannelPoolState poolState = new GpuChannelPoolState(
+            GpuChannelPoolState poolState = new(
                 texturePoolGpuVa,
                 _state.State.SetTexHeaderPoolCMaximumIndex,
                 _state.State.SetBindlessTextureConstantBufferSlotSelect);
 
-            GpuChannelComputeState computeState = new GpuChannelComputeState(
+            GpuChannelComputeState computeState = new(
                 qmd.CtaThreadDimension0,
                 qmd.CtaThreadDimension1,
                 qmd.CtaThreadDimension2,
@@ -151,55 +149,44 @@ namespace Ryujinx.Graphics.Gpu.Engine.Compute
 
             ShaderProgramInfo info = cs.Shaders[0].Info;
 
-            bool hasUnaligned = _channel.BufferManager.HasUnalignedStorageBuffers;
-
             for (int index = 0; index < info.SBuffers.Count; index++)
             {
                 BufferDescriptor sb = info.SBuffers[index];
 
-                ulong sbDescAddress = _channel.BufferManager.GetComputeUniformBufferAddress(0);
-
-                int sbDescOffset = 0x310 + sb.Slot * 0x10;
-
-                sbDescAddress += (ulong)sbDescOffset;
+                ulong sbDescAddress = _channel.BufferManager.GetComputeUniformBufferAddress(sb.SbCbSlot);
+                sbDescAddress += (ulong)sb.SbCbOffset * 4;
 
                 SbDescriptor sbDescriptor = _channel.MemoryManager.Physical.Read<SbDescriptor>(sbDescAddress);
 
-                _channel.BufferManager.SetComputeStorageBuffer(sb.Slot, sbDescriptor.PackAddress(), (uint)sbDescriptor.Size, sb.Flags);
+                uint size;
+                if (sb.SbCbSlot == Constants.DriverReservedUniformBuffer)
+                {
+                    // Only trust the SbDescriptor size if it comes from slot 0.
+                    size = (uint)sbDescriptor.Size;
+                }
+                else
+                {
+                    // TODO: Use full mapped size and somehow speed up buffer sync.
+                    size = (uint)_channel.MemoryManager.GetMappedSize(sbDescriptor.PackAddress(), Constants.MaxUnknownStorageSize);
+                }
+
+                _channel.BufferManager.SetComputeStorageBuffer(sb.Slot, sbDescriptor.PackAddress(), size, sb.Flags);
             }
 
-            if ((_channel.BufferManager.HasUnalignedStorageBuffers) != hasUnaligned)
+            if (_channel.BufferManager.HasUnalignedStorageBuffers != computeState.HasUnalignedStorageBuffer)
             {
                 // Refetch the shader, as assumptions about storage buffer alignment have changed.
+                computeState = new GpuChannelComputeState(
+                    qmd.CtaThreadDimension0,
+                    qmd.CtaThreadDimension1,
+                    qmd.CtaThreadDimension2,
+                    localMemorySize,
+                    sharedMemorySize,
+                    _channel.BufferManager.HasUnalignedStorageBuffers);
+
                 cs = memoryManager.Physical.ShaderCache.GetComputeShader(_channel, poolState, computeState, shaderGpuVa);
 
                 _context.Renderer.Pipeline.SetProgram(cs.HostProgram);
-
-                info = cs.Shaders[0].Info;
-            }
-
-            for (int index = 0; index < info.CBuffers.Count; index++)
-            {
-                BufferDescriptor cb = info.CBuffers[index];
-
-                // NVN uses the "hardware" constant buffer for anything that is less than 8,
-                // and those are already bound above.
-                // Anything greater than or equal to 8 uses the emulated constant buffers.
-                // They are emulated using global memory loads.
-                if (cb.Slot < 8)
-                {
-                    continue;
-                }
-
-                ulong cbDescAddress = _channel.BufferManager.GetComputeUniformBufferAddress(0);
-
-                int cbDescOffset = 0x260 + (cb.Slot - 8) * 0x10;
-
-                cbDescAddress += (ulong)cbDescOffset;
-
-                SbDescriptor cbDescriptor = _channel.MemoryManager.Physical.Read<SbDescriptor>(cbDescAddress);
-
-                _channel.BufferManager.SetComputeUniformBuffer(cb.Slot, cbDescriptor.PackAddress(), (uint)cbDescriptor.Size);
             }
 
             _channel.BufferManager.SetComputeBufferBindings(cs.Bindings);

@@ -17,9 +17,9 @@ namespace Ryujinx.Graphics.Vulkan
             _api = api;
             _device = device;
 
-            var fenceCreateInfo = new FenceCreateInfo()
+            var fenceCreateInfo = new FenceCreateInfo
             {
-                SType = StructureType.FenceCreateInfo
+                SType = StructureType.FenceCreateInfo,
             };
 
             api.CreateFence(device, in fenceCreateInfo, null, out _fence).ThrowOnError();
@@ -30,6 +30,25 @@ namespace Ryujinx.Graphics.Vulkan
         public Fence GetUnsafe()
         {
             return _fence;
+        }
+
+        public bool TryGet(out Fence fence)
+        {
+            int lastValue;
+            do
+            {
+                lastValue = _referenceCount;
+
+                if (lastValue == 0)
+                {
+                    fence = default;
+                    return false;
+                }
+            }
+            while (Interlocked.CompareExchange(ref _referenceCount, lastValue + 1, lastValue) != lastValue);
+
+            fence = _fence;
+            return true;
         }
 
         public Fence Get()
@@ -51,7 +70,7 @@ namespace Ryujinx.Graphics.Vulkan
         {
             Span<Fence> fences = stackalloc Fence[]
             {
-                _fence
+                _fence,
             };
 
             FenceHelper.WaitAllIndefinitely(_api, _device, fences);
@@ -61,7 +80,7 @@ namespace Ryujinx.Graphics.Vulkan
         {
             Span<Fence> fences = stackalloc Fence[]
             {
-                _fence
+                _fence,
             };
 
             return FenceHelper.AllSignaled(_api, _device, fences);

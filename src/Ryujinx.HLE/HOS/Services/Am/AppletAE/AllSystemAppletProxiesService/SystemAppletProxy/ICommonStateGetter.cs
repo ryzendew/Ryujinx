@@ -5,29 +5,37 @@ using Ryujinx.HLE.HOS.Services.Settings.Types;
 using Ryujinx.HLE.HOS.Services.Vi.RootService.ApplicationDisplayService;
 using Ryujinx.HLE.HOS.SystemState;
 using Ryujinx.Horizon.Common;
+using Ryujinx.Horizon.Sdk.Lbl;
 using System;
 
 namespace Ryujinx.HLE.HOS.Services.Am.AppletAE.AllSystemAppletProxiesService.SystemAppletProxy
 {
-    class ICommonStateGetter : IpcService
+    class ICommonStateGetter : DisposableIpcService
     {
-        private Apm.ManagerServer       _apmManagerServer;
-        private Apm.SystemManagerServer _apmSystemManagerServer;
-        private Lbl.LblControllerServer _lblControllerServer;
+        private readonly ServiceCtx _context;
+
+        private readonly Apm.ManagerServer _apmManagerServer;
+        private readonly Apm.SystemManagerServer _apmSystemManagerServer;
 
         private bool _vrModeEnabled;
-#pragma warning disable CS0414
+#pragma warning disable CS0414, IDE0052 // Remove unread private member
         private bool _lcdBacklighOffEnabled;
         private bool _requestExitToLibraryAppletAtExecuteNextProgramEnabled;
-#pragma warning restore CS0414
-        private int  _messageEventHandle;
-        private int  _displayResolutionChangedEventHandle;
+#pragma warning restore CS0414, IDE0052
+        private int _messageEventHandle;
+        private int _displayResolutionChangedEventHandle;
+
+        private readonly KEvent _acquiredSleepLockEvent;
+        private int _acquiredSleepLockEventHandle;
 
         public ICommonStateGetter(ServiceCtx context)
         {
-            _apmManagerServer       = new Apm.ManagerServer(context);
+            _context = context;
+
+            _apmManagerServer = new Apm.ManagerServer(context);
             _apmSystemManagerServer = new Apm.SystemManagerServer(context);
-            _lblControllerServer    = new Lbl.LblControllerServer(context);
+
+            _acquiredSleepLockEvent = new KEvent(context.Device.System.KernelContext);
         }
 
         [CommandCmif(0)]
@@ -117,6 +125,34 @@ namespace Ryujinx.HLE.HOS.Services.Am.AppletAE.AllSystemAppletProxiesService.Sys
             return ResultCode.Success;
         }
 
+        [CommandCmif(10)]
+        // RequestToAcquireSleepLock()
+        public ResultCode RequestToAcquireSleepLock(ServiceCtx context)
+        {
+            Logger.Stub?.PrintStub(LogClass.ServiceAm);
+
+            return ResultCode.Success;
+        }
+
+        [CommandCmif(13)]
+        // GetAcquiredSleepLockEvent() -> handle<copy>
+        public ResultCode GetAcquiredSleepLockEvent(ServiceCtx context)
+        {
+            if (_acquiredSleepLockEventHandle == 0)
+            {
+                if (context.Process.HandleTable.GenerateHandle(_acquiredSleepLockEvent.ReadableEvent, out _acquiredSleepLockEventHandle) != Result.Success)
+                {
+                    throw new InvalidOperationException("Out of handles!");
+                }
+            }
+
+            context.Response.HandleDesc = IpcHandleDesc.MakeCopy(_acquiredSleepLockEventHandle);
+
+            Logger.Stub?.PrintStub(LogClass.ServiceAm);
+
+            return ResultCode.Success;
+        }
+
         [CommandCmif(50)] // 3.0.0+
         // IsVrModeEnabled() -> b8
         public ResultCode IsVrModeEnabled(ServiceCtx context)
@@ -178,13 +214,15 @@ namespace Ryujinx.HLE.HOS.Services.Am.AppletAE.AllSystemAppletProxiesService.Sys
 
             _vrModeEnabled = vrModeEnabled;
 
+            using var lblApi = new LblApi();
+
             if (vrModeEnabled)
             {
-                _lblControllerServer.EnableVrMode();
+                lblApi.EnableVrMode().AbortOnFailure();
             }
             else
             {
-                _lblControllerServer.DisableVrMode();
+                lblApi.DisableVrMode().AbortOnFailure();
             }
 
             // TODO: It signals an internal event of ICommonStateGetter. We have to determine where this event is used.
@@ -280,6 +318,18 @@ namespace Ryujinx.HLE.HOS.Services.Am.AppletAE.AllSystemAppletProxiesService.Sys
             _requestExitToLibraryAppletAtExecuteNextProgramEnabled = true;
 
             return ResultCode.Success;
+        }
+
+        protected override void Dispose(bool isDisposing)
+        {
+            if (isDisposing)
+            {
+                if (_acquiredSleepLockEventHandle != 0)
+                {
+                    _context.Process.HandleTable.CloseHandle(_acquiredSleepLockEventHandle);
+                    _acquiredSleepLockEventHandle = 0;
+                }
+            }
         }
     }
 }

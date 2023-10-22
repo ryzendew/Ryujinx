@@ -36,10 +36,10 @@ namespace Ryujinx.Horizon.Generators.Hipc
             None,
             Ref,
             Out,
-            In
+            In,
         }
 
-        private struct OutParameter
+        private readonly struct OutParameter
         {
             public readonly string Name;
             public readonly string TypeName;
@@ -93,7 +93,7 @@ namespace Ryujinx.Horizon.Generators.Hipc
                 generator.LeaveScope();
                 generator.LeaveScope();
 
-                context.AddSource($"{className}.g.cs", generator.ToString());
+                context.AddSource($"{GetNamespaceName(commandInterface.ClassDeclarationSyntax)}.{className}.g.cs", generator.ToString());
             }
         }
 
@@ -145,7 +145,7 @@ namespace Ryujinx.Horizon.Generators.Hipc
 
                                 if (bufferFixedSize != null)
                                 {
-                                    arg = $"new CommandArg({bufferFlags}, {bufferFixedSize})";
+                                    arg = $"new CommandArg({bufferFlags} | HipcBufferFlags.FixedSize, {bufferFixedSize})";
                                 }
                                 else
                                 {
@@ -341,7 +341,7 @@ namespace Ryujinx.Horizon.Generators.Hipc
                         generator.AppendLine($"using var {argName} = {value};");
 
                         string spanGenericTypeName = GetCanonicalTypeNameOfGenericArgument(compilation, parameter.Type, 0);
-                        argName = GenerateSpanCast(spanGenericTypeName, $"{argName}.Memory.Span"); ;
+                        argName = GenerateSpanCast(spanGenericTypeName, $"{argName}.Memory.Span");
                     }
                     else if (isNonSpanBuffer)
                     {
@@ -604,7 +604,7 @@ namespace Ryujinx.Horizon.Generators.Hipc
             return type;
         }
 
-        private static bool IsArgument(Compilation compilation,ParameterSyntax parameter)
+        private static bool IsArgument(Compilation compilation, ParameterSyntax parameter)
         {
             return !IsBuffer(compilation, parameter) &&
                    !IsHandle(compilation, parameter) &&

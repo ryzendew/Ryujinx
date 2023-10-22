@@ -3,9 +3,9 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace Spv.Generator
 {
-    internal struct TypeDeclarationKey : IEquatable<TypeDeclarationKey>
+    internal readonly struct TypeDeclarationKey : IEquatable<TypeDeclarationKey>
     {
-        private Instruction _typeDeclaration;
+        private readonly Instruction _typeDeclaration;
 
         public TypeDeclarationKey(Instruction typeDeclaration)
         {
@@ -24,7 +24,7 @@ namespace Spv.Generator
 
         public override bool Equals([NotNullWhen(true)] object obj)
         {
-            return obj is TypeDeclarationKey && Equals((TypeDeclarationKey)obj);
+            return obj is TypeDeclarationKey key && Equals(key);
         }
     }
 }

@@ -1,14 +1,13 @@
 ﻿using Ryujinx.Audio.Common;
 using Ryujinx.Audio.Output;
 using Ryujinx.HLE.HOS.Services.Audio.AudioOut;
-
 using AudioOutManagerImpl = Ryujinx.Audio.Output.AudioOutputManager;
 
 namespace Ryujinx.HLE.HOS.Services.Audio
 {
     class AudioOutManager : IAudioOutManager
     {
-        private AudioOutManagerImpl _impl;
+        private readonly AudioOutManagerImpl _impl;
 
         public AudioOutManager(AudioOutManagerImpl impl)
         {

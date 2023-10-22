@@ -15,10 +15,10 @@ namespace Ryujinx.Graphics.Shader.IntermediateRepresentation
         FragmentCoord,
         FragmentOutputColor,
         FragmentOutputDepth,
-        FragmentOutputIsBgra, // TODO: Remove and use constant buffer access.
         FrontColorDiffuse,
         FrontColorSpecular,
         FrontFacing,
+        GlobalId,
         InstanceId,
         InstanceIndex,
         InvocationId,
@@ -34,8 +34,6 @@ namespace Ryujinx.Graphics.Shader.IntermediateRepresentation
         SubgroupLaneId,
         SubgroupLeMask,
         SubgroupLtMask,
-        SupportBlockViewInverse, // TODO: Remove and use constant buffer access.
-        SupportBlockRenderScale, // TODO: Remove and use constant buffer access.
         TessellationCoord,
         TessellationLevelInner,
         TessellationLevelOuter,
@@ -46,6 +44,6 @@ namespace Ryujinx.Graphics.Shader.IntermediateRepresentation
         VertexId,
         VertexIndex,
         ViewportIndex,
-        ViewportMask
+        ViewportMask,
     }
 }

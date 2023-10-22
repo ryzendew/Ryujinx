@@ -14,7 +14,7 @@ namespace Ryujinx.HLE.HOS.Services.Audio
         // Initialize(bytes<8, 4>, u32, handle<copy>) -> object<nn::codec::detail::IHardwareOpusDecoder>
         public ResultCode Initialize(ServiceCtx context)
         {
-            int sampleRate    = context.RequestData.ReadInt32();
+            int sampleRate = context.RequestData.ReadInt32();
             int channelsCount = context.RequestData.ReadInt32();
 
             MakeObject(context, new IHardwareOpusDecoder(sampleRate, channelsCount, OpusDecoderFlags.None));
@@ -29,7 +29,7 @@ namespace Ryujinx.HLE.HOS.Services.Audio
         // GetWorkBufferSize(bytes<8, 4>) -> u32
         public ResultCode GetWorkBufferSize(ServiceCtx context)
         {
-            int sampleRate    = context.RequestData.ReadInt32();
+            int sampleRate = context.RequestData.ReadInt32();
             int channelsCount = context.RequestData.ReadInt32();
 
             int opusDecoderSize = GetOpusDecoderSize(channelsCount);
@@ -154,6 +154,28 @@ namespace Ryujinx.HLE.HOS.Services.Audio
             return ResultCode.Success;
         }
 
+        [CommandCmif(8)] // 16.0.0+
+        // GetWorkBufferSizeExEx(OpusParametersEx) -> u32
+        public ResultCode GetWorkBufferSizeExEx(ServiceCtx context)
+        {
+            // NOTE: GetWorkBufferSizeEx use hardcoded values to compute the returned size.
+            //       GetWorkBufferSizeExEx fixes that by using dynamic values.
+            //       Since we're already doing that, it's fine to call it directly.
+
+            return GetWorkBufferSizeEx(context);
+        }
+
+        [CommandCmif(9)] // 16.0.0+
+        // GetWorkBufferSizeForMultiStreamExEx(buffer<unknown<0x118>, 0x19>) -> u32
+        public ResultCode GetWorkBufferSizeForMultiStreamExEx(ServiceCtx context)
+        {
+            // NOTE: GetWorkBufferSizeForMultiStreamEx use hardcoded values to compute the returned size.
+            //       GetWorkBufferSizeForMultiStreamExEx fixes that by using dynamic values.
+            //       Since we're already doing that, it's fine to call it directly.
+
+            return GetWorkBufferSizeForMultiStreamEx(context);
+        }
+
         private static int GetOpusMultistreamDecoderSize(int streams, int coupledStreams)
         {
             if (streams < 1 || coupledStreams > streams || coupledStreams < 0)
@@ -196,8 +218,8 @@ namespace Ryujinx.HLE.HOS.Services.Audio
         private static int GetCeltDecoderSize(int channelsCount)
         {
             const int DecodeBufferSize = 0x2030;
-            const int Overlap          = 120;
-            const int EBandsCount      = 21;
+            const int Overlap = 120;
+            const int EBandsCount = 21;
 
             return (DecodeBufferSize + Overlap * 4) * channelsCount + EBandsCount * 16 + 0x50;
         }

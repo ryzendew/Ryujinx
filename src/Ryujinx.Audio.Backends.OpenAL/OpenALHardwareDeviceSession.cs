@@ -10,14 +10,14 @@ namespace Ryujinx.Audio.Backends.OpenAL
 {
     class OpenALHardwareDeviceSession : HardwareDeviceSessionOutputBase
     {
-        private OpenALHardwareDeviceDriver _driver;
-        private int _sourceId;
-        private ALFormat _targetFormat;
+        private readonly OpenALHardwareDeviceDriver _driver;
+        private readonly int _sourceId;
+        private readonly ALFormat _targetFormat;
         private bool _isActive;
-        private Queue<OpenALAudioBuffer> _queuedBuffers;
+        private readonly Queue<OpenALAudioBuffer> _queuedBuffers;
         private ulong _playedSampleCount;
 
-        private object _lock = new object();
+        private readonly object _lock = new();
 
         public OpenALHardwareDeviceSession(OpenALHardwareDeviceDriver driver, IVirtualMemoryManager memoryManager, SampleFormat requestedSampleFormat, uint requestedSampleRate, uint requestedChannelCount, float requestedVolume) : base(memoryManager, requestedSampleFormat, requestedSampleRate, requestedChannelCount)
         {
@@ -32,23 +32,17 @@ namespace Ryujinx.Audio.Backends.OpenAL
 
         private ALFormat GetALFormat()
         {
-            switch (RequestedSampleFormat)
+            return RequestedSampleFormat switch
             {
-                case SampleFormat.PcmInt16:
-                    switch (RequestedChannelCount)
-                    {
-                        case 1:
-                            return ALFormat.Mono16;
-                        case 2:
-                            return ALFormat.Stereo16;
-                        case 6:
-                            return ALFormat.Multi51Chn16Ext;
-                        default:
-                            throw new NotImplementedException($"Unsupported channel config {RequestedChannelCount}");
-                    }
-                default:
-                    throw new NotImplementedException($"Unsupported sample format {RequestedSampleFormat}");
-            }
+                SampleFormat.PcmInt16 => RequestedChannelCount switch
+                {
+                    1 => ALFormat.Mono16,
+                    2 => ALFormat.Stereo16,
+                    6 => ALFormat.Multi51Chn16Ext,
+                    _ => throw new NotImplementedException($"Unsupported channel config {RequestedChannelCount}"),
+                },
+                _ => throw new NotImplementedException($"Unsupported sample format {RequestedSampleFormat}"),
+            };
         }
 
         public override void PrepareToClose() { }
@@ -69,11 +63,11 @@ namespace Ryujinx.Audio.Backends.OpenAL
         {
             lock (_lock)
             {
-                OpenALAudioBuffer driverBuffer = new OpenALAudioBuffer
+                OpenALAudioBuffer driverBuffer = new()
                 {
                     DriverIdentifier = buffer.DataPointer,
                     BufferId = AL.GenBuffer(),
-                    SampleCount = GetSampleCount(buffer)
+                    SampleCount = GetSampleCount(buffer),
                 };
 
                 AL.BufferData(driverBuffer.BufferId, _targetFormat, buffer.Data, (int)RequestedSampleRate);

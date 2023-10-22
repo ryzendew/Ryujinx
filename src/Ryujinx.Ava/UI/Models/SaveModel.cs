@@ -3,10 +3,12 @@ using LibHac.Ncm;
 using Ryujinx.Ava.UI.ViewModels;
 using Ryujinx.Ava.UI.Windows;
 using Ryujinx.HLE.FileSystem;
+using Ryujinx.Ui.App.Common;
 using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Path = System.IO.Path;
 
 namespace Ryujinx.Ava.UI.Models
 {
@@ -40,9 +42,9 @@ namespace Ryujinx.Ava.UI.Models
 
         private string GetSizeString()
         {
-            const int scale = 1024;
+            const int Scale = 1024;
             string[] orders = { "GiB", "MiB", "KiB" };
-            long max = (long)Math.Pow(scale, orders.Length);
+            long max = (long)Math.Pow(Scale, orders.Length);
 
             foreach (string order in orders)
             {
@@ -51,13 +53,13 @@ namespace Ryujinx.Ava.UI.Models
                     return $"{decimal.Divide(Size, max):##.##} {order}";
                 }
 
-                max /= scale;
+                max /= Scale;
             }
 
             return "0 KiB";
         }
 
-        public SaveModel(SaveDataInfo info, VirtualFileSystem virtualFileSystem)
+        public SaveModel(SaveDataInfo info)
         {
             SaveId = info.SaveDataId;
             TitleId = info.ProgramId;
@@ -74,16 +76,17 @@ namespace Ryujinx.Ava.UI.Models
             }
             else
             {
-                var appMetadata = MainWindow.MainWindowViewModel.ApplicationLibrary.LoadAndSaveMetaData(TitleIdString);
+                var appMetadata = ApplicationLibrary.LoadAndSaveMetaData(TitleIdString);
                 Title = appMetadata.Title ?? TitleIdString;
             }
 
             Task.Run(() =>
             {
-                var saveRoot = System.IO.Path.Combine(virtualFileSystem.GetNandPath(), $"user/save/{info.SaveDataId:x16}");
+                var saveRoot = Path.Combine(VirtualFileSystem.GetNandPath(), $"user/save/{info.SaveDataId:x16}");
 
-                long total_size = GetDirectorySize(saveRoot);
-                long GetDirectorySize(string path)
+                long totalSize = GetDirectorySize(saveRoot);
+
+                static long GetDirectorySize(string path)
                 {
                     long size = 0;
                     if (Directory.Exists(path))
@@ -104,7 +107,7 @@ namespace Ryujinx.Ava.UI.Models
                     return size;
                 }
 
-                Size = total_size;
+                Size = totalSize;
             });
 
         }

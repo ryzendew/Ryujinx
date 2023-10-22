@@ -32,33 +32,28 @@ namespace Ryujinx.HLE.HOS.Tamper
                 return (ICondition)InstructionHelper.Create(conditionType, width, lhs, rhs);
             }
 
-            switch (comparison)
+            return comparison switch
             {
-                case Comparison.Greater       : return Create(typeof(CondGT<>));
-                case Comparison.GreaterOrEqual: return Create(typeof(CondGE<>));
-                case Comparison.Less          : return Create(typeof(CondLT<>));
-                case Comparison.LessOrEqual   : return Create(typeof(CondLE<>));
-                case Comparison.Equal         : return Create(typeof(CondEQ<>));
-                case Comparison.NotEqual      : return Create(typeof(CondNE<>));
-                default:
-                    throw new TamperCompilationException($"Invalid comparison {comparison} in Atmosphere cheat");
-            }
+                Comparison.Greater => Create(typeof(CondGT<>)),
+                Comparison.GreaterOrEqual => Create(typeof(CondGE<>)),
+                Comparison.Less => Create(typeof(CondLT<>)),
+                Comparison.LessOrEqual => Create(typeof(CondLE<>)),
+                Comparison.Equal => Create(typeof(CondEQ<>)),
+                Comparison.NotEqual => Create(typeof(CondNE<>)),
+                _ => throw new TamperCompilationException($"Invalid comparison {comparison} in Atmosphere cheat"),
+            };
         }
 
         public static Object Create(Type instruction, byte width, params Object[] operands)
         {
-            Type realType;
-
-            switch (width)
+            Type realType = width switch
             {
-                case 1: realType = instruction.MakeGenericType(typeof(byte)); break;
-                case 2: realType = instruction.MakeGenericType(typeof(ushort)); break;
-                case 4: realType = instruction.MakeGenericType(typeof(uint)); break;
-                case 8: realType = instruction.MakeGenericType(typeof(ulong)); break;
-                default:
-                    throw new TamperCompilationException($"Invalid instruction width {width} in Atmosphere cheat");
-            }
-
+                1 => instruction.MakeGenericType(typeof(byte)),
+                2 => instruction.MakeGenericType(typeof(ushort)),
+                4 => instruction.MakeGenericType(typeof(uint)),
+                8 => instruction.MakeGenericType(typeof(ulong)),
+                _ => throw new TamperCompilationException($"Invalid instruction width {width} in Atmosphere cheat"),
+            };
             return Activator.CreateInstance(realType, operands);
         }
 
@@ -96,14 +91,14 @@ namespace Ryujinx.HLE.HOS.Tamper
 
         public static byte[] ParseRawInstruction(string rawInstruction)
         {
-            const int wordSize = 2 * sizeof(uint);
+            const int WordSize = 2 * sizeof(uint);
 
             // Instructions are multi-word, with 32bit words. Split the raw instruction
             // and parse each word into individual nybbles of bits.
 
             var words = rawInstruction.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
 
-            byte[] instruction = new byte[wordSize * words.Length];
+            byte[] instruction = new byte[WordSize * words.Length];
 
             if (words.Length == 0)
             {
@@ -114,14 +109,14 @@ namespace Ryujinx.HLE.HOS.Tamper
             {
                 string word = words[wordIndex];
 
-                if (word.Length != wordSize)
+                if (word.Length != WordSize)
                 {
                     throw new TamperCompilationException($"Invalid word length for {word} in Atmosphere cheat");
                 }
 
-                for (int nybbleIndex = 0; nybbleIndex < wordSize; nybbleIndex++)
+                for (int nybbleIndex = 0; nybbleIndex < WordSize; nybbleIndex++)
                 {
-                    int index = wordIndex * wordSize + nybbleIndex;
+                    int index = wordIndex * WordSize + nybbleIndex;
 
                     instruction[index] = byte.Parse(word.AsSpan(nybbleIndex, 1), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
                 }

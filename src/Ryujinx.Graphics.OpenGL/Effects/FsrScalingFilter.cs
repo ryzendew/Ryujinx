@@ -37,7 +37,7 @@ namespace Ryujinx.Graphics.OpenGL.Effects
             }
         }
 
-        public FsrScalingFilter(OpenGLRenderer renderer, IPostProcessingEffect filter)
+        public FsrScalingFilter(OpenGLRenderer renderer)
         {
             Initialize();
 
@@ -114,7 +114,7 @@ namespace Ryujinx.Graphics.OpenGL.Effects
                     originalInfo.SwizzleB,
                     originalInfo.SwizzleA);
 
-                _intermediaryTexture = new TextureStorage(_renderer, info, view.ScaleFactor);
+                _intermediaryTexture = new TextureStorage(_renderer, info);
                 _intermediaryTexture.CreateDefaultView();
             }
 

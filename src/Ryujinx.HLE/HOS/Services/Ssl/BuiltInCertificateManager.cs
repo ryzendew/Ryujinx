@@ -23,7 +23,7 @@ namespace Ryujinx.HLE.HOS.Services.Ssl
     {
         private const long CertStoreTitleId = 0x0100000000000800;
 
-        private readonly string CertStoreTitleMissingErrorMessage = "CertStore system title not found! SSL CA retrieving will not work, provide the system archive to fix this error. (See https://github.com/Ryujinx/Ryujinx/wiki/Ryujinx-Setup-&-Configuration-Guide#initial-setup-continued---installation-of-firmware for more information)";
+        private const string CertStoreTitleMissingErrorMessage = "CertStore system title not found! SSL CA retrieving will not work, provide the system archive to fix this error. (See https://github.com/Ryujinx/Ryujinx/wiki/Ryujinx-Setup-&-Configuration-Guide#initial-setup-continued---installation-of-firmware for more information)";
 
         private static BuiltInCertificateManager _instance;
 
@@ -31,33 +31,30 @@ namespace Ryujinx.HLE.HOS.Services.Ssl
         {
             get
             {
-                if (_instance == null)
-                {
-                    _instance = new BuiltInCertificateManager();
-                }
+                _instance ??= new BuiltInCertificateManager();
 
                 return _instance;
             }
         }
 
-        private VirtualFileSystem   _virtualFileSystem;
+        private VirtualFileSystem _virtualFileSystem;
         private IntegrityCheckLevel _fsIntegrityCheckLevel;
-        private ContentManager      _contentManager;
-        private bool                _initialized;
+        private ContentManager _contentManager;
+        private bool _initialized;
         private Dictionary<CaCertificateId, CertStoreEntry> _certificates;
 
-        private object _lock = new object();
+        private readonly object _lock = new();
 
         private struct CertStoreFileHeader
         {
             private const uint ValidMagic = 0x546C7373;
 
-#pragma warning disable CS0649
+#pragma warning disable CS0649 // Field is never assigned to
             public uint Magic;
             public uint EntriesCount;
 #pragma warning restore CS0649
 
-            public bool IsValid()
+            public readonly bool IsValid()
             {
                 return Magic == ValidMagic;
             }
@@ -65,7 +62,7 @@ namespace Ryujinx.HLE.HOS.Services.Ssl
 
         private struct CertStoreFileEntry
         {
-#pragma warning disable CS0649
+#pragma warning disable CS0649 // Field is never assigned to
             public CaCertificateId Id;
             public TrustedCertStatus Status;
             public uint DataSize;
@@ -109,7 +106,7 @@ namespace Ryujinx.HLE.HOS.Services.Ssl
             {
                 Id = entry.Id,
                 Status = entry.Status,
-                Data = data
+                Data = data,
             };
         }
 
@@ -125,9 +122,9 @@ namespace Ryujinx.HLE.HOS.Services.Ssl
 
                 if (HasCertStoreTitle())
                 {
-                    using LocalStorage ncaFile = new LocalStorage(_virtualFileSystem.SwitchPathToSystemPath(GetCertStoreTitleContentPath()), FileAccess.Read, FileMode.Open);
+                    using LocalStorage ncaFile = new(VirtualFileSystem.SwitchPathToSystemPath(GetCertStoreTitleContentPath()), FileAccess.Read, FileMode.Open);
 
-                    Nca nca = new Nca(_virtualFileSystem.KeySet, ncaFile);
+                    Nca nca = new(_virtualFileSystem.KeySet, ncaFile);
 
                     IFileSystem romfs = nca.OpenFileSystem(NcaSectionType.Data, _fsIntegrityCheckLevel);
 

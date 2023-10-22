@@ -2,7 +2,7 @@
 using System.Collections.Concurrent;
 using System.Threading;
 
-namespace Ryujinx.Common.Logging
+namespace Ryujinx.Common.Logging.Targets
 {
     public enum AsyncLogTargetOverflowAction
     {
@@ -14,16 +14,16 @@ namespace Ryujinx.Common.Logging
         /// <summary>
         /// Discard the overflowing item
         /// </summary>
-        Discard = 1
+        Discard = 1,
     }
 
     public class AsyncLogTargetWrapper : ILogTarget
     {
-        private ILogTarget _target;
+        private readonly ILogTarget _target;
 
-        private Thread _messageThread;
+        private readonly Thread _messageThread;
 
-        private BlockingCollection<LogEventArgs> _messageQueue;
+        private readonly BlockingCollection<LogEventArgs> _messageQueue;
 
         private readonly int _overflowTimeout;
 
@@ -35,11 +35,12 @@ namespace Ryujinx.Common.Logging
 
         public AsyncLogTargetWrapper(ILogTarget target, int queueLimit, AsyncLogTargetOverflowAction overflowAction)
         {
-            _target          = target;
-            _messageQueue    = new BlockingCollection<LogEventArgs>(queueLimit);
+            _target = target;
+            _messageQueue = new BlockingCollection<LogEventArgs>(queueLimit);
             _overflowTimeout = overflowAction == AsyncLogTargetOverflowAction.Block ? -1 : 0;
 
-            _messageThread = new Thread(() => {
+            _messageThread = new Thread(() =>
+            {
                 while (!_messageQueue.IsCompleted)
                 {
                     try
@@ -55,10 +56,11 @@ namespace Ryujinx.Common.Logging
                         // on the next iteration.
                     }
                 }
-            });
-
-            _messageThread.Name         = "Logger.MessageThread";
-            _messageThread.IsBackground = true;
+            })
+            {
+                Name = "Logger.MessageThread",
+                IsBackground = true,
+            };
             _messageThread.Start();
         }
 
@@ -72,6 +74,7 @@ namespace Ryujinx.Common.Logging
 
         public void Dispose()
         {
+            GC.SuppressFinalize(this);
             _messageQueue.CompleteAdding();
             _messageThread.Join();
         }

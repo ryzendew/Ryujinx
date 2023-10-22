@@ -49,9 +49,9 @@ namespace Ryujinx.Memory.Tracking
 
         internal IMultiRegionHandle Parent { get; set; }
 
-        private event Action _onDirty;
+        private event Action OnDirty;
 
-        private object _preActionLock = new object();
+        private readonly object _preActionLock = new();
         private RegionSignal _preAction; // Action to perform before a read or write. This will block the memory access.
         private PreciseRegionSignal _preciseAction; // Action to perform on a precise read or write.
         private readonly List<VirtualRegion> _regions;
@@ -268,7 +268,7 @@ namespace Ryujinx.Memory.Tracking
                 Dirty = true;
                 if (!oldDirty)
                 {
-                    _onDirty?.Invoke();
+                    OnDirty?.Invoke();
                 }
                 Parent?.SignalWrite();
             }
@@ -310,7 +310,10 @@ namespace Ryujinx.Memory.Tracking
         /// <param name="consecutiveCheck">True if this reprotect is the result of consecutive dirty checks</param>
         public void Reprotect(bool asDirty, bool consecutiveCheck = false)
         {
-            if (_volatile) return;
+            if (_volatile)
+            {
+                return;
+            }
 
             Dirty = asDirty;
 
@@ -402,7 +405,7 @@ namespace Ryujinx.Memory.Tracking
         /// <param name="action">Action to call on dirty</param>
         public void RegisterDirtyEvent(Action action)
         {
-            _onDirty += action;
+            OnDirty += action;
         }
 
         /// <summary>
@@ -444,11 +447,23 @@ namespace Ryujinx.Memory.Tracking
         }
 
         /// <summary>
+        /// Determines if this handle's memory range matches another exactly.
+        /// </summary>
+        /// <param name="other">The other handle</param>
+        /// <returns>True on a match, false otherwise</returns>
+        public bool RangeEquals(RegionHandle other)
+        {
+            return RealAddress == other.RealAddress && RealSize == other.RealSize;
+        }
+
+        /// <summary>
         /// Dispose the handle. Within the tracking lock, this removes references from virtual regions.
         /// </summary>
         public void Dispose()
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+
+            GC.SuppressFinalize(this);
 
             _disposed = true;
 

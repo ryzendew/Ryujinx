@@ -7,13 +7,13 @@ namespace Ryujinx.Horizon.Sdk.OsTypes.Impl
 {
     class MultiWaitImpl
     {
-        private const int WaitTimedOut  = -1;
+        private const int WaitTimedOut = -1;
         private const int WaitCancelled = -2;
-        private const int WaitInvalid   = -3;
+        private const int WaitInvalid = -3;
 
         private readonly List<MultiWaitHolderBase> _multiWaits;
 
-        private object _lock;
+        private readonly object _lock = new();
 
         private int _waitingThreadHandle;
 
@@ -24,8 +24,6 @@ namespace Ryujinx.Horizon.Sdk.OsTypes.Impl
         public MultiWaitImpl()
         {
             _multiWaits = new List<MultiWaitHolderBase>();
-
-            _lock = new object();
         }
 
         public void LinkMultiWaitHolder(MultiWaitHolderBase multiWaitHolder)
@@ -65,10 +63,7 @@ namespace Ryujinx.Horizon.Sdk.OsTypes.Impl
                 }
             }
 
-            if (result == null)
-            {
-                result = WaitAnyHandleImpl(infinite, timeout);
-            }
+            result ??= WaitAnyHandleImpl(infinite, timeout);
 
             UnlinkHoldersFromObjectsList();
             _waitingThreadHandle = 0;
@@ -100,7 +95,7 @@ namespace Ryujinx.Horizon.Sdk.OsTypes.Impl
                 }
                 else
                 {
-                    index = WaitSynchronization(objectHandles.Slice(0, count), minTimeout);
+                    index = WaitSynchronization(objectHandles[..count], minTimeout);
 
                     DebugUtil.Assert(index != WaitInvalid);
                 }
@@ -173,7 +168,7 @@ namespace Ryujinx.Horizon.Sdk.OsTypes.Impl
 
             long minTime = endTime;
 
-            foreach (MultiWaitHolder holder in _multiWaits)
+            foreach (MultiWaitHolderBase holder in _multiWaits)
             {
                 long currentTime = holder.GetAbsoluteTimeToWakeup();
 
@@ -202,10 +197,8 @@ namespace Ryujinx.Horizon.Sdk.OsTypes.Impl
             {
                 return WaitCancelled;
             }
-            else
-            {
-                result.AbortOnFailure();
-            }
+
+            result.AbortOnFailure();
 
             return index;
         }

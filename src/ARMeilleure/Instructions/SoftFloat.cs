@@ -8,7 +8,7 @@ namespace ARMeilleure.Instructions
     {
         static SoftFloat()
         {
-            RecipEstimateTable     = BuildRecipEstimateTable();
+            RecipEstimateTable = BuildRecipEstimateTable();
             RecipSqrtEstimateTable = BuildRecipSqrtEstimateTable();
         }
 
@@ -63,7 +63,7 @@ namespace ARMeilleure.Instructions
 
                 while (src * (aux + 1u) * (aux + 1u) < (1u << 28))
                 {
-                    aux = aux + 1u;
+                    aux++;
                 }
 
                 uint dst = (aux + 1u) >> 1;
@@ -133,8 +133,8 @@ namespace ARMeilleure.Instructions
         {
             sign = (~(uint)valueBits & 0x8000u) == 0u;
 
-            uint exp16  = ((uint)valueBits & 0x7C00u) >> 10;
-            uint frac16 =  (uint)valueBits & 0x03FFu;
+            uint exp16 = ((uint)valueBits & 0x7C00u) >> 10;
+            uint frac16 = (uint)valueBits & 0x03FFu;
 
             double real;
 
@@ -175,22 +175,22 @@ namespace ARMeilleure.Instructions
 
         public static ushort FPRoundCv(double real, ExecutionContext context)
         {
-            const int minimumExp = -14;
+            const int MinimumExp = -14;
 
-            const int e = 5;
-            const int f = 10;
+            const int E = 5;
+            const int F = 10;
 
-            bool   sign;
+            bool sign;
             double mantissa;
 
             if (real < 0d)
             {
-                sign     = true;
+                sign = true;
                 mantissa = -real;
             }
             else
             {
-                sign     = false;
+                sign = false;
                 mantissa = real;
             }
 
@@ -208,15 +208,15 @@ namespace ARMeilleure.Instructions
                 exponent++;
             }
 
-            uint biasedExp = (uint)Math.Max(exponent - minimumExp + 1, 0);
+            uint biasedExp = (uint)Math.Max(exponent - MinimumExp + 1, 0);
 
             if (biasedExp == 0u)
             {
-                mantissa /= Math.Pow(2d, minimumExp - exponent);
+                mantissa /= Math.Pow(2d, MinimumExp - exponent);
             }
 
-            uint intMant = (uint)Math.Floor(mantissa * Math.Pow(2d, f));
-            double error = mantissa * Math.Pow(2d, f) - (double)intMant;
+            uint intMant = (uint)Math.Floor(mantissa * Math.Pow(2d, F));
+            double error = mantissa * Math.Pow(2d, F) - (double)intMant;
 
             if (biasedExp == 0u && (error != 0d || (context.Fpcr & FPCR.Ufe) != 0))
             {
@@ -228,38 +228,40 @@ namespace ARMeilleure.Instructions
 
             switch (context.Fpcr.GetRoundingMode())
             {
-                default:
                 case FPRoundingMode.ToNearest:
-                    roundUp       = (error > 0.5d || (error == 0.5d && (intMant & 1u) == 1u));
+                    roundUp = (error > 0.5d || (error == 0.5d && (intMant & 1u) == 1u));
                     overflowToInf = true;
                     break;
 
                 case FPRoundingMode.TowardsPlusInfinity:
-                    roundUp       = (error != 0d && !sign);
+                    roundUp = (error != 0d && !sign);
                     overflowToInf = !sign;
                     break;
 
                 case FPRoundingMode.TowardsMinusInfinity:
-                    roundUp       = (error != 0d && sign);
+                    roundUp = (error != 0d && sign);
                     overflowToInf = sign;
                     break;
 
                 case FPRoundingMode.TowardsZero:
-                    roundUp       = false;
+                    roundUp = false;
                     overflowToInf = false;
                     break;
+
+                default:
+                    throw new ArgumentException($"Invalid rounding mode \"{context.Fpcr.GetRoundingMode()}\".");
             }
 
             if (roundUp)
             {
                 intMant++;
 
-                if (intMant == 1u << f)
+                if (intMant == 1u << F)
                 {
                     biasedExp = 1u;
                 }
 
-                if (intMant == 1u << (f + 1))
+                if (intMant == 1u << (F + 1))
                 {
                     biasedExp++;
                     intMant >>= 1;
@@ -270,7 +272,7 @@ namespace ARMeilleure.Instructions
 
             if ((context.Fpcr & FPCR.Ahp) == 0)
             {
-                if (biasedExp >= (1u << e) - 1u)
+                if (biasedExp >= (1u << E) - 1u)
                 {
                     resultBits = overflowToInf ? FPInfinity(sign) : FPMaxNormal(sign);
 
@@ -285,7 +287,7 @@ namespace ARMeilleure.Instructions
             }
             else
             {
-                if (biasedExp >= 1u << e)
+                if (biasedExp >= 1u << E)
                 {
                     resultBits = (ushort)((sign ? 1u : 0u) << 15 | 0x7FFFu);
 
@@ -352,22 +354,22 @@ namespace ARMeilleure.Instructions
 
         private static float FPRoundCv(double real, ExecutionContext context)
         {
-            const int minimumExp = -126;
+            const int MinimumExp = -126;
 
-            const int e = 8;
-            const int f = 23;
+            const int E = 8;
+            const int F = 23;
 
-            bool   sign;
+            bool sign;
             double mantissa;
 
             if (real < 0d)
             {
-                sign     = true;
+                sign = true;
                 mantissa = -real;
             }
             else
             {
-                sign     = false;
+                sign = false;
                 mantissa = real;
             }
 
@@ -385,22 +387,22 @@ namespace ARMeilleure.Instructions
                 exponent++;
             }
 
-            if ((context.Fpcr & FPCR.Fz) != 0 && exponent < minimumExp)
+            if ((context.Fpcr & FPCR.Fz) != 0 && exponent < MinimumExp)
             {
                 context.Fpsr |= FPSR.Ufc;
 
                 return SoftFloat32.FPZero(sign);
             }
 
-            uint biasedExp = (uint)Math.Max(exponent - minimumExp + 1, 0);
+            uint biasedExp = (uint)Math.Max(exponent - MinimumExp + 1, 0);
 
             if (biasedExp == 0u)
             {
-                mantissa /= Math.Pow(2d, minimumExp - exponent);
+                mantissa /= Math.Pow(2d, MinimumExp - exponent);
             }
 
-            uint intMant = (uint)Math.Floor(mantissa * Math.Pow(2d, f));
-            double error = mantissa * Math.Pow(2d, f) - (double)intMant;
+            uint intMant = (uint)Math.Floor(mantissa * Math.Pow(2d, F));
+            double error = mantissa * Math.Pow(2d, F) - (double)intMant;
 
             if (biasedExp == 0u && (error != 0d || (context.Fpcr & FPCR.Ufe) != 0))
             {
@@ -412,38 +414,40 @@ namespace ARMeilleure.Instructions
 
             switch (context.Fpcr.GetRoundingMode())
             {
-                default:
                 case FPRoundingMode.ToNearest:
-                    roundUp       = (error > 0.5d || (error == 0.5d && (intMant & 1u) == 1u));
+                    roundUp = (error > 0.5d || (error == 0.5d && (intMant & 1u) == 1u));
                     overflowToInf = true;
                     break;
 
                 case FPRoundingMode.TowardsPlusInfinity:
-                    roundUp       = (error != 0d && !sign);
+                    roundUp = (error != 0d && !sign);
                     overflowToInf = !sign;
                     break;
 
                 case FPRoundingMode.TowardsMinusInfinity:
-                    roundUp       = (error != 0d && sign);
+                    roundUp = (error != 0d && sign);
                     overflowToInf = sign;
                     break;
 
                 case FPRoundingMode.TowardsZero:
-                    roundUp       = false;
+                    roundUp = false;
                     overflowToInf = false;
                     break;
+
+                default:
+                    throw new ArgumentException($"Invalid rounding mode \"{context.Fpcr.GetRoundingMode()}\".");
             }
 
             if (roundUp)
             {
                 intMant++;
 
-                if (intMant == 1u << f)
+                if (intMant == 1u << F)
                 {
                     biasedExp = 1u;
                 }
 
-                if (intMant == 1u << (f + 1))
+                if (intMant == 1u << (F + 1))
                 {
                     biasedExp++;
                     intMant >>= 1;
@@ -452,7 +456,7 @@ namespace ARMeilleure.Instructions
 
             float result;
 
-            if (biasedExp >= (1u << e) - 1u)
+            if (biasedExp >= (1u << E) - 1u)
             {
                 result = overflowToInf ? SoftFloat32.FPInfinity(sign) : SoftFloat32.FPMaxNormal(sign);
 
@@ -525,22 +529,22 @@ namespace ARMeilleure.Instructions
 
         private static double FPRoundCv(double real, ExecutionContext context)
         {
-            const int minimumExp = -1022;
+            const int MinimumExp = -1022;
 
-            const int e = 11;
-            const int f = 52;
+            const int E = 11;
+            const int F = 52;
 
-            bool   sign;
+            bool sign;
             double mantissa;
 
             if (real < 0d)
             {
-                sign     = true;
+                sign = true;
                 mantissa = -real;
             }
             else
             {
-                sign     = false;
+                sign = false;
                 mantissa = real;
             }
 
@@ -558,22 +562,22 @@ namespace ARMeilleure.Instructions
                 exponent++;
             }
 
-            if ((context.Fpcr & FPCR.Fz) != 0 && exponent < minimumExp)
+            if ((context.Fpcr & FPCR.Fz) != 0 && exponent < MinimumExp)
             {
                 context.Fpsr |= FPSR.Ufc;
 
                 return SoftFloat64.FPZero(sign);
             }
 
-            uint biasedExp = (uint)Math.Max(exponent - minimumExp + 1, 0);
+            uint biasedExp = (uint)Math.Max(exponent - MinimumExp + 1, 0);
 
             if (biasedExp == 0u)
             {
-                mantissa /= Math.Pow(2d, minimumExp - exponent);
+                mantissa /= Math.Pow(2d, MinimumExp - exponent);
             }
 
-            ulong intMant = (ulong)Math.Floor(mantissa * Math.Pow(2d, f));
-            double error = mantissa * Math.Pow(2d, f) - (double)intMant;
+            ulong intMant = (ulong)Math.Floor(mantissa * Math.Pow(2d, F));
+            double error = mantissa * Math.Pow(2d, F) - (double)intMant;
 
             if (biasedExp == 0u && (error != 0d || (context.Fpcr & FPCR.Ufe) != 0))
             {
@@ -585,38 +589,40 @@ namespace ARMeilleure.Instructions
 
             switch (context.Fpcr.GetRoundingMode())
             {
-                default:
                 case FPRoundingMode.ToNearest:
-                    roundUp       = (error > 0.5d || (error == 0.5d && (intMant & 1u) == 1u));
+                    roundUp = (error > 0.5d || (error == 0.5d && (intMant & 1u) == 1u));
                     overflowToInf = true;
                     break;
 
                 case FPRoundingMode.TowardsPlusInfinity:
-                    roundUp       = (error != 0d && !sign);
+                    roundUp = (error != 0d && !sign);
                     overflowToInf = !sign;
                     break;
 
                 case FPRoundingMode.TowardsMinusInfinity:
-                    roundUp       = (error != 0d && sign);
+                    roundUp = (error != 0d && sign);
                     overflowToInf = sign;
                     break;
 
                 case FPRoundingMode.TowardsZero:
-                    roundUp       = false;
+                    roundUp = false;
                     overflowToInf = false;
                     break;
+
+                default:
+                    throw new ArgumentException($"Invalid rounding mode \"{context.Fpcr.GetRoundingMode()}\".");
             }
 
             if (roundUp)
             {
                 intMant++;
 
-                if (intMant == 1ul << f)
+                if (intMant == 1ul << F)
                 {
                     biasedExp = 1u;
                 }
 
-                if (intMant == 1ul << (f + 1))
+                if (intMant == 1ul << (F + 1))
                 {
                     biasedExp++;
                     intMant >>= 1;
@@ -625,7 +631,7 @@ namespace ARMeilleure.Instructions
 
             double result;
 
-            if (biasedExp >= (1u << e) - 1u)
+            if (biasedExp >= (1u << E) - 1u)
             {
                 result = overflowToInf ? SoftFloat64.FPInfinity(sign) : SoftFloat64.FPMaxNormal(sign);
 
@@ -722,8 +728,8 @@ namespace ARMeilleure.Instructions
 
             sign = (~valueBits & 0x80000000u) == 0u;
 
-            uint exp32  = (valueBits & 0x7F800000u) >> 23;
-            uint frac32 =  valueBits & 0x007FFFFFu;
+            uint exp32 = (valueBits & 0x7F800000u) >> 23;
+            uint frac32 = valueBits & 0x007FFFFFu;
 
             double real;
 
@@ -792,8 +798,10 @@ namespace ARMeilleure.Instructions
 
             if (!done)
             {
-                bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-                bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+                bool inf1 = type1 == FPType.Infinity;
+                bool zero1 = type1 == FPType.Zero;
+                bool inf2 = type2 == FPType.Infinity;
+                bool zero2 = type2 == FPType.Zero;
 
                 if (inf1 && inf2 && sign1 == !sign2)
                 {
@@ -834,8 +842,8 @@ namespace ARMeilleure.Instructions
             ExecutionContext context = NativeInterface.GetContext();
             FPCR fpcr = context.Fpcr;
 
-            value1 = value1.FPUnpack(out FPType type1, out bool sign1, out _, context, fpcr);
-            value2 = value2.FPUnpack(out FPType type2, out bool sign2, out _, context, fpcr);
+            value1 = value1.FPUnpack(out FPType type1, out _, out _, context, fpcr);
+            value2 = value2.FPUnpack(out FPType type2, out _, out _, context, fpcr);
 
             int result;
 
@@ -989,8 +997,10 @@ namespace ARMeilleure.Instructions
 
             if (!done)
             {
-                bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-                bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+                bool inf1 = type1 == FPType.Infinity;
+                bool zero1 = type1 == FPType.Zero;
+                bool inf2 = type2 == FPType.Infinity;
+                bool zero2 = type2 == FPType.Zero;
 
                 if ((inf1 && inf2) || (zero1 && zero2))
                 {
@@ -1226,8 +1236,10 @@ namespace ARMeilleure.Instructions
 
             if (!done)
             {
-                bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-                bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+                bool inf1 = type1 == FPType.Infinity;
+                bool zero1 = type1 == FPType.Zero;
+                bool inf2 = type2 == FPType.Infinity;
+                bool zero2 = type2 == FPType.Zero;
 
                 if ((inf1 && zero2) || (zero1 && inf2))
                 {
@@ -1270,11 +1282,13 @@ namespace ARMeilleure.Instructions
             FPCR fpcr = standardFpscr ? context.StandardFpcrValue : context.Fpcr;
 
             valueA = valueA.FPUnpack(out FPType typeA, out bool signA, out uint addend, context, fpcr);
-            value1 = value1.FPUnpack(out FPType type1, out bool sign1, out uint op1,    context, fpcr);
-            value2 = value2.FPUnpack(out FPType type2, out bool sign2, out uint op2,    context, fpcr);
+            value1 = value1.FPUnpack(out FPType type1, out bool sign1, out uint op1, context, fpcr);
+            value2 = value2.FPUnpack(out FPType type2, out bool sign2, out uint op2, context, fpcr);
 
-            bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-            bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+            bool inf1 = type1 == FPType.Infinity;
+            bool zero1 = type1 == FPType.Zero;
+            bool inf2 = type2 == FPType.Infinity;
+            bool zero2 = type2 == FPType.Zero;
 
             float result = FPProcessNaNs3(typeA, type1, type2, addend, op1, op2, out bool done, context, fpcr);
 
@@ -1287,10 +1301,11 @@ namespace ARMeilleure.Instructions
 
             if (!done)
             {
-                bool infA = typeA == FPType.Infinity; bool zeroA = typeA == FPType.Zero;
+                bool infA = typeA == FPType.Infinity;
+                bool zeroA = typeA == FPType.Zero;
 
-                bool signP = sign1 ^  sign2;
-                bool infP  = inf1  || inf2;
+                bool signP = sign1 ^ sign2;
+                bool infP = inf1 || inf2;
                 bool zeroP = zero1 || zero2;
 
                 if ((inf1 && zero2) || (zero1 && inf2) || (infA && infP && signA != signP))
@@ -1353,8 +1368,10 @@ namespace ARMeilleure.Instructions
 
             if (!done)
             {
-                bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-                bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+                bool inf1 = type1 == FPType.Infinity;
+                bool zero1 = type1 == FPType.Zero;
+                bool inf2 = type2 == FPType.Infinity;
+                bool zero2 = type2 == FPType.Zero;
 
                 if ((inf1 && zero2) || (zero1 && inf2))
                 {
@@ -1429,21 +1446,18 @@ namespace ARMeilleure.Instructions
             }
             else if (MathF.Abs(value) < MathF.Pow(2f, -128))
             {
-                bool overflowToInf;
-
-                switch (fpcr.GetRoundingMode())
+                var overflowToInf = fpcr.GetRoundingMode() switch
                 {
-                    default:
-                    case FPRoundingMode.ToNearest:            overflowToInf = true;  break;
-                    case FPRoundingMode.TowardsPlusInfinity:  overflowToInf = !sign; break;
-                    case FPRoundingMode.TowardsMinusInfinity: overflowToInf = sign;  break;
-                    case FPRoundingMode.TowardsZero:          overflowToInf = false; break;
-                }
-
+                    FPRoundingMode.ToNearest => true,
+                    FPRoundingMode.TowardsPlusInfinity => !sign,
+                    FPRoundingMode.TowardsMinusInfinity => sign,
+                    FPRoundingMode.TowardsZero => false,
+                    _ => throw new ArgumentException($"Invalid rounding mode \"{fpcr.GetRoundingMode()}\"."),
+                };
                 result = overflowToInf ? FPInfinity(sign) : FPMaxNormal(sign);
 
                 SoftFloat.FPProcessException(FPException.Overflow, context, fpcr);
-                SoftFloat.FPProcessException(FPException.Inexact,  context, fpcr);
+                SoftFloat.FPProcessException(FPException.Inexact, context, fpcr);
             }
             else if ((fpcr & FPCR.Fz) != 0 && (MathF.Abs(value) >= MathF.Pow(2f, 126)))
             {
@@ -1499,15 +1513,17 @@ namespace ARMeilleure.Instructions
             ExecutionContext context = NativeInterface.GetContext();
             FPCR fpcr = context.StandardFpcrValue;
 
-            value1 = value1.FPUnpack(out FPType type1, out bool sign1, out uint op1, context, fpcr);
-            value2 = value2.FPUnpack(out FPType type2, out bool sign2, out uint op2, context, fpcr);
+            value1 = value1.FPUnpack(out FPType type1, out _, out uint op1, context, fpcr);
+            value2 = value2.FPUnpack(out FPType type2, out _, out uint op2, context, fpcr);
 
             float result = FPProcessNaNs(type1, type2, op1, op2, out bool done, context, fpcr);
 
             if (!done)
             {
-                bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-                bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+                bool inf1 = type1 == FPType.Infinity;
+                bool zero1 = type1 == FPType.Zero;
+                bool inf2 = type2 == FPType.Infinity;
+                bool zero2 = type2 == FPType.Zero;
 
                 float product;
 
@@ -1540,8 +1556,10 @@ namespace ARMeilleure.Instructions
 
             if (!done)
             {
-                bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-                bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+                bool inf1 = type1 == FPType.Infinity;
+                bool zero1 = type1 == FPType.Zero;
+                bool inf2 = type2 == FPType.Infinity;
+                bool zero2 = type2 == FPType.Zero;
 
                 if ((inf1 && zero2) || (zero1 && inf2))
                 {
@@ -1672,8 +1690,10 @@ namespace ARMeilleure.Instructions
 
             if (!done)
             {
-                bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-                bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+                bool inf1 = type1 == FPType.Infinity;
+                bool zero1 = type1 == FPType.Zero;
+                bool inf2 = type2 == FPType.Infinity;
+                bool zero2 = type2 == FPType.Zero;
 
                 if (inf1 && inf2 && sign1 == sign2)
                 {
@@ -1714,15 +1734,17 @@ namespace ARMeilleure.Instructions
             ExecutionContext context = NativeInterface.GetContext();
             FPCR fpcr = context.StandardFpcrValue;
 
-            value1 = value1.FPUnpack(out FPType type1, out bool sign1, out uint op1, context, fpcr);
-            value2 = value2.FPUnpack(out FPType type2, out bool sign2, out uint op2, context, fpcr);
+            value1 = value1.FPUnpack(out FPType type1, out _, out uint op1, context, fpcr);
+            value2 = value2.FPUnpack(out FPType type2, out _, out uint op2, context, fpcr);
 
             float result = FPProcessNaNs(type1, type2, op1, op2, out bool done, context, fpcr);
 
             if (!done)
             {
-                bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-                bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+                bool inf1 = type1 == FPType.Infinity;
+                bool zero1 = type1 == FPType.Zero;
+                bool inf2 = type2 == FPType.Infinity;
+                bool zero2 = type2 == FPType.Zero;
 
                 float product;
 
@@ -1755,8 +1777,10 @@ namespace ARMeilleure.Instructions
 
             if (!done)
             {
-                bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-                bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+                bool inf1 = type1 == FPType.Infinity;
+                bool zero1 = type1 == FPType.Zero;
+                bool inf2 = type2 == FPType.Infinity;
+                bool zero2 = type2 == FPType.Zero;
 
                 if ((inf1 && zero2) || (zero1 && inf2))
                 {
@@ -1841,8 +1865,10 @@ namespace ARMeilleure.Instructions
 
             if (!done)
             {
-                bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-                bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+                bool inf1 = type1 == FPType.Infinity;
+                bool zero1 = type1 == FPType.Zero;
+                bool inf2 = type2 == FPType.Infinity;
+                bool zero2 = type2 == FPType.Zero;
 
                 if (inf1 && inf2 && sign1 == sign2)
                 {
@@ -1939,7 +1965,7 @@ namespace ARMeilleure.Instructions
             {
                 if ((valueBits & 0x007FFFFFu) == 0u || (fpcr & FPCR.Fz) != 0)
                 {
-                    type  = FPType.Zero;
+                    type = FPType.Zero;
                     value = FPZero(sign);
 
                     if ((valueBits & 0x007FFFFFu) != 0u)
@@ -1960,7 +1986,7 @@ namespace ARMeilleure.Instructions
                 }
                 else
                 {
-                    type  = (~valueBits & 0x00400000u) == 0u ? FPType.QNaN : FPType.SNaN;
+                    type = (~valueBits & 0x00400000u) == 0u ? FPType.QNaN : FPType.SNaN;
                     value = FPZero(sign);
                 }
             }
@@ -2134,8 +2160,8 @@ namespace ARMeilleure.Instructions
 
             sign = (~valueBits & 0x8000000000000000ul) == 0u;
 
-            ulong exp64  = (valueBits & 0x7FF0000000000000ul) >> 52;
-            ulong frac64 =  valueBits & 0x000FFFFFFFFFFFFFul;
+            ulong exp64 = (valueBits & 0x7FF0000000000000ul) >> 52;
+            ulong frac64 = valueBits & 0x000FFFFFFFFFFFFFul;
 
             double real;
 
@@ -2204,8 +2230,10 @@ namespace ARMeilleure.Instructions
 
             if (!done)
             {
-                bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-                bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+                bool inf1 = type1 == FPType.Infinity;
+                bool zero1 = type1 == FPType.Zero;
+                bool inf2 = type2 == FPType.Infinity;
+                bool zero2 = type2 == FPType.Zero;
 
                 if (inf1 && inf2 && sign1 == !sign2)
                 {
@@ -2246,8 +2274,8 @@ namespace ARMeilleure.Instructions
             ExecutionContext context = NativeInterface.GetContext();
             FPCR fpcr = context.Fpcr;
 
-            value1 = value1.FPUnpack(out FPType type1, out bool sign1, out _, context, fpcr);
-            value2 = value2.FPUnpack(out FPType type2, out bool sign2, out _, context, fpcr);
+            value1 = value1.FPUnpack(out FPType type1, out _, out _, context, fpcr);
+            value2 = value2.FPUnpack(out FPType type2, out _, out _, context, fpcr);
 
             int result;
 
@@ -2401,8 +2429,10 @@ namespace ARMeilleure.Instructions
 
             if (!done)
             {
-                bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-                bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+                bool inf1 = type1 == FPType.Infinity;
+                bool zero1 = type1 == FPType.Zero;
+                bool inf2 = type2 == FPType.Infinity;
+                bool zero2 = type2 == FPType.Zero;
 
                 if ((inf1 && inf2) || (zero1 && zero2))
                 {
@@ -2638,8 +2668,10 @@ namespace ARMeilleure.Instructions
 
             if (!done)
             {
-                bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-                bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+                bool inf1 = type1 == FPType.Infinity;
+                bool zero1 = type1 == FPType.Zero;
+                bool inf2 = type2 == FPType.Infinity;
+                bool zero2 = type2 == FPType.Zero;
 
                 if ((inf1 && zero2) || (zero1 && inf2))
                 {
@@ -2682,11 +2714,13 @@ namespace ARMeilleure.Instructions
             FPCR fpcr = standardFpscr ? context.StandardFpcrValue : context.Fpcr;
 
             valueA = valueA.FPUnpack(out FPType typeA, out bool signA, out ulong addend, context, fpcr);
-            value1 = value1.FPUnpack(out FPType type1, out bool sign1, out ulong op1,    context, fpcr);
-            value2 = value2.FPUnpack(out FPType type2, out bool sign2, out ulong op2,    context, fpcr);
+            value1 = value1.FPUnpack(out FPType type1, out bool sign1, out ulong op1, context, fpcr);
+            value2 = value2.FPUnpack(out FPType type2, out bool sign2, out ulong op2, context, fpcr);
 
-            bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-            bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+            bool inf1 = type1 == FPType.Infinity;
+            bool zero1 = type1 == FPType.Zero;
+            bool inf2 = type2 == FPType.Infinity;
+            bool zero2 = type2 == FPType.Zero;
 
             double result = FPProcessNaNs3(typeA, type1, type2, addend, op1, op2, out bool done, context, fpcr);
 
@@ -2699,10 +2733,11 @@ namespace ARMeilleure.Instructions
 
             if (!done)
             {
-                bool infA = typeA == FPType.Infinity; bool zeroA = typeA == FPType.Zero;
+                bool infA = typeA == FPType.Infinity;
+                bool zeroA = typeA == FPType.Zero;
 
-                bool signP = sign1 ^  sign2;
-                bool infP  = inf1  || inf2;
+                bool signP = sign1 ^ sign2;
+                bool infP = inf1 || inf2;
                 bool zeroP = zero1 || zero2;
 
                 if ((inf1 && zero2) || (zero1 && inf2) || (infA && infP && signA != signP))
@@ -2765,8 +2800,10 @@ namespace ARMeilleure.Instructions
 
             if (!done)
             {
-                bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-                bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+                bool inf1 = type1 == FPType.Infinity;
+                bool zero1 = type1 == FPType.Zero;
+                bool inf2 = type2 == FPType.Infinity;
+                bool zero2 = type2 == FPType.Zero;
 
                 if ((inf1 && zero2) || (zero1 && inf2))
                 {
@@ -2841,21 +2878,18 @@ namespace ARMeilleure.Instructions
             }
             else if (Math.Abs(value) < Math.Pow(2d, -1024))
             {
-                bool overflowToInf;
-
-                switch (fpcr.GetRoundingMode())
+                var overflowToInf = fpcr.GetRoundingMode() switch
                 {
-                    default:
-                    case FPRoundingMode.ToNearest:            overflowToInf = true;  break;
-                    case FPRoundingMode.TowardsPlusInfinity:  overflowToInf = !sign; break;
-                    case FPRoundingMode.TowardsMinusInfinity: overflowToInf = sign;  break;
-                    case FPRoundingMode.TowardsZero:          overflowToInf = false; break;
-                }
-
+                    FPRoundingMode.ToNearest => true,
+                    FPRoundingMode.TowardsPlusInfinity => !sign,
+                    FPRoundingMode.TowardsMinusInfinity => sign,
+                    FPRoundingMode.TowardsZero => false,
+                    _ => throw new ArgumentException($"Invalid rounding mode \"{fpcr.GetRoundingMode()}\"."),
+                };
                 result = overflowToInf ? FPInfinity(sign) : FPMaxNormal(sign);
 
                 SoftFloat.FPProcessException(FPException.Overflow, context, fpcr);
-                SoftFloat.FPProcessException(FPException.Inexact,  context, fpcr);
+                SoftFloat.FPProcessException(FPException.Inexact, context, fpcr);
             }
             else if ((fpcr & FPCR.Fz) != 0 && (Math.Abs(value) >= Math.Pow(2d, 1022)))
             {
@@ -2911,15 +2945,17 @@ namespace ARMeilleure.Instructions
             ExecutionContext context = NativeInterface.GetContext();
             FPCR fpcr = context.StandardFpcrValue;
 
-            value1 = value1.FPUnpack(out FPType type1, out bool sign1, out ulong op1, context, fpcr);
-            value2 = value2.FPUnpack(out FPType type2, out bool sign2, out ulong op2, context, fpcr);
+            value1 = value1.FPUnpack(out FPType type1, out _, out ulong op1, context, fpcr);
+            value2 = value2.FPUnpack(out FPType type2, out _, out ulong op2, context, fpcr);
 
             double result = FPProcessNaNs(type1, type2, op1, op2, out bool done, context, fpcr);
 
             if (!done)
             {
-                bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-                bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+                bool inf1 = type1 == FPType.Infinity;
+                bool zero1 = type1 == FPType.Zero;
+                bool inf2 = type2 == FPType.Infinity;
+                bool zero2 = type2 == FPType.Zero;
 
                 double product;
 
@@ -2952,8 +2988,10 @@ namespace ARMeilleure.Instructions
 
             if (!done)
             {
-                bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-                bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+                bool inf1 = type1 == FPType.Infinity;
+                bool zero1 = type1 == FPType.Zero;
+                bool inf2 = type2 == FPType.Infinity;
+                bool zero2 = type2 == FPType.Zero;
 
                 if ((inf1 && zero2) || (zero1 && inf2))
                 {
@@ -3084,8 +3122,10 @@ namespace ARMeilleure.Instructions
 
             if (!done)
             {
-                bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-                bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+                bool inf1 = type1 == FPType.Infinity;
+                bool zero1 = type1 == FPType.Zero;
+                bool inf2 = type2 == FPType.Infinity;
+                bool zero2 = type2 == FPType.Zero;
 
                 if (inf1 && inf2 && sign1 == sign2)
                 {
@@ -3126,15 +3166,17 @@ namespace ARMeilleure.Instructions
             ExecutionContext context = NativeInterface.GetContext();
             FPCR fpcr = context.StandardFpcrValue;
 
-            value1 = value1.FPUnpack(out FPType type1, out bool sign1, out ulong op1, context, fpcr);
-            value2 = value2.FPUnpack(out FPType type2, out bool sign2, out ulong op2, context, fpcr);
+            value1 = value1.FPUnpack(out FPType type1, out _, out ulong op1, context, fpcr);
+            value2 = value2.FPUnpack(out FPType type2, out _, out ulong op2, context, fpcr);
 
             double result = FPProcessNaNs(type1, type2, op1, op2, out bool done, context, fpcr);
 
             if (!done)
             {
-                bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-                bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+                bool inf1 = type1 == FPType.Infinity;
+                bool zero1 = type1 == FPType.Zero;
+                bool inf2 = type2 == FPType.Infinity;
+                bool zero2 = type2 == FPType.Zero;
 
                 double product;
 
@@ -3167,8 +3209,10 @@ namespace ARMeilleure.Instructions
 
             if (!done)
             {
-                bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-                bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+                bool inf1 = type1 == FPType.Infinity;
+                bool zero1 = type1 == FPType.Zero;
+                bool inf2 = type2 == FPType.Infinity;
+                bool zero2 = type2 == FPType.Zero;
 
                 if ((inf1 && zero2) || (zero1 && inf2))
                 {
@@ -3253,8 +3297,10 @@ namespace ARMeilleure.Instructions
 
             if (!done)
             {
-                bool inf1 = type1 == FPType.Infinity; bool zero1 = type1 == FPType.Zero;
-                bool inf2 = type2 == FPType.Infinity; bool zero2 = type2 == FPType.Zero;
+                bool inf1 = type1 == FPType.Infinity;
+                bool zero1 = type1 == FPType.Zero;
+                bool inf2 = type2 == FPType.Infinity;
+                bool zero2 = type2 == FPType.Zero;
 
                 if (inf1 && inf2 && sign1 == sign2)
                 {
@@ -3351,7 +3397,7 @@ namespace ARMeilleure.Instructions
             {
                 if ((valueBits & 0x000FFFFFFFFFFFFFul) == 0ul || (fpcr & FPCR.Fz) != 0)
                 {
-                    type  = FPType.Zero;
+                    type = FPType.Zero;
                     value = FPZero(sign);
 
                     if ((valueBits & 0x000FFFFFFFFFFFFFul) != 0ul)
@@ -3372,7 +3418,7 @@ namespace ARMeilleure.Instructions
                 }
                 else
                 {
-                    type  = (~valueBits & 0x0008000000000000ul) == 0ul ? FPType.QNaN : FPType.SNaN;
+                    type = (~valueBits & 0x0008000000000000ul) == 0ul ? FPType.QNaN : FPType.SNaN;
                     value = FPZero(sign);
                 }
             }

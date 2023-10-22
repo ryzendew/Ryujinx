@@ -218,17 +218,48 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
         {
             bool changed = false;
             ref Array32<AttributeType> attributeTypes = ref _graphics.AttributeTypes;
+            bool mayConvertVtgToCompute = ShaderCache.MayConvertVtgToCompute(ref _context.Capabilities);
+            bool supportsScaledFormats = _context.Capabilities.SupportsScaledVertexFormats && !mayConvertVtgToCompute;
 
             for (int location = 0; location < state.Length; location++)
             {
                 VertexAttribType type = state[location].UnpackType();
+                VertexAttribSize size = state[location].UnpackSize();
 
-                AttributeType value = type switch
+                AttributeType value;
+
+                if (supportsScaledFormats)
                 {
-                    VertexAttribType.Sint => AttributeType.Sint,
-                    VertexAttribType.Uint => AttributeType.Uint,
-                    _ => AttributeType.Float
-                };
+                    value = type switch
+                    {
+                        VertexAttribType.Sint => AttributeType.Sint,
+                        VertexAttribType.Uint => AttributeType.Uint,
+                        _ => AttributeType.Float,
+                    };
+                }
+                else
+                {
+                    value = type switch
+                    {
+                        VertexAttribType.Sint => AttributeType.Sint,
+                        VertexAttribType.Uint => AttributeType.Uint,
+                        VertexAttribType.Uscaled => AttributeType.Uscaled,
+                        VertexAttribType.Sscaled => AttributeType.Sscaled,
+                        _ => AttributeType.Float,
+                    };
+                }
+
+                if (mayConvertVtgToCompute && (size == VertexAttribSize.Rgb10A2 || size == VertexAttribSize.Rg11B10))
+                {
+                    value |= AttributeType.Packed;
+
+                    if (type == VertexAttribType.Snorm ||
+                        type == VertexAttribType.Sint ||
+                        type == VertexAttribType.Sscaled)
+                    {
+                        value |= AttributeType.PackedRgb10A2Signed;
+                    }
+                }
 
                 if (attributeTypes[location] != value)
                 {
@@ -338,6 +369,20 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
             if (enabled != _graphics.DualSourceBlendEnable)
             {
                 _graphics.DualSourceBlendEnable = enabled;
+
+                Signal();
+            }
+        }
+
+        /// <summary>
+        /// Sets the Y negate enabled state.
+        /// </summary>
+        /// <param name="enabled">True if Y negate of the fragment coordinates is enabled</param>
+        public void SetYNegateEnabled(bool enabled)
+        {
+            if (enabled != _graphics.YNegateEnabled)
+            {
+                _graphics.YNegateEnabled = enabled;
 
                 Signal();
             }

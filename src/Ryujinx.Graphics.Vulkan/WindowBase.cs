@@ -3,7 +3,7 @@ using System;
 
 namespace Ryujinx.Graphics.Vulkan
 {
-    internal abstract class WindowBase: IWindow
+    internal abstract class WindowBase : IWindow
     {
         public bool ScreenCaptureRequested { get; set; }
 
@@ -14,5 +14,6 @@ namespace Ryujinx.Graphics.Vulkan
         public abstract void SetAntiAliasing(AntiAliasing effect);
         public abstract void SetScalingFilter(ScalingFilter scalerType);
         public abstract void SetScalingFilterLevel(float scale);
+        public abstract void SetColorSpacePassthrough(bool colorSpacePassthroughEnabled);
     }
 }

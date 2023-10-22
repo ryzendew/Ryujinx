@@ -46,7 +46,7 @@ namespace Ryujinx.Input.SDL2
             SDL_GameControllerButton.SDL_CONTROLLER_BUTTON_PADDLE2,
             SDL_GameControllerButton.SDL_CONTROLLER_BUTTON_PADDLE3,
             SDL_GameControllerButton.SDL_CONTROLLER_BUTTON_PADDLE4,
-            SDL_GameControllerButton.SDL_CONTROLLER_BUTTON_TOUCHPAD,            
+            SDL_GameControllerButton.SDL_CONTROLLER_BUTTON_TOUCHPAD,
 
             // Virtual buttons are invalid, ignored.
             SDL_GameControllerButton.SDL_CONTROLLER_BUTTON_INVALID,
@@ -55,15 +55,15 @@ namespace Ryujinx.Input.SDL2
             SDL_GameControllerButton.SDL_CONTROLLER_BUTTON_INVALID,
         };
 
-        private object _userMappingLock = new object();
+        private readonly object _userMappingLock = new();
 
-        private List<ButtonMappingEntry> _buttonsUserMapping;
+        private readonly List<ButtonMappingEntry> _buttonsUserMapping;
 
-        private StickInputId[] _stickUserMapping = new StickInputId[(int)StickInputId.Count]
+        private readonly StickInputId[] _stickUserMapping = new StickInputId[(int)StickInputId.Count]
         {
             StickInputId.Unbound,
             StickInputId.Left,
-            StickInputId.Right
+            StickInputId.Right,
         };
 
         public GamepadFeaturesFlag Features { get; }
@@ -85,8 +85,15 @@ namespace Ryujinx.Input.SDL2
             // Enable motion tracking
             if (Features.HasFlag(GamepadFeaturesFlag.Motion))
             {
-                SDL_GameControllerSetSensorEnabled(_gamepadHandle, SDL_SensorType.SDL_SENSOR_ACCEL, SDL_bool.SDL_TRUE);
-                SDL_GameControllerSetSensorEnabled(_gamepadHandle, SDL_SensorType.SDL_SENSOR_GYRO, SDL_bool.SDL_TRUE);
+                if (SDL_GameControllerSetSensorEnabled(_gamepadHandle, SDL_SensorType.SDL_SENSOR_ACCEL, SDL_bool.SDL_TRUE) != 0)
+                {
+                    Logger.Error?.Print(LogClass.Hid, $"Could not enable data reporting for SensorType {SDL_SensorType.SDL_SENSOR_ACCEL}.");
+                }
+
+                if (SDL_GameControllerSetSensorEnabled(_gamepadHandle, SDL_SensorType.SDL_SENSOR_GYRO, SDL_bool.SDL_TRUE) != 0)
+                {
+                    Logger.Error?.Print(LogClass.Hid, $"Could not enable data reporting for SensorType {SDL_SensorType.SDL_SENSOR_GYRO}.");
+                }
             }
         }
 
@@ -144,7 +151,10 @@ namespace Ryujinx.Input.SDL2
 
                 if (durationMs == uint.MaxValue)
                 {
-                    SDL_GameControllerRumble(_gamepadHandle, lowFrequencyRaw, highFrequencyRaw, SDL_HAPTIC_INFINITY);
+                    if (SDL_GameControllerRumble(_gamepadHandle, lowFrequencyRaw, highFrequencyRaw, SDL_HAPTIC_INFINITY) != 0)
+                    {
+                        Logger.Error?.Print(LogClass.Hid, "Rumble is not supported on this game controller.");
+                    }
                 }
                 else if (durationMs > SDL_HAPTIC_INFINITY)
                 {
@@ -152,7 +162,10 @@ namespace Ryujinx.Input.SDL2
                 }
                 else
                 {
-                    SDL_GameControllerRumble(_gamepadHandle, lowFrequencyRaw, highFrequencyRaw, durationMs);
+                    if (SDL_GameControllerRumble(_gamepadHandle, lowFrequencyRaw, highFrequencyRaw, durationMs) != 0)
+                    {
+                        Logger.Error?.Print(LogClass.Hid, "Rumble is not supported on this game controller.");
+                    }
                 }
             }
         }
@@ -182,13 +195,14 @@ namespace Ryujinx.Input.SDL2
 
                     if (result == 0)
                     {
-                        Vector3 value = new Vector3(values[0], values[1], values[2]);
+                        Vector3 value = new(values[0], values[1], values[2]);
 
                         if (inputId == MotionInputId.Gyroscope)
                         {
                             return RadToDegree(value);
                         }
-                        else if (inputId == MotionInputId.Accelerometer)
+
+                        if (inputId == MotionInputId.Accelerometer)
                         {
                             return GsToMs2(value);
                         }
@@ -359,18 +373,18 @@ namespace Ryujinx.Input.SDL2
             {
                 return ConvertRawStickValue(SDL_GameControllerGetAxis(_gamepadHandle, SDL_GameControllerAxis.SDL_CONTROLLER_AXIS_TRIGGERLEFT)) > _triggerThreshold;
             }
-            else if (inputId == GamepadButtonInputId.RightTrigger)
+
+            if (inputId == GamepadButtonInputId.RightTrigger)
             {
                 return ConvertRawStickValue(SDL_GameControllerGetAxis(_gamepadHandle, SDL_GameControllerAxis.SDL_CONTROLLER_AXIS_TRIGGERRIGHT)) > _triggerThreshold;
             }
-            else if (_buttonsDriverMapping[(int)inputId] == SDL_GameControllerButton.SDL_CONTROLLER_BUTTON_INVALID)
+
+            if (_buttonsDriverMapping[(int)inputId] == SDL_GameControllerButton.SDL_CONTROLLER_BUTTON_INVALID)
             {
                 return false;
             }
-            else
-            {
-                return SDL_GameControllerGetButton(_gamepadHandle, _buttonsDriverMapping[(int)inputId]) == 1;
-            }
+
+            return SDL_GameControllerGetButton(_gamepadHandle, _buttonsDriverMapping[(int)inputId]) == 1;
         }
     }
 }

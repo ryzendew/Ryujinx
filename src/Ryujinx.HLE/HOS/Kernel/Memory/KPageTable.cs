@@ -13,7 +13,7 @@ namespace Ryujinx.HLE.HOS.Kernel.Memory
 
         protected override bool Supports4KBPages => _cpuMemory.Supports4KBPages;
 
-        public KPageTable(KernelContext context, IVirtualMemoryManager cpuMemory) : base(context)
+        public KPageTable(KernelContext context, IVirtualMemoryManager cpuMemory, ulong reservedAddressSpaceSize) : base(context, reservedAddressSpaceSize)
         {
             _cpuMemory = cpuMemory;
         }
@@ -43,7 +43,7 @@ namespace Ryujinx.HLE.HOS.Kernel.Memory
         /// <inheritdoc/>
         protected override Result MapMemory(ulong src, ulong dst, ulong pagesCount, KMemoryPermission oldSrcPermission, KMemoryPermission newDstPermission)
         {
-            KPageList pageList = new KPageList();
+            KPageList pageList = new();
             GetPhysicalRegions(src, pagesCount * PageSize, pageList);
 
             Result result = Reprotect(src, pagesCount, KMemoryPermission.None);
@@ -69,8 +69,8 @@ namespace Ryujinx.HLE.HOS.Kernel.Memory
         {
             ulong size = pagesCount * PageSize;
 
-            KPageList srcPageList = new KPageList();
-            KPageList dstPageList = new KPageList();
+            KPageList srcPageList = new();
+            KPageList dstPageList = new();
 
             GetPhysicalRegions(src, size, srcPageList);
             GetPhysicalRegions(dst, size, dstPageList);
@@ -180,7 +180,7 @@ namespace Ryujinx.HLE.HOS.Kernel.Memory
         /// <inheritdoc/>
         protected override Result Unmap(ulong address, ulong pagesCount)
         {
-            KPageList pagesToClose = new KPageList();
+            KPageList pagesToClose = new();
 
             var regions = _cpuMemory.GetPhysicalRegions(address, pagesCount * PageSize);
 

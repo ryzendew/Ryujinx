@@ -1,3 +1,4 @@
+using Ryujinx.Audio.Integration;
 using System.Collections.Generic;
 
 namespace Ryujinx.Audio.Renderer.Device
@@ -10,19 +11,37 @@ namespace Ryujinx.Audio.Renderer.Device
         /// <summary>
         /// The session registry, used to store the sessions of a given AppletResourceId.
         /// </summary>
-        private Dictionary<ulong, VirtualDeviceSession[]> _sessionsRegistry = new Dictionary<ulong, VirtualDeviceSession[]>();
+        private readonly Dictionary<ulong, VirtualDeviceSession[]> _sessionsRegistry = new();
 
         /// <summary>
         /// The default <see cref="VirtualDevice"/>.
         /// </summary>
         /// <remarks>This is used when the USB device is the default one on older revision.</remarks>
+#pragma warning disable CA1822 // Mark member as static
         public VirtualDevice DefaultDevice => VirtualDevice.Devices[0];
+#pragma warning restore CA1822
 
         /// <summary>
         /// The current active <see cref="VirtualDevice"/>.
         /// </summary>
         // TODO: make this configurable
-        public VirtualDevice ActiveDevice = VirtualDevice.Devices[2];
+        public VirtualDevice ActiveDevice { get; }
+
+        public VirtualDeviceSessionRegistry(IHardwareDeviceDriver driver)
+        {
+            uint channelCount;
+
+            if (driver.GetRealDeviceDriver().SupportsChannelCount(6))
+            {
+                channelCount = 6;
+            }
+            else
+            {
+                channelCount = 2;
+            }
+
+            ActiveDevice = new VirtualDevice("AudioTvOutput", channelCount, false);
+        }
 
         /// <summary>
         /// Get the associated <see cref="T:VirtualDeviceSession[]"/> from an AppletResourceId.

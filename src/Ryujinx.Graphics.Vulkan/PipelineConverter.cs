@@ -2,13 +2,19 @@
 using Ryujinx.Graphics.GAL;
 using Silk.NET.Vulkan;
 using System;
+using Format = Silk.NET.Vulkan.Format;
+using PolygonMode = Silk.NET.Vulkan.PolygonMode;
 
 namespace Ryujinx.Graphics.Vulkan
 {
     static class PipelineConverter
     {
-        private const AccessFlags SubpassSrcAccessMask = AccessFlags.MemoryReadBit | AccessFlags.MemoryWriteBit | AccessFlags.ColorAttachmentWriteBit;
-        private const AccessFlags SubpassDstAccessMask = AccessFlags.MemoryReadBit | AccessFlags.MemoryWriteBit | AccessFlags.ShaderReadBit;
+        private const AccessFlags SubpassAccessMask =
+            AccessFlags.MemoryReadBit |
+            AccessFlags.MemoryWriteBit |
+            AccessFlags.ShaderReadBit |
+            AccessFlags.ColorAttachmentWriteBit |
+            AccessFlags.DepthStencilAttachmentWriteBit;
 
         public static unsafe DisposableRenderPass ToRenderPass(this ProgramPipelineState state, VulkanRenderer gd, Device device)
         {
@@ -16,15 +22,15 @@ namespace Ryujinx.Graphics.Vulkan
 
             AttachmentDescription[] attachmentDescs = null;
 
-            var subpass = new SubpassDescription()
+            var subpass = new SubpassDescription
             {
-                PipelineBindPoint = PipelineBindPoint.Graphics
+                PipelineBindPoint = PipelineBindPoint.Graphics,
             };
 
             AttachmentReference* attachmentReferences = stackalloc AttachmentReference[MaxAttachments];
 
             Span<int> attachmentIndices = stackalloc int[MaxAttachments];
-            Span<Silk.NET.Vulkan.Format> attachmentFormats = stackalloc Silk.NET.Vulkan.Format[MaxAttachments];
+            Span<Format> attachmentFormats = stackalloc Format[MaxAttachments];
 
             int attachmentCount = 0;
             int colorCount = 0;
@@ -106,7 +112,7 @@ namespace Ryujinx.Graphics.Vulkan
 
             fixed (AttachmentDescription* pAttachmentDescs = attachmentDescs)
             {
-                var renderPassCreateInfo = new RenderPassCreateInfo()
+                var renderPassCreateInfo = new RenderPassCreateInfo
                 {
                     SType = StructureType.RenderPassCreateInfo,
                     PAttachments = pAttachmentDescs,
@@ -114,7 +120,7 @@ namespace Ryujinx.Graphics.Vulkan
                     PSubpasses = &subpass,
                     SubpassCount = 1,
                     PDependencies = &subpassDependency,
-                    DependencyCount = 1
+                    DependencyCount = 1,
                 };
 
                 gd.Api.CreateRenderPass(device, renderPassCreateInfo, null, out var renderPass).ThrowOnError();
@@ -130,8 +136,8 @@ namespace Ryujinx.Graphics.Vulkan
                 0,
                 PipelineStageFlags.AllGraphicsBit,
                 PipelineStageFlags.AllGraphicsBit,
-                SubpassSrcAccessMask,
-                SubpassDstAccessMask,
+                SubpassAccessMask,
+                SubpassAccessMask,
                 0);
         }
 
@@ -144,14 +150,14 @@ namespace Ryujinx.Graphics.Vulkan
                 0,
                 PipelineStageFlags.AllGraphicsBit,
                 PipelineStageFlags.AllGraphicsBit,
-                SubpassSrcAccessMask,
-                SubpassDstAccessMask,
+                SubpassAccessMask,
+                SubpassAccessMask,
                 0);
         }
 
         public static PipelineState ToVulkanPipelineState(this ProgramPipelineState state, VulkanRenderer gd)
         {
-            PipelineState pipeline = new PipelineState();
+            PipelineState pipeline = new();
             pipeline.Initialize();
 
             // It is assumed that Dynamic State is enabled when this conversion is used.
@@ -165,6 +171,7 @@ namespace Ryujinx.Graphics.Vulkan
             pipeline.DepthTestEnable = state.DepthTest.TestEnable;
             pipeline.DepthWriteEnable = state.DepthTest.WriteEnable;
             pipeline.DepthCompareOp = state.DepthTest.Func.Convert();
+            pipeline.DepthMode = state.DepthMode == DepthMode.MinusOneToOne;
 
             pipeline.FrontFace = state.FrontFace.Convert();
 
@@ -177,7 +184,7 @@ namespace Ryujinx.Graphics.Vulkan
             pipeline.MaxDepthBounds = 0f; // Not implemented.
 
             pipeline.PatchControlPoints = state.PatchControlPoints;
-            pipeline.PolygonMode = Silk.NET.Vulkan.PolygonMode.Fill; // Not implemented.
+            pipeline.PolygonMode = PolygonMode.Fill; // Not implemented.
             pipeline.PrimitiveRestartEnable = state.PrimitiveRestartEnable;
             pipeline.RasterizerDiscardEnable = state.RasterizerDiscard;
             pipeline.SamplesCount = (uint)state.SamplesCount;
@@ -294,6 +301,7 @@ namespace Ryujinx.Graphics.Vulkan
 
             int attachmentCount = 0;
             int maxColorAttachmentIndex = -1;
+            uint attachmentIntegerFormatMask = 0;
 
             for (int i = 0; i < Constants.MaxRenderTargets; i++)
             {
@@ -301,6 +309,11 @@ namespace Ryujinx.Graphics.Vulkan
                 {
                     pipeline.Internal.AttachmentFormats[attachmentCount++] = gd.FormatCapabilities.ConvertToVkFormat(state.AttachmentFormats[i]);
                     maxColorAttachmentIndex = i;
+
+                    if (state.AttachmentFormats[i].IsInteger())
+                    {
+                        attachmentIntegerFormatMask |= 1u << i;
+                    }
                 }
             }
 
@@ -311,6 +324,7 @@ namespace Ryujinx.Graphics.Vulkan
 
             pipeline.ColorBlendAttachmentStateCount = (uint)(maxColorAttachmentIndex + 1);
             pipeline.VertexAttributeDescriptionsCount = (uint)Math.Min(Constants.MaxVertexAttributes, state.VertexAttribCount);
+            pipeline.Internal.AttachmentIntegerFormatMask = attachmentIntegerFormatMask;
 
             return pipeline;
         }

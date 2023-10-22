@@ -2,35 +2,45 @@ using Ryujinx.Graphics.Shader.IntermediateRepresentation;
 using Ryujinx.Graphics.Shader.Translation;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Numerics;
 
 namespace Ryujinx.Graphics.Shader.StructuredIr
 {
     static class StructuredProgram
     {
-        public static StructuredProgramInfo MakeStructuredProgram(Function[] functions, ShaderConfig config)
-        {
-            StructuredProgramContext context = new StructuredProgramContext(config);
+        // TODO: Eventually it should be possible to specify the parameter types for the function instead of using S32 for everything.
+        private const AggregateType FuncParameterType = AggregateType.S32;
 
-            for (int funcIndex = 0; funcIndex < functions.Length; funcIndex++)
+        public static StructuredProgramInfo MakeStructuredProgram(
+            IReadOnlyList<Function> functions,
+            AttributeUsage attributeUsage,
+            ShaderDefinitions definitions,
+            ResourceManager resourceManager,
+            TargetLanguage targetLanguage,
+            bool debugMode)
+        {
+            StructuredProgramContext context = new(attributeUsage, definitions, resourceManager, debugMode);
+
+            for (int funcIndex = 0; funcIndex < functions.Count; funcIndex++)
             {
                 Function function = functions[funcIndex];
 
                 BasicBlock[] blocks = function.Blocks;
 
-                AggregateType returnType = function.ReturnsValue ? AggregateType.S32 : AggregateType.Void;
+                AggregateType returnType = function.ReturnsValue ? FuncParameterType : AggregateType.Void;
 
-                AggregateType[] inArguments  = new AggregateType[function.InArgumentsCount];
+                AggregateType[] inArguments = new AggregateType[function.InArgumentsCount];
                 AggregateType[] outArguments = new AggregateType[function.OutArgumentsCount];
 
                 for (int i = 0; i < inArguments.Length; i++)
                 {
-                    inArguments[i] = AggregateType.S32;
+                    inArguments[i] = FuncParameterType;
                 }
 
                 for (int i = 0; i < outArguments.Length; i++)
                 {
-                    outArguments[i] = AggregateType.S32;
+                    outArguments[i] = FuncParameterType;
                 }
 
                 context.EnterFunction(blocks.Length, function.Name, returnType, inArguments, outArguments);
@@ -53,7 +63,7 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
                         }
                         else
                         {
-                            AddOperation(context, operation);
+                            AddOperation(context, operation, targetLanguage, functions);
                         }
                     }
                 }
@@ -68,32 +78,38 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
             return context.Info;
         }
 
-        private static void AddOperation(StructuredProgramContext context, Operation operation)
+        private static void AddOperation(StructuredProgramContext context, Operation operation, TargetLanguage targetLanguage, IReadOnlyList<Function> functions)
         {
             Instruction inst = operation.Inst;
             StorageKind storageKind = operation.StorageKind;
 
-            if ((inst == Instruction.Load || inst == Instruction.Store) && storageKind.IsInputOrOutput())
+            if (inst == Instruction.Load || inst == Instruction.Store)
             {
-                IoVariable ioVariable = (IoVariable)operation.GetSource(0).Value;
-                bool isOutput = storageKind.IsOutput();
-                bool perPatch = storageKind.IsPerPatch();
-                int location = 0;
-                int component = 0;
-
-                if (context.Config.HasPerLocationInputOrOutput(ioVariable, isOutput))
+                if (storageKind.IsInputOrOutput())
                 {
-                    location = operation.GetSource(1).Value;
+                    IoVariable ioVariable = (IoVariable)operation.GetSource(0).Value;
+                    bool isOutput = storageKind.IsOutput();
+                    int location = 0;
+                    int component = 0;
 
-                    if (operation.SourcesCount > 2 &&
-                        operation.GetSource(2).Type == OperandType.Constant &&
-                        context.Config.HasPerLocationInputOrOutputComponent(ioVariable, location, operation.GetSource(2).Value, isOutput))
+                    if (context.Definitions.HasPerLocationInputOrOutput(ioVariable, isOutput))
                     {
-                        component = operation.GetSource(2).Value;
-                    }
-                }
+                        location = operation.GetSource(1).Value;
 
-                context.Info.IoDefinitions.Add(new IoDefinition(storageKind, ioVariable, location, component));
+                        if (operation.SourcesCount > 2 &&
+                            operation.GetSource(2).Type == OperandType.Constant &&
+                            context.Definitions.HasPerLocationInputOrOutputComponent(ioVariable, location, operation.GetSource(2).Value, isOutput))
+                        {
+                            component = operation.GetSource(2).Value;
+                        }
+                    }
+
+                    context.Info.IoDefinitions.Add(new IoDefinition(storageKind, ioVariable, location, component));
+                }
+                else if (storageKind == StorageKind.ConstantBuffer && operation.GetSource(0).Type == OperandType.Constant)
+                {
+                    context.ResourceManager.SetUsedConstantBufferBinding(operation.GetSource(0).Value);
+                }
             }
 
             bool vectorDest = IsVectorDestInst(inst);
@@ -103,9 +119,43 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
 
             IAstNode[] sources = new IAstNode[sourcesCount + outDestsCount];
 
-            for (int index = 0; index < operation.SourcesCount; index++)
+            if (inst == Instruction.Call && targetLanguage == TargetLanguage.Spirv)
             {
-                sources[index] = context.GetOperand(operation.GetSource(index));
+                // SPIR-V requires that all function parameters are copied to a local variable before the call
+                // (or at least that's what the Khronos compiler does).
+
+                // First one is the function index.
+                Operand funcIndexOperand = operation.GetSource(0);
+                Debug.Assert(funcIndexOperand.Type == OperandType.Constant);
+                int funcIndex = funcIndexOperand.Value;
+
+                sources[0] = new AstOperand(OperandType.Constant, funcIndex);
+
+                int inArgsCount = functions[funcIndex].InArgumentsCount;
+
+                // Remaining ones are parameters, copy them to a temp local variable.
+                for (int index = 1; index < operation.SourcesCount; index++)
+                {
+                    IAstNode source = context.GetOperandOrCbLoad(operation.GetSource(index));
+
+                    if (index - 1 < inArgsCount)
+                    {
+                        AstOperand argTemp = context.NewTemp(FuncParameterType);
+                        context.AddNode(new AstAssignment(argTemp, source));
+                        sources[index] = argTemp;
+                    }
+                    else
+                    {
+                        sources[index] = source;
+                    }
+                }
+            }
+            else
+            {
+                for (int index = 0; index < operation.SourcesCount; index++)
+                {
+                    sources[index] = context.GetOperandOrCbLoad(operation.GetSource(index));
+                }
             }
 
             for (int index = 0; index < outDestsCount; index++)
@@ -119,15 +169,7 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
 
             AstTextureOperation GetAstTextureOperation(TextureOperation texOp)
             {
-                return new AstTextureOperation(
-                    inst,
-                    texOp.Type,
-                    texOp.Format,
-                    texOp.Flags,
-                    texOp.CbufSlot,
-                    texOp.Handle,
-                    texOp.Index,
-                    sources);
+                return new AstTextureOperation(inst, texOp.Type, texOp.Format, texOp.Flags, texOp.Binding, texOp.Index, sources);
             }
 
             int componentsCount = BitOperations.PopCount((uint)operation.Index);
@@ -149,16 +191,28 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
                 }
                 else
                 {
-                    source = new AstOperation(inst, operation.StorageKind, operation.Index, sources, operation.SourcesCount);
+                    source = new AstOperation(
+                        inst,
+                        operation.StorageKind,
+                        operation.ForcePrecise,
+                        operation.Index,
+                        sources,
+                        operation.SourcesCount);
                 }
 
                 AggregateType destElemType = destType;
 
                 switch (componentsCount)
                 {
-                    case 2: destType |= AggregateType.Vector2; break;
-                    case 3: destType |= AggregateType.Vector3; break;
-                    case 4: destType |= AggregateType.Vector4; break;
+                    case 2:
+                        destType |= AggregateType.Vector2;
+                        break;
+                    case 3:
+                        destType |= AggregateType.Vector3;
+                        break;
+                    case 4:
+                        destType |= AggregateType.Vector4;
+                        break;
                 }
 
                 AstOperand destVec = context.NewTemp(destType);
@@ -168,11 +222,11 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
                 for (int i = 0; i < operation.DestsCount; i++)
                 {
                     AstOperand dest = context.GetOperand(operation.GetDest(i));
-                    AstOperand index = new AstOperand(OperandType.Constant, i);
+                    AstOperand index = new(OperandType.Constant, i);
 
                     dest.VarType = destElemType;
 
-                    context.AddNode(new AstAssignment(dest, new AstOperation(Instruction.VectorExtract, StorageKind.None, new[] { destVec, index }, 2)));
+                    context.AddNode(new AstAssignment(dest, new AstOperation(Instruction.VectorExtract, StorageKind.None, false, new[] { destVec, index }, 2)));
                 }
             }
             else if (operation.Dest != null)
@@ -189,7 +243,7 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
                 }
 
                 bool isCondSel = inst == Instruction.ConditionalSelect;
-                bool isCopy    = inst == Instruction.Copy;
+                bool isCopy = inst == Instruction.Copy;
 
                 if (isCondSel || isCopy)
                 {
@@ -220,7 +274,13 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
                 }
                 else if (!isCopy)
                 {
-                    source = new AstOperation(inst, operation.StorageKind, operation.Index, sources, operation.SourcesCount);
+                    source = new AstOperation(
+                        inst,
+                        operation.StorageKind,
+                        operation.ForcePrecise,
+                        operation.Index,
+                        sources,
+                        operation.SourcesCount);
                 }
                 else
                 {
@@ -241,7 +301,13 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
             }
             else
             {
-                context.AddNode(new AstOperation(inst, operation.StorageKind, operation.Index, sources, operation.SourcesCount));
+                context.AddNode(new AstOperation(
+                    inst,
+                    operation.StorageKind,
+                    operation.ForcePrecise,
+                    operation.Index,
+                    sources,
+                    operation.SourcesCount));
             }
 
             // Those instructions needs to be emulated by using helper functions,
@@ -249,42 +315,11 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
             // decide which helper functions are needed on the final generated code.
             switch (operation.Inst)
             {
-                case Instruction.AtomicMaxS32:
-                case Instruction.AtomicMinS32:
-                    if (operation.StorageKind == StorageKind.SharedMemory)
-                    {
-                        context.Info.HelperFunctionsMask |= HelperFunctionsMask.AtomicMinMaxS32Shared;
-                    }
-                    else if (operation.StorageKind == StorageKind.StorageBuffer)
-                    {
-                        context.Info.HelperFunctionsMask |= HelperFunctionsMask.AtomicMinMaxS32Storage;
-                    }
-                    break;
                 case Instruction.MultiplyHighS32:
                     context.Info.HelperFunctionsMask |= HelperFunctionsMask.MultiplyHighS32;
                     break;
                 case Instruction.MultiplyHighU32:
                     context.Info.HelperFunctionsMask |= HelperFunctionsMask.MultiplyHighU32;
-                    break;
-                case Instruction.Shuffle:
-                    context.Info.HelperFunctionsMask |= HelperFunctionsMask.Shuffle;
-                    break;
-                case Instruction.ShuffleDown:
-                    context.Info.HelperFunctionsMask |= HelperFunctionsMask.ShuffleDown;
-                    break;
-                case Instruction.ShuffleUp:
-                    context.Info.HelperFunctionsMask |= HelperFunctionsMask.ShuffleUp;
-                    break;
-                case Instruction.ShuffleXor:
-                    context.Info.HelperFunctionsMask |= HelperFunctionsMask.ShuffleXor;
-                    break;
-                case Instruction.StoreShared16:
-                case Instruction.StoreShared8:
-                    context.Info.HelperFunctionsMask |= HelperFunctionsMask.StoreSharedSmallInt;
-                    break;
-                case Instruction.StoreStorage16:
-                case Instruction.StoreStorage8:
-                    context.Info.HelperFunctionsMask |= HelperFunctionsMask.StoreStorageSmallInt;
                     break;
                 case Instruction.SwizzleAdd:
                     context.Info.HelperFunctionsMask |= HelperFunctionsMask.SwizzleAdd;
@@ -298,9 +333,9 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
 
         private static AggregateType GetVarTypeFromUses(Operand dest)
         {
-            HashSet<Operand> visited = new HashSet<Operand>();
+            HashSet<Operand> visited = new();
 
-            Queue<Operand> pending = new Queue<Operand>();
+            Queue<Operand> pending = new();
 
             bool Enqueue(Operand operand)
             {
@@ -379,7 +414,7 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
             {
                 Instruction.ImageLoad or
                 Instruction.TextureSample => true,
-                _ => false
+                _ => false,
             };
         }
 
@@ -390,7 +425,7 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
                 Instruction.Branch or
                 Instruction.BranchIfFalse or
                 Instruction.BranchIfTrue => true,
-                _ => false
+                _ => false,
             };
         }
 
@@ -402,7 +437,7 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
                 Instruction.BitwiseExclusiveOr or
                 Instruction.BitwiseNot or
                 Instruction.BitwiseOr => true,
-                _ => false
+                _ => false,
             };
         }
 
@@ -414,7 +449,7 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
                 Instruction.BitwiseExclusiveOr => Instruction.LogicalExclusiveOr,
                 Instruction.BitwiseNot => Instruction.LogicalNot,
                 Instruction.BitwiseOr => Instruction.LogicalOr,
-                _ => throw new ArgumentException($"Unexpected instruction \"{inst}\".")
+                _ => throw new ArgumentException($"Unexpected instruction \"{inst}\"."),
             };
         }
     }

@@ -1,5 +1,8 @@
+using System;
+
 namespace Ryujinx.Graphics.Shader.Decoders
 {
+    [Flags]
     enum InstProps : ushort
     {
         None = 0,
@@ -23,6 +26,6 @@ namespace Ryujinx.Graphics.Shader.Decoders
         Tex = 1 << 12,
         TexB = 1 << 13,
         Bra = 1 << 14,
-        NoPred = 1 << 15
+        NoPred = 1 << 15,
     }
 }

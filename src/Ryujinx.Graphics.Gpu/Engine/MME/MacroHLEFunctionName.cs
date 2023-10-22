@@ -6,11 +6,19 @@
     enum MacroHLEFunctionName
     {
         None,
+        BindShaderProgram,
         ClearColor,
         ClearDepthStencil,
         DrawArraysInstanced,
+        DrawElements,
         DrawElementsInstanced,
         DrawElementsIndirect,
-        MultiDrawElementsIndirectCount
+        MultiDrawElementsIndirectCount,
+
+        UpdateBlendState,
+        UpdateColorMasks,
+        UpdateUniformBufferState,
+        UpdateUniformBufferStateCbu,
+        UpdateUniformBufferStateCbuV2
     }
 }

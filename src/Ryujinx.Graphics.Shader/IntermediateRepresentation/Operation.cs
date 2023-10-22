@@ -8,6 +8,8 @@ namespace Ryujinx.Graphics.Shader.IntermediateRepresentation
         public Instruction Inst { get; private set; }
         public StorageKind StorageKind { get; }
 
+        public bool ForcePrecise { get; set; }
+
         private Operand[] _dests;
 
         public Operand Dest
@@ -60,7 +62,7 @@ namespace Ryujinx.Graphics.Shader.IntermediateRepresentation
 
         public Operation(Instruction inst, int index, Operand[] dests, Operand[] sources) : this(sources)
         {
-            Inst  = inst;
+            Inst = inst;
             Index = index;
 
             if (dests != null)
@@ -252,6 +254,36 @@ namespace Ryujinx.Graphics.Shader.IntermediateRepresentation
             }
 
             _sources = new Operand[] { source };
+        }
+
+        public void TurnDoubleIntoFloat()
+        {
+            if ((Inst & ~Instruction.Mask) == Instruction.FP64)
+            {
+                Inst = (Inst & Instruction.Mask) | Instruction.FP32;
+            }
+            else
+            {
+                switch (Inst)
+                {
+                    case Instruction.ConvertFP32ToFP64:
+                    case Instruction.ConvertFP64ToFP32:
+                        Inst = Instruction.Copy;
+                        break;
+                    case Instruction.ConvertFP64ToS32:
+                        Inst = Instruction.ConvertFP32ToS32;
+                        break;
+                    case Instruction.ConvertFP64ToU32:
+                        Inst = Instruction.ConvertFP32ToU32;
+                        break;
+                    case Instruction.ConvertS32ToFP64:
+                        Inst = Instruction.ConvertS32ToFP32;
+                        break;
+                    case Instruction.ConvertU32ToFP64:
+                        Inst = Instruction.ConvertU32ToFP32;
+                        break;
+                }
+            }
         }
     }
 }

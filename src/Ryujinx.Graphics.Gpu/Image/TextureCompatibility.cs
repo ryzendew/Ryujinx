@@ -35,7 +35,7 @@ namespace Ryujinx.Graphics.Gpu.Image
             Astc10x8,
             Astc10x10,
             Astc12x10,
-            Astc12x12
+            Astc12x12,
         }
 
         /// <summary>
@@ -291,22 +291,7 @@ namespace Ryujinx.Graphics.Gpu.Image
         /// <returns>The minimum compatibility level of two provided view compatibility results</returns>
         public static TextureViewCompatibility PropagateViewCompatibility(TextureViewCompatibility first, TextureViewCompatibility second)
         {
-            if (first == TextureViewCompatibility.Incompatible || second == TextureViewCompatibility.Incompatible)
-            {
-                return TextureViewCompatibility.Incompatible;
-            }
-            else if (first == TextureViewCompatibility.LayoutIncompatible || second == TextureViewCompatibility.LayoutIncompatible)
-            {
-                return TextureViewCompatibility.LayoutIncompatible;
-            }
-            else if (first == TextureViewCompatibility.CopyOnly || second == TextureViewCompatibility.CopyOnly)
-            {
-                return TextureViewCompatibility.CopyOnly;
-            }
-            else
-            {
-                return TextureViewCompatibility.Full;
-            }
+            return (TextureViewCompatibility)Math.Min((int)first, (int)second);
         }
 
         /// <summary>
@@ -388,6 +373,13 @@ namespace Ryujinx.Graphics.Gpu.Image
                 int stride = BitUtils.AlignUp(Math.Max(1, lhs.Stride >> level), Constants.StrideAlignment);
 
                 return stride == rhs.Stride ? TextureViewCompatibility.CopyOnly : TextureViewCompatibility.LayoutIncompatible;
+            }
+            else if (lhs.Target.IsMultisample() != rhs.Target.IsMultisample() && alignedWidthMatches && lhsAlignedSize.Height == rhsAlignedSize.Height)
+            {
+                // Copy between multisample and non-multisample textures with mismatching size is allowed,
+                // as long aligned size matches.
+
+                return TextureViewCompatibility.CopyOnly;
             }
             else
             {
@@ -556,7 +548,8 @@ namespace Ryujinx.Graphics.Gpu.Image
                     depth,
                     lhs.FormatInfo.BlockHeight,
                     lhs.GobBlocksInY,
-                    lhs.GobBlocksInZ);
+                    lhs.GobBlocksInZ,
+                    level);
 
                 return gobBlocksInY == rhs.GobBlocksInY &&
                        gobBlocksInZ == rhs.GobBlocksInZ;
@@ -602,7 +595,8 @@ namespace Ryujinx.Graphics.Gpu.Image
                     lhsDepth,
                     lhs.FormatInfo.BlockHeight,
                     lhs.GobBlocksInY,
-                    lhs.GobBlocksInZ);
+                    lhs.GobBlocksInZ,
+                    lhsLevel);
 
                 int rhsHeight = Math.Max(1, rhs.Height >> rhsLevel);
                 int rhsDepth = Math.Max(1, rhs.GetDepth() >> rhsLevel);
@@ -612,7 +606,8 @@ namespace Ryujinx.Graphics.Gpu.Image
                     rhsDepth,
                     rhs.FormatInfo.BlockHeight,
                     rhs.GobBlocksInY,
-                    rhs.GobBlocksInZ);
+                    rhs.GobBlocksInZ,
+                    rhsLevel);
 
                 return lhsGobBlocksInY == rhsGobBlocksInY &&
                        lhsGobBlocksInZ == rhsGobBlocksInZ;
@@ -628,15 +623,21 @@ namespace Ryujinx.Graphics.Gpu.Image
         /// <param name="lhs">Texture information of the texture view</param>
         /// <param name="rhs">Texture information of the texture view</param>
         /// <param name="caps">Host GPU capabilities</param>
+        /// <param name="flags">Texture search flags</param>
         /// <returns>The view compatibility level of the texture formats</returns>
-        public static TextureViewCompatibility ViewFormatCompatible(TextureInfo lhs, TextureInfo rhs, Capabilities caps)
+        public static TextureViewCompatibility ViewFormatCompatible(TextureInfo lhs, TextureInfo rhs, Capabilities caps, TextureSearchFlags flags)
         {
             FormatInfo lhsFormat = lhs.FormatInfo;
             FormatInfo rhsFormat = rhs.FormatInfo;
 
             if (lhsFormat.Format.IsDepthOrStencil() || rhsFormat.Format.IsDepthOrStencil())
             {
-                return lhsFormat.Format == rhsFormat.Format ? TextureViewCompatibility.Full : TextureViewCompatibility.Incompatible;
+                return FormatMatches(lhs, rhs, flags.HasFlag(TextureSearchFlags.ForSampler), flags.HasFlag(TextureSearchFlags.DepthAlias)) switch
+                {
+                    TextureMatchQuality.Perfect => TextureViewCompatibility.Full,
+                    TextureMatchQuality.FormatAlias => TextureViewCompatibility.FormatAlias,
+                    _ => TextureViewCompatibility.Incompatible,
+                };
             }
 
             if (IsFormatHostIncompatible(lhs, caps) || IsFormatHostIncompatible(rhs, caps))
@@ -755,49 +756,6 @@ namespace Ryujinx.Graphics.Gpu.Image
         }
 
         /// <summary>
-        /// Checks if a swizzle component in two textures functionally match, taking into account if the components are defined.
-        /// </summary>
-        /// <param name="lhs">Texture information to compare</param>
-        /// <param name="rhs">Texture information to compare with</param>
-        /// <param name="swizzleLhs">Swizzle component for the first texture</param>
-        /// <param name="swizzleRhs">Swizzle component for the second texture</param>
-        /// <param name="component">Component index, starting at 0 for red</param>
-        /// <returns>True if the swizzle components functionally match, false othersize</returns>
-        private static bool SwizzleComponentMatches(TextureInfo lhs, TextureInfo rhs, SwizzleComponent swizzleLhs, SwizzleComponent swizzleRhs, int component)
-        {
-            int lhsComponents = lhs.FormatInfo.Components;
-            int rhsComponents = rhs.FormatInfo.Components;
-
-            if (lhsComponents == 4 && rhsComponents == 4)
-            {
-                return swizzleLhs == swizzleRhs;
-            }
-
-            // Swizzles after the number of components a format defines are "undefined".
-            // We allow these to not be equal under certain circumstances.
-            // This can only happen when there are less than 4 components in a format.
-            // It tends to happen when float depth textures are sampled.
-
-            bool lhsDefined = (swizzleLhs - SwizzleComponent.Red) < lhsComponents;
-            bool rhsDefined = (swizzleRhs - SwizzleComponent.Red) < rhsComponents;
-
-            if (lhsDefined == rhsDefined)
-            {
-                // If both are undefined, return true. Otherwise just check if they're equal.
-                return lhsDefined ? swizzleLhs == swizzleRhs : true;
-            }
-            else
-            {
-                SwizzleComponent defined = lhsDefined ? swizzleLhs : swizzleRhs;
-                SwizzleComponent undefined = lhsDefined ? swizzleRhs : swizzleLhs;
-
-                // Undefined swizzle can be matched by a forced value (0, 1), exact equality, or expected value.
-                // For example, R___ matches R001, RGBA but not RBGA.
-                return defined == undefined || defined < SwizzleComponent.Red || defined == SwizzleComponent.Red + component;
-            }
-        }
-
-        /// <summary>
         /// Checks if the texture shader sampling parameters of two texture informations match.
         /// </summary>
         /// <param name="lhs">Texture information to compare</param>
@@ -806,10 +764,10 @@ namespace Ryujinx.Graphics.Gpu.Image
         public static bool SamplerParamsMatches(TextureInfo lhs, TextureInfo rhs)
         {
             return lhs.DepthStencilMode == rhs.DepthStencilMode &&
-                   SwizzleComponentMatches(lhs, rhs, lhs.SwizzleR, rhs.SwizzleR, 0) &&
-                   SwizzleComponentMatches(lhs, rhs, lhs.SwizzleG, rhs.SwizzleG, 1) &&
-                   SwizzleComponentMatches(lhs, rhs, lhs.SwizzleB, rhs.SwizzleB, 2) &&
-                   SwizzleComponentMatches(lhs, rhs, lhs.SwizzleA, rhs.SwizzleA, 3);
+                   lhs.SwizzleR == rhs.SwizzleR &&
+                   lhs.SwizzleG == rhs.SwizzleG &&
+                   lhs.SwizzleB == rhs.SwizzleB &&
+                   lhs.SwizzleA == rhs.SwizzleA;
         }
 
         /// <summary>
@@ -832,80 +790,33 @@ namespace Ryujinx.Graphics.Gpu.Image
         /// <returns>Format class</returns>
         private static FormatClass GetFormatClass(Format format)
         {
-            switch (format)
+            return format switch
             {
-                case Format.Bc1RgbaSrgb:
-                case Format.Bc1RgbaUnorm:
-                    return FormatClass.Bc1Rgba;
-                case Format.Bc2Srgb:
-                case Format.Bc2Unorm:
-                    return FormatClass.Bc2;
-                case Format.Bc3Srgb:
-                case Format.Bc3Unorm:
-                    return FormatClass.Bc3;
-                case Format.Bc4Snorm:
-                case Format.Bc4Unorm:
-                    return FormatClass.Bc4;
-                case Format.Bc5Snorm:
-                case Format.Bc5Unorm:
-                    return FormatClass.Bc5;
-                case Format.Bc6HSfloat:
-                case Format.Bc6HUfloat:
-                    return FormatClass.Bc6;
-                case Format.Bc7Srgb:
-                case Format.Bc7Unorm:
-                    return FormatClass.Bc7;
-                case Format.Etc2RgbSrgb:
-                case Format.Etc2RgbUnorm:
-                    return FormatClass.Etc2Rgb;
-                case Format.Etc2RgbaSrgb:
-                case Format.Etc2RgbaUnorm:
-                    return FormatClass.Etc2Rgba;
-                case Format.Astc4x4Srgb:
-                case Format.Astc4x4Unorm:
-                    return FormatClass.Astc4x4;
-                case Format.Astc5x4Srgb:
-                case Format.Astc5x4Unorm:
-                    return FormatClass.Astc5x4;
-                case Format.Astc5x5Srgb:
-                case Format.Astc5x5Unorm:
-                    return FormatClass.Astc5x5;
-                case Format.Astc6x5Srgb:
-                case Format.Astc6x5Unorm:
-                    return FormatClass.Astc6x5;
-                case Format.Astc6x6Srgb:
-                case Format.Astc6x6Unorm:
-                    return FormatClass.Astc6x6;
-                case Format.Astc8x5Srgb:
-                case Format.Astc8x5Unorm:
-                    return FormatClass.Astc8x5;
-                case Format.Astc8x6Srgb:
-                case Format.Astc8x6Unorm:
-                    return FormatClass.Astc8x6;
-                case Format.Astc8x8Srgb:
-                case Format.Astc8x8Unorm:
-                    return FormatClass.Astc8x8;
-                case Format.Astc10x5Srgb:
-                case Format.Astc10x5Unorm:
-                    return FormatClass.Astc10x5;
-                case Format.Astc10x6Srgb:
-                case Format.Astc10x6Unorm:
-                    return FormatClass.Astc10x6;
-                case Format.Astc10x8Srgb:
-                case Format.Astc10x8Unorm:
-                    return FormatClass.Astc10x8;
-                case Format.Astc10x10Srgb:
-                case Format.Astc10x10Unorm:
-                    return FormatClass.Astc10x10;
-                case Format.Astc12x10Srgb:
-                case Format.Astc12x10Unorm:
-                    return FormatClass.Astc12x10;
-                case Format.Astc12x12Srgb:
-                case Format.Astc12x12Unorm:
-                    return FormatClass.Astc12x12;
-            }
-
-            return FormatClass.Unclassified;
+                Format.Bc1RgbaSrgb or Format.Bc1RgbaUnorm => FormatClass.Bc1Rgba,
+                Format.Bc2Srgb or Format.Bc2Unorm => FormatClass.Bc2,
+                Format.Bc3Srgb or Format.Bc3Unorm => FormatClass.Bc3,
+                Format.Bc4Snorm or Format.Bc4Unorm => FormatClass.Bc4,
+                Format.Bc5Snorm or Format.Bc5Unorm => FormatClass.Bc5,
+                Format.Bc6HSfloat or Format.Bc6HUfloat => FormatClass.Bc6,
+                Format.Bc7Srgb or Format.Bc7Unorm => FormatClass.Bc7,
+                Format.Etc2RgbSrgb or Format.Etc2RgbUnorm => FormatClass.Etc2Rgb,
+                Format.Etc2RgbaSrgb or Format.Etc2RgbaUnorm => FormatClass.Etc2Rgba,
+                Format.Astc4x4Srgb or Format.Astc4x4Unorm => FormatClass.Astc4x4,
+                Format.Astc5x4Srgb or Format.Astc5x4Unorm => FormatClass.Astc5x4,
+                Format.Astc5x5Srgb or Format.Astc5x5Unorm => FormatClass.Astc5x5,
+                Format.Astc6x5Srgb or Format.Astc6x5Unorm => FormatClass.Astc6x5,
+                Format.Astc6x6Srgb or Format.Astc6x6Unorm => FormatClass.Astc6x6,
+                Format.Astc8x5Srgb or Format.Astc8x5Unorm => FormatClass.Astc8x5,
+                Format.Astc8x6Srgb or Format.Astc8x6Unorm => FormatClass.Astc8x6,
+                Format.Astc8x8Srgb or Format.Astc8x8Unorm => FormatClass.Astc8x8,
+                Format.Astc10x5Srgb or Format.Astc10x5Unorm => FormatClass.Astc10x5,
+                Format.Astc10x6Srgb or Format.Astc10x6Unorm => FormatClass.Astc10x6,
+                Format.Astc10x8Srgb or Format.Astc10x8Unorm => FormatClass.Astc10x8,
+                Format.Astc10x10Srgb or Format.Astc10x10Unorm => FormatClass.Astc10x10,
+                Format.Astc12x10Srgb or Format.Astc12x10Unorm => FormatClass.Astc12x10,
+                Format.Astc12x12Srgb or Format.Astc12x12Unorm => FormatClass.Astc12x12,
+                _ => FormatClass.Unclassified,
+            };
         }
     }
 }

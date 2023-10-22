@@ -31,7 +31,7 @@ namespace Ryujinx.Graphics.Texture
 
             int wAligned = BitUtils.AlignUp(width, alignment);
 
-            BlockLinearLayout layoutConverter = new BlockLinearLayout(wAligned, height, gobBlocksInY, 1, bytesPerPixel);
+            BlockLinearLayout layoutConverter = new(wAligned, height, gobBlocksInY, 1, bytesPerPixel);
 
             unsafe bool Convert<T>(Span<byte> output, ReadOnlySpan<byte> data) where T : unmanaged
             {
@@ -89,7 +89,7 @@ namespace Ryujinx.Graphics.Texture
                 8 => Convert<ulong>(dst, data),
                 12 => Convert<Bpp12Pixel>(dst, data),
                 16 => Convert<Vector128<byte>>(dst, data),
-                _ => throw new NotSupportedException($"Unable to convert ${bytesPerPixel} bpp pixel format.")
+                _ => throw new NotSupportedException($"Unable to convert ${bytesPerPixel} bpp pixel format."),
             };
         }
 
@@ -126,14 +126,14 @@ namespace Ryujinx.Graphics.Texture
             int mipGobBlocksInY = gobBlocksInY;
             int mipGobBlocksInZ = gobBlocksInZ;
 
-            int gobWidth  = (GobStride / bytesPerPixel) * gobBlocksInTileX;
+            int gobWidth = (GobStride / bytesPerPixel) * gobBlocksInTileX;
             int gobHeight = gobBlocksInY * GobHeight;
 
             for (int level = 0; level < levels; level++)
             {
-                int w = Math.Max(1, width  >> level);
+                int w = Math.Max(1, width >> level);
                 int h = Math.Max(1, height >> level);
-                int d = Math.Max(1, depth  >> level);
+                int d = Math.Max(1, depth >> level);
 
                 w = BitUtils.DivRoundUp(w, blockWidth);
                 h = BitUtils.DivRoundUp(h, blockHeight);
@@ -143,7 +143,7 @@ namespace Ryujinx.Graphics.Texture
                     mipGobBlocksInY >>= 1;
                 }
 
-                while (d <= (mipGobBlocksInZ >> 1) && mipGobBlocksInZ != 1)
+                if (level > 0 && d <= (mipGobBlocksInZ >> 1) && mipGobBlocksInZ != 1)
                 {
                     mipGobBlocksInZ >>= 1;
                 }
@@ -166,7 +166,7 @@ namespace Ryujinx.Graphics.Texture
 
                 int wAligned = BitUtils.AlignUp(w, alignment);
 
-                BlockLinearLayout layoutConverter = new BlockLinearLayout(
+                BlockLinearLayout layoutConverter = new(
                     wAligned,
                     h,
                     mipGobBlocksInY,
@@ -240,7 +240,7 @@ namespace Ryujinx.Graphics.Texture
                     8 => Convert<ulong>(output, data),
                     12 => Convert<Bpp12Pixel>(output, data),
                     16 => Convert<Vector128<byte>>(output, data),
-                    _ => throw new NotSupportedException($"Unable to convert ${bytesPerPixel} bpp pixel format.")
+                    _ => throw new NotSupportedException($"Unable to convert ${bytesPerPixel} bpp pixel format."),
                 };
             }
             return output;
@@ -256,7 +256,7 @@ namespace Ryujinx.Graphics.Texture
             int bytesPerPixel,
             ReadOnlySpan<byte> data)
         {
-            int w = BitUtils.DivRoundUp(width,  blockWidth);
+            int w = BitUtils.DivRoundUp(width, blockWidth);
             int h = BitUtils.DivRoundUp(height, blockHeight);
 
             int outStride = BitUtils.AlignUp(w * bytesPerPixel, HostStrideAlignment);
@@ -301,7 +301,7 @@ namespace Ryujinx.Graphics.Texture
 
             int wAligned = BitUtils.AlignUp(width, alignment);
 
-            BlockLinearLayout layoutConverter = new BlockLinearLayout(wAligned, height, gobBlocksInY, 1, bytesPerPixel);
+            BlockLinearLayout layoutConverter = new(wAligned, height, gobBlocksInY, 1, bytesPerPixel);
 
             unsafe bool Convert<T>(Span<byte> output, ReadOnlySpan<byte> data) where T : unmanaged
             {
@@ -359,7 +359,7 @@ namespace Ryujinx.Graphics.Texture
                 8 => Convert<ulong>(dst, data),
                 12 => Convert<Bpp12Pixel>(dst, data),
                 16 => Convert<Vector128<byte>>(dst, data),
-                _ => throw new NotSupportedException($"Unable to convert ${bytesPerPixel} bpp pixel format.")
+                _ => throw new NotSupportedException($"Unable to convert ${bytesPerPixel} bpp pixel format."),
             };
         }
 
@@ -390,14 +390,14 @@ namespace Ryujinx.Graphics.Texture
             int mipGobBlocksInY = gobBlocksInY;
             int mipGobBlocksInZ = gobBlocksInZ;
 
-            int gobWidth  = (GobStride / bytesPerPixel) * gobBlocksInTileX;
+            int gobWidth = (GobStride / bytesPerPixel) * gobBlocksInTileX;
             int gobHeight = gobBlocksInY * GobHeight;
 
             for (int level = 0; level < levels; level++)
             {
-                int w = Math.Max(1, width  >> level);
+                int w = Math.Max(1, width >> level);
                 int h = Math.Max(1, height >> level);
-                int d = Math.Max(1, depth  >> level);
+                int d = Math.Max(1, depth >> level);
 
                 w = BitUtils.DivRoundUp(w, blockWidth);
                 h = BitUtils.DivRoundUp(h, blockHeight);
@@ -407,7 +407,7 @@ namespace Ryujinx.Graphics.Texture
                     mipGobBlocksInY >>= 1;
                 }
 
-                while (d <= (mipGobBlocksInZ >> 1) && mipGobBlocksInZ != 1)
+                if (level > 0 && d <= (mipGobBlocksInZ >> 1) && mipGobBlocksInZ != 1)
                 {
                     mipGobBlocksInZ >>= 1;
                 }
@@ -430,7 +430,7 @@ namespace Ryujinx.Graphics.Texture
 
                 int wAligned = BitUtils.AlignUp(w, alignment);
 
-                BlockLinearLayout layoutConverter = new BlockLinearLayout(
+                BlockLinearLayout layoutConverter = new(
                     wAligned,
                     h,
                     mipGobBlocksInY,
@@ -504,7 +504,7 @@ namespace Ryujinx.Graphics.Texture
                     8 => Convert<ulong>(output, data),
                     12 => Convert<Bpp12Pixel>(output, data),
                     16 => Convert<Vector128<byte>>(output, data),
-                    _ => throw new NotSupportedException($"Unable to convert ${bytesPerPixel} bpp pixel format.")
+                    _ => throw new NotSupportedException($"Unable to convert ${bytesPerPixel} bpp pixel format."),
                 };
             }
 
@@ -521,7 +521,7 @@ namespace Ryujinx.Graphics.Texture
             int bytesPerPixel,
             ReadOnlySpan<byte> data)
         {
-            int w = BitUtils.DivRoundUp(width,  blockWidth);
+            int w = BitUtils.DivRoundUp(width, blockWidth);
             int h = BitUtils.DivRoundUp(height, blockHeight);
 
             int inStride = BitUtils.AlignUp(w * bytesPerPixel, HostStrideAlignment);
@@ -573,9 +573,9 @@ namespace Ryujinx.Graphics.Texture
 
             for (int level = 0; level < levels; level++)
             {
-                int w = Math.Max(1, width  >> level);
+                int w = Math.Max(1, width >> level);
                 int h = Math.Max(1, height >> level);
-                int d = Math.Max(1, depth  >> level);
+                int d = Math.Max(1, depth >> level);
 
                 w = BitUtils.DivRoundUp(w, blockWidth);
                 h = BitUtils.DivRoundUp(h, blockHeight);

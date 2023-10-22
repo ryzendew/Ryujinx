@@ -12,7 +12,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
     class BufferCache : IDisposable
     {
         private const int OverlapsBufferInitialCapacity = 10;
-        private const int OverlapsBufferMaxCapacity     = 10000;
+        private const int OverlapsBufferMaxCapacity = 10000;
 
         private const ulong BufferAlignmentSize = 0x1000;
         private const ulong BufferAlignmentMask = BufferAlignmentSize - 1;
@@ -246,7 +246,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
                     {
                         Buffer buffer = _bufferOverlaps[index];
 
-                        address    = Math.Min(address,    buffer.Address);
+                        address = Math.Min(address, buffer.Address);
                         endAddress = Math.Max(endAddress, buffer.EndAddress);
 
                         lock (_buffers)
@@ -257,7 +257,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
 
                     ulong newSize = endAddress - address;
 
-                    Buffer newBuffer = new Buffer(_context, _physicalMemory, address, newSize, _bufferOverlaps.Take(overlapsCount));
+                    Buffer newBuffer = new(_context, _physicalMemory, address, newSize, _bufferOverlaps.Take(overlapsCount));
 
                     lock (_buffers)
                     {
@@ -285,7 +285,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
             else
             {
                 // No overlap, just create a new buffer.
-                Buffer buffer = new Buffer(_context, _physicalMemory, address, size);
+                Buffer buffer = new(_context, _physicalMemory, address, size);
 
                 lock (_buffers)
                 {
@@ -344,7 +344,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
                 // Optimization: If the data being copied is already in memory, then copy it directly instead of flushing from GPU.
 
                 dstBuffer.ClearModified(dstAddress, size);
-                memoryManager.Physical.WriteUntracked(dstAddress, memoryManager.Physical.GetSpan(srcAddress, (int)size));
+                memoryManager.Physical.WriteTrackedResource(dstAddress, memoryManager.Physical.GetSpan(srcAddress, (int)size), ResourceKind.Buffer);
             }
         }
 
@@ -372,15 +372,15 @@ namespace Ryujinx.Graphics.Gpu.Memory
         }
 
         /// <summary>
-        /// Gets a buffer sub-range starting at a given memory address.
+        /// Gets a buffer sub-range from a start address til a page boundary after the given size.
         /// </summary>
         /// <param name="address">Start address of the memory range</param>
         /// <param name="size">Size in bytes of the memory range</param>
         /// <param name="write">Whether the buffer will be written to by this use</param>
         /// <returns>The buffer sub-range starting at the given memory address</returns>
-        public BufferRange GetBufferRangeTillEnd(ulong address, ulong size, bool write = false)
+        public BufferRange GetBufferRangeAligned(ulong address, ulong size, bool write = false)
         {
-            return GetBuffer(address, size, write).GetRange(address);
+            return GetBuffer(address, size, write).GetRangeAligned(address, size, write);
         }
 
         /// <summary>
@@ -392,7 +392,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
         /// <returns>The buffer sub-range for the given range</returns>
         public BufferRange GetBufferRange(ulong address, ulong size, bool write = false)
         {
-            return GetBuffer(address, size, write).GetRange(address, size);
+            return GetBuffer(address, size, write).GetRange(address, size, write);
         }
 
         /// <summary>
@@ -446,7 +446,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
         /// </summary>
         /// <param name="dictionary">Dictionary to prune</param>
         /// <param name="toDelete">List used to track entries to delete</param>
-        private void Prune(Dictionary<ulong, BufferCacheEntry> dictionary, ref List<ulong> toDelete)
+        private static void Prune(Dictionary<ulong, BufferCacheEntry> dictionary, ref List<ulong> toDelete)
         {
             foreach (var entry in dictionary)
             {

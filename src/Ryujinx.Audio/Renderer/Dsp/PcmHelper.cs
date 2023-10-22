@@ -1,5 +1,4 @@
 using System;
-using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace Ryujinx.Audio.Renderer.Dsp
@@ -21,6 +20,11 @@ namespace Ryujinx.Audio.Renderer.Dsp
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int GetBufferSize<T>(int startSampleOffset, int endSampleOffset, int offset, int count) where T : unmanaged
         {
+            if (endSampleOffset < startSampleOffset)
+            {
+                return 0;
+            }
+
             return GetCountToDecode(startSampleOffset, endSampleOffset, offset, count) * Unsafe.SizeOf<T>();
         }
 
@@ -62,7 +66,7 @@ namespace Ryujinx.Audio.Renderer.Dsp
         {
             for (int i = 0; i < input.Length; i++)
             {
-                output[i] = ((int)input[i]) << 16;
+                output[i] = input[i] << 16;
             }
         }
 

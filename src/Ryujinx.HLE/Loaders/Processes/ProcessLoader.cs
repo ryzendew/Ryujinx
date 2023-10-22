@@ -9,9 +9,9 @@ using LibHac.Tools.FsSystem.NcaUtils;
 using Ryujinx.Common.Logging;
 using Ryujinx.HLE.Loaders.Executables;
 using Ryujinx.HLE.Loaders.Processes.Extensions;
+using System;
 using System.Collections.Concurrent;
 using System.IO;
-using System.Linq;
 using Path = System.IO.Path;
 
 namespace Ryujinx.HLE.Loaders.Processes
@@ -28,14 +28,14 @@ namespace Ryujinx.HLE.Loaders.Processes
 
         public ProcessLoader(Switch device)
         {
-            _device         = device;
+            _device = device;
             _processesByPid = new ConcurrentDictionary<ulong, ProcessResult>();
         }
 
         public bool LoadXci(string path)
         {
             FileStream stream = new(path, FileMode.Open, FileAccess.Read);
-            Xci        xci    = new(_device.Configuration.VirtualFileSystem.KeySet, stream.AsStorage());
+            Xci xci = new(_device.Configuration.VirtualFileSystem.KeySet, stream.AsStorage());
 
             if (!xci.HasPartition(XciPartitionType.Secure))
             {
@@ -68,7 +68,7 @@ namespace Ryujinx.HLE.Loaders.Processes
 
         public bool LoadNsp(string path)
         {
-            FileStream          file                = new(path, FileMode.Open, FileAccess.Read);
+            FileStream file = new(path, FileMode.Open, FileAccess.Read);
             PartitionFileSystem partitionFileSystem = new(file.AsStorage());
 
             (bool success, ProcessResult processResult) = partitionFileSystem.TryLoad(_device, path, out string errorMessage);
@@ -100,7 +100,7 @@ namespace Ryujinx.HLE.Loaders.Processes
         public bool LoadNca(string path)
         {
             FileStream file = new(path, FileMode.Open, FileAccess.Read);
-            Nca        nca  = new(_device.Configuration.VirtualFileSystem.KeySet, file.AsStorage(false));
+            Nca nca = new(_device.Configuration.VirtualFileSystem.KeySet, file.AsStorage(false));
 
             ProcessResult processResult = nca.Load(_device, null, null);
 
@@ -140,20 +140,20 @@ namespace Ryujinx.HLE.Loaders.Processes
 
         public bool LoadNxo(string path)
         {
-            var         nacpData    = new BlitStruct<ApplicationControlProperty>(1);
-            IFileSystem dummyExeFs  = null;
-            Stream      romfsStream = null;
+            var nacpData = new BlitStruct<ApplicationControlProperty>(1);
+            IFileSystem dummyExeFs = null;
+            Stream romfsStream = null;
 
             string programName = "";
-            ulong  programId   = 0000000000000000;
+            ulong programId = 0000000000000000;
 
             // Load executable.
             IExecutable executable;
 
             if (Path.GetExtension(path).ToLower() == ".nro")
             {
-                FileStream    input = new(path, FileMode.Open);
-                NroExecutable nro   = new(input.AsStorage());
+                FileStream input = new(path, FileMode.Open);
+                NroExecutable nro = new(input.AsStorage());
 
                 executable = nro;
 
@@ -176,7 +176,7 @@ namespace Ryujinx.HLE.Loaders.Processes
 
                     if (string.IsNullOrWhiteSpace(programName))
                     {
-                        programName = nacpData.Value.Title.ItemsRo.ToArray().FirstOrDefault(x => x.Name[0] != 0).NameString.ToString();
+                        programName = Array.Find(nacpData.Value.Title.ItemsRo.ToArray(), x => x.Name[0] != 0).NameString.ToString();
                     }
 
                     if (nacpData.Value.PresenceGroupId != 0)
@@ -209,7 +209,7 @@ namespace Ryujinx.HLE.Loaders.Processes
             ProcessResult processResult = ProcessLoaderHelper.LoadNsos(_device,
                                                                        _device.System.KernelContext,
                                                                        dummyExeFs.GetNpdm(),
-                                                                       nacpData.Value,
+                                                                       nacpData,
                                                                        diskCacheEnabled: false,
                                                                        allowCodeMemoryForJit: true,
                                                                        programName,

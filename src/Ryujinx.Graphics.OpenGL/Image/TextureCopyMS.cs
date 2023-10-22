@@ -94,8 +94,8 @@ void main()
 }";
 
         private readonly OpenGLRenderer _renderer;
-        private int[] _msToNonMSProgramHandles;
-        private int[] _nonMSToMSProgramHandles;
+        private readonly int[] _msToNonMSProgramHandles;
+        private readonly int[] _nonMSToMSProgramHandles;
 
         public TextureCopyMS(OpenGLRenderer renderer)
         {
@@ -173,7 +173,7 @@ void main()
                 4 => SizedInternalFormat.R32ui,
                 8 => SizedInternalFormat.Rg32ui,
                 16 => SizedInternalFormat.Rgba32ui,
-                _ => throw new ArgumentException($"Invalid bytes per pixel {bytesPerPixel}.")
+                _ => throw new ArgumentException($"Invalid bytes per pixel {bytesPerPixel}."),
             };
         }
 
@@ -219,7 +219,7 @@ void main()
             return GetShader(ComputeShaderNonMSToMS, _nonMSToMSProgramHandles, bytesPerPixel);
         }
 
-        private int GetShader(string code, int[] programHandles, int bytesPerPixel)
+        private static int GetShader(string code, int[] programHandles, int bytesPerPixel)
         {
             int index = BitOperations.Log2((uint)bytesPerPixel);
 

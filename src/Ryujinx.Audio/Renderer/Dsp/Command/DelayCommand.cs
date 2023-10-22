@@ -49,14 +49,14 @@ namespace Ryujinx.Audio.Renderer.Dsp.Command
                 OutputBufferIndices[i] = (ushort)(bufferOffset + Parameter.Output[i]);
             }
 
-            DataSourceHelper.RemapLegacyChannelEffectMappingToChannelResourceMapping(newEffectChannelMappingSupported, InputBufferIndices);
-            DataSourceHelper.RemapLegacyChannelEffectMappingToChannelResourceMapping(newEffectChannelMappingSupported, OutputBufferIndices);
+            DataSourceHelper.RemapLegacyChannelEffectMappingToChannelResourceMapping(newEffectChannelMappingSupported, InputBufferIndices, Parameter.ChannelCount);
+            DataSourceHelper.RemapLegacyChannelEffectMappingToChannelResourceMapping(newEffectChannelMappingSupported, OutputBufferIndices, Parameter.ChannelCount);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private unsafe void ProcessDelayMono(ref DelayState state, float* outputBuffer, float* inputBuffer, uint sampleCount)
         {
-            const ushort channelCount = 1;
+            const ushort ChannelCount = 1;
 
             float feedbackGain = FixedPointHelper.ToFloat(Parameter.FeedbackGain, FixedPointPrecision);
             float inGain = FixedPointHelper.ToFloat(Parameter.InGain, FixedPointPrecision);
@@ -70,7 +70,7 @@ namespace Ryujinx.Audio.Renderer.Dsp.Command
 
                 float temp = input * inGain + delayLineValue * feedbackGain;
 
-                state.UpdateLowPassFilter(ref temp, channelCount);
+                state.UpdateLowPassFilter(ref temp, ChannelCount);
 
                 outputBuffer[i] = (input * dryGain + delayLineValue * outGain) / 64;
             }
@@ -79,7 +79,7 @@ namespace Ryujinx.Audio.Renderer.Dsp.Command
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private unsafe void ProcessDelayStereo(ref DelayState state, Span<IntPtr> outputBuffers, ReadOnlySpan<IntPtr> inputBuffers, uint sampleCount)
         {
-            const ushort channelCount = 2;
+            const ushort ChannelCount = 2;
 
             float delayFeedbackBaseGain = state.DelayFeedbackBaseGain;
             float delayFeedbackCrossGain = state.DelayFeedbackCrossGain;
@@ -87,18 +87,18 @@ namespace Ryujinx.Audio.Renderer.Dsp.Command
             float dryGain = FixedPointHelper.ToFloat(Parameter.DryGain, FixedPointPrecision);
             float outGain = FixedPointHelper.ToFloat(Parameter.OutGain, FixedPointPrecision);
 
-            Matrix2x2 delayFeedback = new Matrix2x2(delayFeedbackBaseGain, delayFeedbackCrossGain,
-                                                    delayFeedbackCrossGain, delayFeedbackBaseGain);
+            Matrix2x2 delayFeedback = new(delayFeedbackBaseGain, delayFeedbackCrossGain,
+                                          delayFeedbackCrossGain, delayFeedbackBaseGain);
 
             for (int i = 0; i < sampleCount; i++)
             {
-                Vector2 channelInput = new Vector2
+                Vector2 channelInput = new()
                 {
                     X = *((float*)inputBuffers[0] + i) * 64,
                     Y = *((float*)inputBuffers[1] + i) * 64,
                 };
 
-                Vector2 delayLineValues = new Vector2()
+                Vector2 delayLineValues = new()
                 {
                     X = state.DelayLines[0].Read(),
                     Y = state.DelayLines[1].Read(),
@@ -106,7 +106,7 @@ namespace Ryujinx.Audio.Renderer.Dsp.Command
 
                 Vector2 temp = MatrixHelper.Transform(ref delayLineValues, ref delayFeedback) + channelInput * inGain;
 
-                state.UpdateLowPassFilter(ref Unsafe.As<Vector2, float>(ref temp), channelCount);
+                state.UpdateLowPassFilter(ref Unsafe.As<Vector2, float>(ref temp), ChannelCount);
 
                 *((float*)outputBuffers[0] + i) = (channelInput.X * dryGain + delayLineValues.X * outGain) / 64;
                 *((float*)outputBuffers[1] + i) = (channelInput.Y * dryGain + delayLineValues.Y * outGain) / 64;
@@ -116,7 +116,7 @@ namespace Ryujinx.Audio.Renderer.Dsp.Command
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private unsafe void ProcessDelayQuadraphonic(ref DelayState state, Span<IntPtr> outputBuffers, ReadOnlySpan<IntPtr> inputBuffers, uint sampleCount)
         {
-            const ushort channelCount = 4;
+            const ushort ChannelCount = 4;
 
             float delayFeedbackBaseGain = state.DelayFeedbackBaseGain;
             float delayFeedbackCrossGain = state.DelayFeedbackCrossGain;
@@ -124,33 +124,33 @@ namespace Ryujinx.Audio.Renderer.Dsp.Command
             float dryGain = FixedPointHelper.ToFloat(Parameter.DryGain, FixedPointPrecision);
             float outGain = FixedPointHelper.ToFloat(Parameter.OutGain, FixedPointPrecision);
 
-            Matrix4x4 delayFeedback = new Matrix4x4(delayFeedbackBaseGain, delayFeedbackCrossGain, delayFeedbackCrossGain, 0.0f,
-                                                    delayFeedbackCrossGain, delayFeedbackBaseGain, 0.0f, delayFeedbackCrossGain,
-                                                    delayFeedbackCrossGain, 0.0f, delayFeedbackBaseGain, delayFeedbackCrossGain,
-                                                    0.0f, delayFeedbackCrossGain, delayFeedbackCrossGain, delayFeedbackBaseGain);
+            Matrix4x4 delayFeedback = new(delayFeedbackBaseGain, delayFeedbackCrossGain, delayFeedbackCrossGain, 0.0f,
+                                          delayFeedbackCrossGain, delayFeedbackBaseGain, 0.0f, delayFeedbackCrossGain,
+                                          delayFeedbackCrossGain, 0.0f, delayFeedbackBaseGain, delayFeedbackCrossGain,
+                                          0.0f, delayFeedbackCrossGain, delayFeedbackCrossGain, delayFeedbackBaseGain);
 
 
             for (int i = 0; i < sampleCount; i++)
             {
-                Vector4 channelInput = new Vector4
+                Vector4 channelInput = new()
                 {
                     X = *((float*)inputBuffers[0] + i) * 64,
                     Y = *((float*)inputBuffers[1] + i) * 64,
                     Z = *((float*)inputBuffers[2] + i) * 64,
-                    W = *((float*)inputBuffers[3] + i) * 64
+                    W = *((float*)inputBuffers[3] + i) * 64,
                 };
 
-                Vector4 delayLineValues = new Vector4()
+                Vector4 delayLineValues = new()
                 {
                     X = state.DelayLines[0].Read(),
                     Y = state.DelayLines[1].Read(),
                     Z = state.DelayLines[2].Read(),
-                    W = state.DelayLines[3].Read()
+                    W = state.DelayLines[3].Read(),
                 };
 
                 Vector4 temp = MatrixHelper.Transform(ref delayLineValues, ref delayFeedback) + channelInput * inGain;
 
-                state.UpdateLowPassFilter(ref Unsafe.As<Vector4, float>(ref temp), channelCount);
+                state.UpdateLowPassFilter(ref Unsafe.As<Vector4, float>(ref temp), ChannelCount);
 
                 *((float*)outputBuffers[0] + i) = (channelInput.X * dryGain + delayLineValues.X * outGain) / 64;
                 *((float*)outputBuffers[1] + i) = (channelInput.Y * dryGain + delayLineValues.Y * outGain) / 64;
@@ -162,7 +162,7 @@ namespace Ryujinx.Audio.Renderer.Dsp.Command
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private unsafe void ProcessDelaySurround(ref DelayState state, Span<IntPtr> outputBuffers, ReadOnlySpan<IntPtr> inputBuffers, uint sampleCount)
         {
-            const ushort channelCount = 6;
+            const ushort ChannelCount = 6;
 
             float feedbackGain = FixedPointHelper.ToFloat(Parameter.FeedbackGain, FixedPointPrecision);
             float delayFeedbackBaseGain = state.DelayFeedbackBaseGain;
@@ -171,38 +171,38 @@ namespace Ryujinx.Audio.Renderer.Dsp.Command
             float dryGain = FixedPointHelper.ToFloat(Parameter.DryGain, FixedPointPrecision);
             float outGain = FixedPointHelper.ToFloat(Parameter.OutGain, FixedPointPrecision);
 
-            Matrix6x6 delayFeedback = new Matrix6x6(delayFeedbackBaseGain, 0.0f, delayFeedbackCrossGain, 0.0f, delayFeedbackCrossGain, 0.0f,
-                                                    0.0f, delayFeedbackBaseGain, delayFeedbackCrossGain, 0.0f, 0.0f, delayFeedbackCrossGain,
-                                                    delayFeedbackCrossGain, delayFeedbackCrossGain, delayFeedbackBaseGain, 0.0f, 0.0f, 0.0f,
-                                                    0.0f, 0.0f, 0.0f, feedbackGain, 0.0f, 0.0f,
-                                                    delayFeedbackCrossGain, 0.0f, 0.0f, 0.0f, delayFeedbackBaseGain, delayFeedbackCrossGain,
-                                                    0.0f, delayFeedbackCrossGain, 0.0f, 0.0f, delayFeedbackCrossGain, delayFeedbackBaseGain);
+            Matrix6x6 delayFeedback = new(delayFeedbackBaseGain, 0.0f, delayFeedbackCrossGain, 0.0f, delayFeedbackCrossGain, 0.0f,
+                                          0.0f, delayFeedbackBaseGain, delayFeedbackCrossGain, 0.0f, 0.0f, delayFeedbackCrossGain,
+                                          delayFeedbackCrossGain, delayFeedbackCrossGain, delayFeedbackBaseGain, 0.0f, 0.0f, 0.0f,
+                                          0.0f, 0.0f, 0.0f, feedbackGain, 0.0f, 0.0f,
+                                          delayFeedbackCrossGain, 0.0f, 0.0f, 0.0f, delayFeedbackBaseGain, delayFeedbackCrossGain,
+                                          0.0f, delayFeedbackCrossGain, 0.0f, 0.0f, delayFeedbackCrossGain, delayFeedbackBaseGain);
 
             for (int i = 0; i < sampleCount; i++)
             {
-                Vector6 channelInput = new Vector6
+                Vector6 channelInput = new()
                 {
                     X = *((float*)inputBuffers[0] + i) * 64,
                     Y = *((float*)inputBuffers[1] + i) * 64,
                     Z = *((float*)inputBuffers[2] + i) * 64,
                     W = *((float*)inputBuffers[3] + i) * 64,
                     V = *((float*)inputBuffers[4] + i) * 64,
-                    U = *((float*)inputBuffers[5] + i) * 64
+                    U = *((float*)inputBuffers[5] + i) * 64,
                 };
 
-                Vector6 delayLineValues = new Vector6
+                Vector6 delayLineValues = new()
                 {
                     X = state.DelayLines[0].Read(),
                     Y = state.DelayLines[1].Read(),
                     Z = state.DelayLines[2].Read(),
                     W = state.DelayLines[3].Read(),
                     V = state.DelayLines[4].Read(),
-                    U = state.DelayLines[5].Read()
+                    U = state.DelayLines[5].Read(),
                 };
 
                 Vector6 temp = MatrixHelper.Transform(ref delayLineValues, ref delayFeedback) + channelInput * inGain;
 
-                state.UpdateLowPassFilter(ref Unsafe.As<Vector6, float>(ref temp), channelCount);
+                state.UpdateLowPassFilter(ref Unsafe.As<Vector6, float>(ref temp), ChannelCount);
 
                 *((float*)outputBuffers[0] + i) = (channelInput.X * dryGain + delayLineValues.X * outGain) / 64;
                 *((float*)outputBuffers[1] + i) = (channelInput.Y * dryGain + delayLineValues.Y * outGain) / 64;

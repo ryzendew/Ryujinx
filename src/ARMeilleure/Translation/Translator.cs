@@ -22,24 +22,24 @@ namespace ARMeilleure.Translation
 {
     public class Translator
     {
-        private static readonly AddressTable<ulong>.Level[] Levels64Bit =
+        private static readonly AddressTable<ulong>.Level[] _levels64Bit =
             new AddressTable<ulong>.Level[]
             {
                 new(31, 17),
                 new(23,  8),
                 new(15,  8),
                 new( 7,  8),
-                new( 2,  5)
+                new( 2,  5),
             };
 
-        private static readonly AddressTable<ulong>.Level[] Levels32Bit =
+        private static readonly AddressTable<ulong>.Level[] _levels32Bit =
             new AddressTable<ulong>.Level[]
             {
                 new(31, 17),
                 new(23,  8),
                 new(15,  8),
                 new( 7,  8),
-                new( 1,  6)
+                new( 1,  6),
             };
 
         private readonly IJitMemoryAllocator _allocator;
@@ -54,6 +54,7 @@ namespace ARMeilleure.Translation
         internal TranslatorQueue Queue { get; }
         internal IMemoryManager Memory { get; }
 
+        private Thread[] _backgroundTranslationThreads;
         private volatile int _threadCount;
 
         // FIXME: Remove this once the init logic of the emulator will be redone.
@@ -74,7 +75,7 @@ namespace ARMeilleure.Translation
 
             CountTable = new EntryTable<uint>();
             Functions = new TranslatorCache<TranslatedFunction>();
-            FunctionTable = new AddressTable<ulong>(for64Bits ? Levels64Bit : Levels32Bit);
+            FunctionTable = new AddressTable<ulong>(for64Bits ? _levels64Bit : _levels32Bit);
             Stubs = new TranslatorStubs(this);
 
             FunctionTable.Fill = (ulong)Stubs.SlowDispatchStub;
@@ -125,20 +126,24 @@ namespace ARMeilleure.Translation
                 // TODO: Use physical cores rather than logical. This only really makes sense for processors with
                 // hyperthreading. Requires OS specific code.
                 int unboundedThreadCount = Math.Max(1, (Environment.ProcessorCount - 6) / 3);
-                int threadCount          = Math.Min(4, unboundedThreadCount);
+                int threadCount = Math.Min(4, unboundedThreadCount);
+
+                Thread[] backgroundTranslationThreads = new Thread[threadCount];
 
                 for (int i = 0; i < threadCount; i++)
                 {
                     bool last = i != 0 && i == unboundedThreadCount - 1;
 
-                    Thread backgroundTranslatorThread = new Thread(BackgroundTranslate)
+                    backgroundTranslationThreads[i] = new(BackgroundTranslate)
                     {
                         Name = "CPU.BackgroundTranslatorThread." + i,
-                        Priority = last ? ThreadPriority.Lowest : ThreadPriority.Normal
+                        Priority = last ? ThreadPriority.Lowest : ThreadPriority.Normal,
                     };
 
-                    backgroundTranslatorThread.Start();
+                    backgroundTranslationThreads[i].Start();
                 }
+
+                Interlocked.Exchange(ref _backgroundTranslationThreads, backgroundTranslationThreads);
             }
 
             Statistics.InitializeTimer();
@@ -162,9 +167,20 @@ namespace ARMeilleure.Translation
 
             if (Interlocked.Decrement(ref _threadCount) == 0)
             {
+                Queue.Dispose();
+
+                Thread[] backgroundTranslationThreads = Interlocked.Exchange(ref _backgroundTranslationThreads, null);
+
+                if (backgroundTranslationThreads != null)
+                {
+                    foreach (Thread thread in backgroundTranslationThreads)
+                    {
+                        thread.Join();
+                    }
+                }
+
                 ClearJitCache();
 
-                Queue.Dispose();
                 Stubs.Dispose();
                 FunctionTable.Dispose();
                 CountTable.Dispose();

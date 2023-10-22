@@ -15,9 +15,9 @@ namespace Ryujinx.Graphics.GAL.Multithreading
     {
         private ulong _bufferHandle = 0;
 
-        private Dictionary<BufferHandle, BufferHandle> _bufferMap = new Dictionary<BufferHandle, BufferHandle>();
-        private HashSet<BufferHandle> _inFlight = new HashSet<BufferHandle>();
-        private AutoResetEvent _inFlightChanged = new AutoResetEvent(false);
+        private readonly Dictionary<BufferHandle, BufferHandle> _bufferMap = new();
+        private readonly HashSet<BufferHandle> _inFlight = new();
+        private readonly AutoResetEvent _inFlightChanged = new(false);
 
         internal BufferHandle CreateBufferHandle()
         {
@@ -59,14 +59,12 @@ namespace Ryujinx.Graphics.GAL.Multithreading
         internal BufferHandle MapBuffer(BufferHandle handle)
         {
             // Maps a threaded buffer to a backend one.
-            // Threaded buffers are returned on creation as the buffer 
+            // Threaded buffers are returned on creation as the buffer
             // isn't actually created until the queue runs the command.
-
-            BufferHandle result;
 
             lock (_bufferMap)
             {
-                if (!_bufferMap.TryGetValue(handle, out result))
+                if (!_bufferMap.TryGetValue(handle, out BufferHandle result))
                 {
                     result = BufferHandle.Null;
                 }
@@ -79,11 +77,10 @@ namespace Ryujinx.Graphics.GAL.Multithreading
         {
             // Blocks until the handle is available.
 
-            BufferHandle result;
 
             lock (_bufferMap)
             {
-                if (_bufferMap.TryGetValue(handle, out result))
+                if (_bufferMap.TryGetValue(handle, out BufferHandle result))
                 {
                     return result;
                 }
@@ -116,7 +113,7 @@ namespace Ryujinx.Graphics.GAL.Multithreading
 
         internal BufferRange MapBufferRange(BufferRange range)
         {
-            return new BufferRange(MapBuffer(range.Handle), range.Offset, range.Size);
+            return new BufferRange(MapBuffer(range.Handle), range.Offset, range.Size, range.Write);
         }
 
         internal Span<BufferRange> MapBufferRanges(Span<BufferRange> ranges)
@@ -128,14 +125,13 @@ namespace Ryujinx.Graphics.GAL.Multithreading
                 for (int i = 0; i < ranges.Length; i++)
                 {
                     ref BufferRange range = ref ranges[i];
-                    BufferHandle result;
 
-                    if (!_bufferMap.TryGetValue(range.Handle, out result))
+                    if (!_bufferMap.TryGetValue(range.Handle, out BufferHandle result))
                     {
                         result = BufferHandle.Null;
                     }
 
-                    range = new BufferRange(result, range.Offset, range.Size);
+                    range = new BufferRange(result, range.Offset, range.Size, range.Write);
                 }
             }
 
@@ -152,14 +148,13 @@ namespace Ryujinx.Graphics.GAL.Multithreading
                 {
                     ref BufferAssignment assignment = ref ranges[i];
                     BufferRange range = assignment.Range;
-                    BufferHandle result;
 
-                    if (!_bufferMap.TryGetValue(range.Handle, out result))
+                    if (!_bufferMap.TryGetValue(range.Handle, out BufferHandle result))
                     {
                         result = BufferHandle.Null;
                     }
 
-                    assignment = new BufferAssignment(ranges[i].Binding, new BufferRange(result, range.Offset, range.Size));
+                    assignment = new BufferAssignment(ranges[i].Binding, new BufferRange(result, range.Offset, range.Size, range.Write));
                 }
             }
 
@@ -175,14 +170,13 @@ namespace Ryujinx.Graphics.GAL.Multithreading
                 for (int i = 0; i < ranges.Length; i++)
                 {
                     BufferRange range = ranges[i].Buffer;
-                    BufferHandle result;
 
-                    if (!_bufferMap.TryGetValue(range.Handle, out result))
+                    if (!_bufferMap.TryGetValue(range.Handle, out BufferHandle result))
                     {
                         result = BufferHandle.Null;
                     }
 
-                    range = new BufferRange(result, range.Offset, range.Size);
+                    range = new BufferRange(result, range.Offset, range.Size, range.Write);
 
                     ranges[i] = new VertexBufferDescriptor(range, ranges[i].Stride, ranges[i].Divisor);
                 }

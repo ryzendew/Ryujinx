@@ -14,12 +14,11 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Glsl.Instructions
         {
             _infoTable = new InstInfo[(int)Instruction.Count];
 
+#pragma warning disable IDE0055 // Disable formatting
             Add(Instruction.AtomicAdd,                InstType.AtomicBinary,   "atomicAdd");
             Add(Instruction.AtomicAnd,                InstType.AtomicBinary,   "atomicAnd");
             Add(Instruction.AtomicCompareAndSwap,     InstType.AtomicTernary,  "atomicCompSwap");
-            Add(Instruction.AtomicMaxS32,             InstType.CallTernary,    HelperFunctionNames.AtomicMaxS32);
             Add(Instruction.AtomicMaxU32,             InstType.AtomicBinary,   "atomicMax");
-            Add(Instruction.AtomicMinS32,             InstType.CallTernary,    HelperFunctionNames.AtomicMinS32);
             Add(Instruction.AtomicMinU32,             InstType.AtomicBinary,   "atomicMin");
             Add(Instruction.AtomicOr,                 InstType.AtomicBinary,   "atomicOr");
             Add(Instruction.AtomicSwap,               InstType.AtomicBinary,   "atomicExchange");
@@ -83,10 +82,6 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Glsl.Instructions
             Add(Instruction.ImageAtomic,              InstType.Special);
             Add(Instruction.IsNan,                    InstType.CallUnary,      "isnan");
             Add(Instruction.Load,                     InstType.Special);
-            Add(Instruction.LoadConstant,             InstType.Special);
-            Add(Instruction.LoadLocal,                InstType.Special);
-            Add(Instruction.LoadShared,               InstType.Special);
-            Add(Instruction.LoadStorage,              InstType.Special);
             Add(Instruction.Lod,                      InstType.Special);
             Add(Instruction.LogarithmB2,              InstType.CallUnary,      "log2");
             Add(Instruction.LogicalAnd,               InstType.OpBinaryCom,    "&&",              9);
@@ -102,6 +97,7 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Glsl.Instructions
             Add(Instruction.MemoryBarrier,            InstType.CallNullary,    "memoryBarrier");
             Add(Instruction.Minimum,                  InstType.CallBinary,     "min");
             Add(Instruction.MinimumU32,               InstType.CallBinary,     "min");
+            Add(Instruction.Modulo,                   InstType.CallBinary,     "mod");
             Add(Instruction.Multiply,                 InstType.OpBinaryCom,    "*",               1);
             Add(Instruction.MultiplyHighS32,          InstType.CallBinary,     HelperFunctionNames.MultiplyHighS32);
             Add(Instruction.MultiplyHighU32,          InstType.CallBinary,     HelperFunctionNames.MultiplyHighU32);
@@ -112,24 +108,18 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Glsl.Instructions
             Add(Instruction.ShiftLeft,                InstType.OpBinary,       "<<",              3);
             Add(Instruction.ShiftRightS32,            InstType.OpBinary,       ">>",              3);
             Add(Instruction.ShiftRightU32,            InstType.OpBinary,       ">>",              3);
-            Add(Instruction.Shuffle,                  InstType.CallQuaternary, HelperFunctionNames.Shuffle);
-            Add(Instruction.ShuffleDown,              InstType.CallQuaternary, HelperFunctionNames.ShuffleDown);
-            Add(Instruction.ShuffleUp,                InstType.CallQuaternary, HelperFunctionNames.ShuffleUp);
-            Add(Instruction.ShuffleXor,               InstType.CallQuaternary, HelperFunctionNames.ShuffleXor);
+            Add(Instruction.Shuffle,                  InstType.Special);
+            Add(Instruction.ShuffleDown,              InstType.CallBinary,     "subgroupShuffleDown");
+            Add(Instruction.ShuffleUp,                InstType.CallBinary,     "subgroupShuffleUp");
+            Add(Instruction.ShuffleXor,               InstType.CallBinary,     "subgroupShuffleXor");
             Add(Instruction.Sine,                     InstType.CallUnary,      "sin");
             Add(Instruction.SquareRoot,               InstType.CallUnary,      "sqrt");
             Add(Instruction.Store,                    InstType.Special);
-            Add(Instruction.StoreLocal,               InstType.Special);
-            Add(Instruction.StoreShared,              InstType.Special);
-            Add(Instruction.StoreShared16,            InstType.Special);
-            Add(Instruction.StoreShared8,             InstType.Special);
-            Add(Instruction.StoreStorage,             InstType.Special);
-            Add(Instruction.StoreStorage16,           InstType.Special);
-            Add(Instruction.StoreStorage8,            InstType.Special);
             Add(Instruction.Subtract,                 InstType.OpBinary,       "-",               2);
             Add(Instruction.SwizzleAdd,               InstType.CallTernary,    HelperFunctionNames.SwizzleAdd);
             Add(Instruction.TextureSample,            InstType.Special);
-            Add(Instruction.TextureSize,              InstType.Special);
+            Add(Instruction.TextureQuerySamples,      InstType.Special);
+            Add(Instruction.TextureQuerySize,         InstType.Special);
             Add(Instruction.Truncate,                 InstType.CallUnary,      "trunc");
             Add(Instruction.UnpackDouble2x32,         InstType.Special);
             Add(Instruction.UnpackHalf2x16,           InstType.Special);
@@ -137,6 +127,7 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Glsl.Instructions
             Add(Instruction.VoteAll,                  InstType.CallUnary,      "allInvocationsARB");
             Add(Instruction.VoteAllEqual,             InstType.CallUnary,      "allInvocationsEqualARB");
             Add(Instruction.VoteAny,                  InstType.CallUnary,      "anyInvocationARB");
+#pragma warning restore IDE0055
         }
 
         private static void Add(Instruction inst, InstType flags, string opName = null, int precedence = 0)
@@ -175,7 +166,7 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Glsl.Instructions
         {
             // If the node isn't a operation, then it can only be a operand,
             // and those never needs to be surrounded in parenthesis.
-            if (!(node is AstOperation operation))
+            if (node is not AstOperation operation)
             {
                 // This is sort of a special case, if this is a negative constant,
                 // and it is consumed by a unary operation, we need to put on the parenthesis,
@@ -220,7 +211,7 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Glsl.Instructions
 
         private static bool IsNegativeConst(IAstNode node)
         {
-            if (!(node is AstOperand operand))
+            if (node is not AstOperand operand)
             {
                 return false;
             }

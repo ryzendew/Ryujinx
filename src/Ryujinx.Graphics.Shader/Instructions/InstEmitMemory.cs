@@ -1,7 +1,7 @@
 using Ryujinx.Graphics.Shader.Decoders;
 using Ryujinx.Graphics.Shader.IntermediateRepresentation;
 using Ryujinx.Graphics.Shader.Translation;
-
+using System.Numerics;
 using static Ryujinx.Graphics.Shader.Instructions.InstEmitHelper;
 using static Ryujinx.Graphics.Shader.IntermediateRepresentation.OperandHelper;
 
@@ -9,12 +9,6 @@ namespace Ryujinx.Graphics.Shader.Instructions
 {
     static partial class InstEmit
     {
-        private enum MemoryRegion
-        {
-            Local,
-            Shared
-        }
-
         public static void Atom(EmitterContext context)
         {
             InstAtom op = context.GetOp<InstAtom>();
@@ -32,6 +26,12 @@ namespace Ryujinx.Graphics.Shader.Instructions
 
         public static void Atoms(EmitterContext context)
         {
+            if (context.TranslatorContext.Definitions.Stage != ShaderStage.Compute)
+            {
+                context.TranslatorContext.GpuAccessor.Log($"Atoms instruction is not valid on \"{context.TranslatorContext.Definitions.Stage}\" stage.");
+                return;
+            }
+
             InstAtoms op = context.GetOp<InstAtoms>();
 
             Operand offset = context.ShiftRightU32(GetSrcReg(context, op.SrcA), Const(2));
@@ -47,10 +47,11 @@ namespace Ryujinx.Graphics.Shader.Instructions
                 AtomsSize.S32 => AtomSize.S32,
                 AtomsSize.U64 => AtomSize.U64,
                 AtomsSize.S64 => AtomSize.S64,
-                _ => AtomSize.U32
+                _ => AtomSize.U32,
             };
 
-            Operand res = EmitAtomicOp(context, StorageKind.SharedMemory, op.AtomOp, size, offset, Const(0), value);
+            Operand id = Const(context.ResourceManager.SharedMemoryId);
+            Operand res = EmitAtomicOp(context, StorageKind.SharedMemory, op.AtomOp, size, id, offset, value);
 
             context.Copy(GetDest(op.Dest), res);
         }
@@ -61,7 +62,7 @@ namespace Ryujinx.Graphics.Shader.Instructions
 
             if (op.LsSize > LsSize2.B64)
             {
-                context.Config.GpuAccessor.Log($"Invalid LDC size: {op.LsSize}.");
+                context.TranslatorContext.GpuAccessor.Log($"Invalid LDC size: {op.LsSize}.");
                 return;
             }
 
@@ -80,11 +81,10 @@ namespace Ryujinx.Graphics.Shader.Instructions
 
             Operand addr = context.IAdd(srcA, Const(Imm16ToSInt(op.CbufOffset)));
             Operand wordOffset = context.ShiftRightU32(addr, Const(2));
-            Operand bitOffset = GetBitOffset(context, addr);
 
             for (int index = 0; index < count; index++)
             {
-                Register dest = new Register(op.Dest + index, RegisterType.Gpr);
+                Register dest = new(op.Dest + index, RegisterType.Gpr);
 
                 if (dest.IsRZ)
                 {
@@ -92,11 +92,11 @@ namespace Ryujinx.Graphics.Shader.Instructions
                 }
 
                 Operand offset = context.IAdd(wordOffset, Const(index));
-                Operand value = context.LoadConstant(slot, offset);
+                Operand value = EmitLoadConstant(context, slot, offset);
 
                 if (isSmallInt)
                 {
-                    value = ExtractSmallInt(context, (LsSize)op.LsSize, bitOffset, value);
+                    value = ExtractSmallInt(context, (LsSize)op.LsSize, GetBitOffset(context, addr), value);
                 }
 
                 context.Copy(Register(dest), value);
@@ -114,14 +114,20 @@ namespace Ryujinx.Graphics.Shader.Instructions
         {
             InstLdl op = context.GetOp<InstLdl>();
 
-            EmitLoad(context, MemoryRegion.Local, op.LsSize, GetSrcReg(context, op.SrcA), op.Dest, Imm24ToSInt(op.Imm24));
+            EmitLoad(context, StorageKind.LocalMemory, op.LsSize, GetSrcReg(context, op.SrcA), op.Dest, Imm24ToSInt(op.Imm24));
         }
 
         public static void Lds(EmitterContext context)
         {
+            if (context.TranslatorContext.Definitions.Stage != ShaderStage.Compute)
+            {
+                context.TranslatorContext.GpuAccessor.Log($"Lds instruction is not valid on \"{context.TranslatorContext.Definitions.Stage}\" stage.");
+                return;
+            }
+
             InstLds op = context.GetOp<InstLds>();
 
-            EmitLoad(context, MemoryRegion.Shared, op.LsSize, GetSrcReg(context, op.SrcA), op.Dest, Imm24ToSInt(op.Imm24));
+            EmitLoad(context, StorageKind.SharedMemory, op.LsSize, GetSrcReg(context, op.SrcA), op.Dest, Imm24ToSInt(op.Imm24));
         }
 
         public static void Red(EmitterContext context)
@@ -144,14 +150,53 @@ namespace Ryujinx.Graphics.Shader.Instructions
         {
             InstStl op = context.GetOp<InstStl>();
 
-            EmitStore(context, MemoryRegion.Local, op.LsSize, GetSrcReg(context, op.SrcA), op.Dest, Imm24ToSInt(op.Imm24));
+            EmitStore(context, StorageKind.LocalMemory, op.LsSize, GetSrcReg(context, op.SrcA), op.Dest, Imm24ToSInt(op.Imm24));
         }
 
         public static void Sts(EmitterContext context)
         {
+            if (context.TranslatorContext.Definitions.Stage != ShaderStage.Compute)
+            {
+                context.TranslatorContext.GpuAccessor.Log($"Sts instruction is not valid on \"{context.TranslatorContext.Definitions.Stage}\" stage.");
+                return;
+            }
+
             InstSts op = context.GetOp<InstSts>();
 
-            EmitStore(context, MemoryRegion.Shared, op.LsSize, GetSrcReg(context, op.SrcA), op.Dest, Imm24ToSInt(op.Imm24));
+            EmitStore(context, StorageKind.SharedMemory, op.LsSize, GetSrcReg(context, op.SrcA), op.Dest, Imm24ToSInt(op.Imm24));
+        }
+
+        private static Operand EmitLoadConstant(EmitterContext context, Operand slot, Operand offset)
+        {
+            Operand vecIndex = context.ShiftRightU32(offset, Const(2));
+            Operand elemIndex = context.BitwiseAnd(offset, Const(3));
+
+            if (slot.Type == OperandType.Constant)
+            {
+                int binding = context.ResourceManager.GetConstantBufferBinding(slot.Value);
+                return context.Load(StorageKind.ConstantBuffer, binding, Const(0), vecIndex, elemIndex);
+            }
+            else
+            {
+                Operand value = Const(0);
+
+                uint cbUseMask = context.TranslatorContext.GpuAccessor.QueryConstantBufferUse();
+
+                while (cbUseMask != 0)
+                {
+                    int cbIndex = BitOperations.TrailingZeroCount(cbUseMask);
+                    int binding = context.ResourceManager.GetConstantBufferBinding(cbIndex);
+
+                    Operand isCurrent = context.ICompareEqual(slot, Const(cbIndex));
+                    Operand currentValue = context.Load(StorageKind.ConstantBuffer, binding, Const(0), vecIndex, elemIndex);
+
+                    value = context.ConditionalSelect(isCurrent, currentValue, value);
+
+                    cbUseMask &= ~(1u << cbIndex);
+                }
+
+                return value;
+            }
         }
 
         private static Operand EmitAtomicOp(
@@ -159,8 +204,8 @@ namespace Ryujinx.Graphics.Shader.Instructions
             StorageKind storageKind,
             AtomOp op,
             AtomSize type,
-            Operand addrLow,
-            Operand addrHigh,
+            Operand e0,
+            Operand e1,
             Operand value)
         {
             Operand res = Const(0);
@@ -170,69 +215,69 @@ namespace Ryujinx.Graphics.Shader.Instructions
                 case AtomOp.Add:
                     if (type == AtomSize.S32 || type == AtomSize.U32)
                     {
-                        res = context.AtomicAdd(storageKind, addrLow, addrHigh, value);
+                        res = context.AtomicAdd(storageKind, e0, e1, value);
                     }
                     else
                     {
-                        context.Config.GpuAccessor.Log($"Invalid reduction type: {type}.");
+                        context.TranslatorContext.GpuAccessor.Log($"Invalid reduction type: {type}.");
                     }
                     break;
                 case AtomOp.And:
                     if (type == AtomSize.S32 || type == AtomSize.U32)
                     {
-                        res = context.AtomicAnd(storageKind, addrLow, addrHigh, value);
+                        res = context.AtomicAnd(storageKind, e0, e1, value);
                     }
                     else
                     {
-                        context.Config.GpuAccessor.Log($"Invalid reduction type: {type}.");
+                        context.TranslatorContext.GpuAccessor.Log($"Invalid reduction type: {type}.");
                     }
                     break;
                 case AtomOp.Xor:
                     if (type == AtomSize.S32 || type == AtomSize.U32)
                     {
-                        res = context.AtomicXor(storageKind, addrLow, addrHigh, value);
+                        res = context.AtomicXor(storageKind, e0, e1, value);
                     }
                     else
                     {
-                        context.Config.GpuAccessor.Log($"Invalid reduction type: {type}.");
+                        context.TranslatorContext.GpuAccessor.Log($"Invalid reduction type: {type}.");
                     }
                     break;
                 case AtomOp.Or:
                     if (type == AtomSize.S32 || type == AtomSize.U32)
                     {
-                        res = context.AtomicOr(storageKind, addrLow, addrHigh, value);
+                        res = context.AtomicOr(storageKind, e0, e1, value);
                     }
                     else
                     {
-                        context.Config.GpuAccessor.Log($"Invalid reduction type: {type}.");
+                        context.TranslatorContext.GpuAccessor.Log($"Invalid reduction type: {type}.");
                     }
                     break;
                 case AtomOp.Max:
                     if (type == AtomSize.S32)
                     {
-                        res = context.AtomicMaxS32(storageKind, addrLow, addrHigh, value);
+                        res = context.AtomicMaxS32(storageKind, e0, e1, value);
                     }
                     else if (type == AtomSize.U32)
                     {
-                        res = context.AtomicMaxU32(storageKind, addrLow, addrHigh, value);
+                        res = context.AtomicMaxU32(storageKind, e0, e1, value);
                     }
                     else
                     {
-                        context.Config.GpuAccessor.Log($"Invalid reduction type: {type}.");
+                        context.TranslatorContext.GpuAccessor.Log($"Invalid reduction type: {type}.");
                     }
                     break;
                 case AtomOp.Min:
                     if (type == AtomSize.S32)
                     {
-                        res = context.AtomicMinS32(storageKind, addrLow, addrHigh, value);
+                        res = context.AtomicMinS32(storageKind, e0, e1, value);
                     }
                     else if (type == AtomSize.U32)
                     {
-                        res = context.AtomicMinU32(storageKind, addrLow, addrHigh, value);
+                        res = context.AtomicMinU32(storageKind, e0, e1, value);
                     }
                     else
                     {
-                        context.Config.GpuAccessor.Log($"Invalid reduction type: {type}.");
+                        context.TranslatorContext.GpuAccessor.Log($"Invalid reduction type: {type}.");
                     }
                     break;
             }
@@ -242,7 +287,7 @@ namespace Ryujinx.Graphics.Shader.Instructions
 
         private static void EmitLoad(
             EmitterContext context,
-            MemoryRegion region,
+            StorageKind storageKind,
             LsSize2 size,
             Operand srcA,
             int rd,
@@ -250,41 +295,37 @@ namespace Ryujinx.Graphics.Shader.Instructions
         {
             if (size > LsSize2.B128)
             {
-                context.Config.GpuAccessor.Log($"Invalid load size: {size}.");
+                context.TranslatorContext.GpuAccessor.Log($"Invalid load size: {size}.");
                 return;
             }
 
+            int id = storageKind == StorageKind.LocalMemory
+                ? context.ResourceManager.LocalMemoryId
+                : context.ResourceManager.SharedMemoryId;
             bool isSmallInt = size < LsSize2.B32;
 
-            int count = 1;
-
-            switch (size)
+            int count = size switch
             {
-                case LsSize2.B64: count = 2; break;
-                case LsSize2.B128: count = 4; break;
-            }
+                LsSize2.B64 => 2,
+                LsSize2.B128 => 4,
+                _ => 1,
+            };
 
-            Operand baseOffset = context.IAdd(srcA, Const(offset));
-            Operand wordOffset = context.ShiftRightU32(baseOffset, Const(2)); // Word offset = byte offset / 4 (one word = 4 bytes).
-            Operand bitOffset = GetBitOffset(context, baseOffset);
+            Operand baseOffset = context.Copy(srcA);
 
             for (int index = 0; index < count; index++)
             {
-                Register dest = new Register(rd + index, RegisterType.Gpr);
+                Register dest = new(rd + index, RegisterType.Gpr);
 
                 if (dest.IsRZ)
                 {
                     break;
                 }
 
-                Operand elemOffset = context.IAdd(wordOffset, Const(index));
-                Operand value = null;
-
-                switch (region)
-                {
-                    case MemoryRegion.Local: value = context.LoadLocal(elemOffset); break;
-                    case MemoryRegion.Shared: value = context.LoadShared(elemOffset); break;
-                }
+                Operand byteOffset = context.IAdd(baseOffset, Const(offset + index * 4));
+                Operand wordOffset = context.ShiftRightU32(byteOffset, Const(2)); // Word offset = byte offset / 4 (one word = 4 bytes).
+                Operand bitOffset = GetBitOffset(context, byteOffset);
+                Operand value = context.Load(storageKind, id, wordOffset);
 
                 if (isSmallInt)
                 {
@@ -303,29 +344,23 @@ namespace Ryujinx.Graphics.Shader.Instructions
             int offset,
             bool extended)
         {
-            bool isSmallInt = size < LsSize.B32;
-
             int count = GetVectorCount(size);
+            StorageKind storageKind = GetStorageKind(size);
 
-            (Operand addrLow, Operand addrHigh) = Get40BitsAddress(context, new Register(ra, RegisterType.Gpr), extended, offset);
+            (_, Operand addrHigh) = Get40BitsAddress(context, new Register(ra, RegisterType.Gpr), extended, offset);
 
-            Operand bitOffset = GetBitOffset(context, addrLow);
+            Operand srcA = context.Copy(new Operand(new Register(ra, RegisterType.Gpr)));
 
             for (int index = 0; index < count; index++)
             {
-                Register dest = new Register(rd + index, RegisterType.Gpr);
+                Register dest = new(rd + index, RegisterType.Gpr);
 
                 if (dest.IsRZ)
                 {
                     break;
                 }
 
-                Operand value = context.LoadGlobal(context.IAdd(addrLow, Const(index * 4)), addrHigh);
-
-                if (isSmallInt)
-                {
-                    value = ExtractSmallInt(context, size, bitOffset, value);
-                }
+                Operand value = context.Load(storageKind, context.IAdd(srcA, Const(offset + index * 4)), addrHigh);
 
                 context.Copy(Register(dest), value);
             }
@@ -333,7 +368,7 @@ namespace Ryujinx.Graphics.Shader.Instructions
 
         private static void EmitStore(
             EmitterContext context,
-            MemoryRegion region,
+            StorageKind storageKind,
             LsSize2 size,
             Operand srcA,
             int rd,
@@ -341,56 +376,58 @@ namespace Ryujinx.Graphics.Shader.Instructions
         {
             if (size > LsSize2.B128)
             {
-                context.Config.GpuAccessor.Log($"Invalid store size: {size}.");
+                context.TranslatorContext.GpuAccessor.Log($"Invalid store size: {size}.");
                 return;
             }
 
+            int id = storageKind == StorageKind.LocalMemory
+                ? context.ResourceManager.LocalMemoryId
+                : context.ResourceManager.SharedMemoryId;
             bool isSmallInt = size < LsSize2.B32;
 
-            int count = 1;
-
-            switch (size)
+            int count = size switch
             {
-                case LsSize2.B64: count = 2; break;
-                case LsSize2.B128: count = 4; break;
-            }
+                LsSize2.B64 => 2,
+                LsSize2.B128 => 4,
+                _ => 1,
+            };
 
-            Operand baseOffset = context.IAdd(srcA, Const(offset));
-            Operand wordOffset = context.ShiftRightU32(baseOffset, Const(2));
-            Operand bitOffset = GetBitOffset(context, baseOffset);
+            Operand baseOffset = context.Copy(srcA);
 
             for (int index = 0; index < count; index++)
             {
                 bool isRz = rd + index >= RegisterConsts.RegisterZeroIndex;
 
                 Operand value = Register(isRz ? rd : rd + index, RegisterType.Gpr);
-                Operand elemOffset = context.IAdd(wordOffset, Const(index));
+                Operand byteOffset = context.IAdd(baseOffset, Const(offset + index * 4));
+                Operand wordOffset = context.ShiftRightU32(byteOffset, Const(2));
+                Operand bitOffset = GetBitOffset(context, byteOffset);
 
-                if (isSmallInt && region == MemoryRegion.Local)
+                if (isSmallInt && storageKind == StorageKind.LocalMemory)
                 {
-                    Operand word = context.LoadLocal(elemOffset);
+                    Operand word = context.Load(storageKind, id, wordOffset);
 
                     value = InsertSmallInt(context, (LsSize)size, bitOffset, word, value);
                 }
 
-                if (region == MemoryRegion.Local)
+                if (storageKind == StorageKind.LocalMemory)
                 {
-                    context.StoreLocal(elemOffset, value);
+                    context.Store(storageKind, id, wordOffset, value);
                 }
-                else if (region == MemoryRegion.Shared)
+                else if (storageKind == StorageKind.SharedMemory)
                 {
                     switch (size)
                     {
                         case LsSize2.U8:
                         case LsSize2.S8:
-                            context.StoreShared8(baseOffset, value);
+                            context.Store(StorageKind.SharedMemory8, id, byteOffset, value);
                             break;
                         case LsSize2.U16:
                         case LsSize2.S16:
-                            context.StoreShared16(baseOffset, value);
+                            context.Store(StorageKind.SharedMemory16, id, byteOffset, value);
                             break;
                         default:
-                            context.StoreShared(elemOffset, value);
+                            context.Store(storageKind, id, wordOffset, value);
                             break;
                     }
                 }
@@ -407,15 +444,16 @@ namespace Ryujinx.Graphics.Shader.Instructions
         {
             if (size > LsSize2.B128)
             {
-                context.Config.GpuAccessor.Log($"Invalid store size: {size}.");
+                context.TranslatorContext.GpuAccessor.Log($"Invalid store size: {size}.");
                 return;
             }
 
             int count = GetVectorCount((LsSize)size);
+            StorageKind storageKind = GetStorageKind((LsSize)size);
 
-            (Operand addrLow, Operand addrHigh) = Get40BitsAddress(context, new Register(ra, RegisterType.Gpr), extended, offset);
+            (_, Operand addrHigh) = Get40BitsAddress(context, new Register(ra, RegisterType.Gpr), extended, offset);
 
-            Operand bitOffset = GetBitOffset(context, addrLow);
+            Operand srcA = context.Copy(new Operand(new Register(ra, RegisterType.Gpr)));
 
             for (int index = 0; index < count; index++)
             {
@@ -423,35 +461,32 @@ namespace Ryujinx.Graphics.Shader.Instructions
 
                 Operand value = Register(isRz ? rd : rd + index, RegisterType.Gpr);
 
-                Operand addrLowOffset = context.IAdd(addrLow, Const(index * 4));
+                Operand addrLowOffset = context.IAdd(srcA, Const(offset + index * 4));
 
-                if (size == LsSize2.U8 || size == LsSize2.S8)
-                {
-                    context.StoreGlobal8(addrLowOffset, addrHigh, value);
-                }
-                else if (size == LsSize2.U16 || size == LsSize2.S16)
-                {
-                    context.StoreGlobal16(addrLowOffset, addrHigh, value);
-                }
-                else
-                {
-                    context.StoreGlobal(addrLowOffset, addrHigh, value);
-                }
+                context.Store(storageKind, addrLowOffset, addrHigh, value);
             }
+        }
+
+        private static StorageKind GetStorageKind(LsSize size)
+        {
+            return size switch
+            {
+                LsSize.U8 => StorageKind.GlobalMemoryU8,
+                LsSize.S8 => StorageKind.GlobalMemoryS8,
+                LsSize.U16 => StorageKind.GlobalMemoryU16,
+                LsSize.S16 => StorageKind.GlobalMemoryS16,
+                _ => StorageKind.GlobalMemory,
+            };
         }
 
         private static int GetVectorCount(LsSize size)
         {
-            switch (size)
+            return size switch
             {
-                case LsSize.B64:
-                    return 2;
-                case LsSize.B128:
-                case LsSize.UB128:
-                    return 4;
-            }
-
-            return 1;
+                LsSize.B64 => 2,
+                LsSize.B128 or LsSize.UB128 => 4,
+                _ => 1,
+            };
         }
 
         private static (Operand, Operand) Get40BitsAddress(
@@ -504,10 +539,18 @@ namespace Ryujinx.Graphics.Shader.Instructions
 
             switch (size)
             {
-                case LsSize.U8: value = ZeroExtendTo32(context, value, 8); break;
-                case LsSize.U16: value = ZeroExtendTo32(context, value, 16); break;
-                case LsSize.S8: value = SignExtendTo32(context, value, 8); break;
-                case LsSize.S16: value = SignExtendTo32(context, value, 16); break;
+                case LsSize.U8:
+                    value = ZeroExtendTo32(context, value, 8);
+                    break;
+                case LsSize.U16:
+                    value = ZeroExtendTo32(context, value, 16);
+                    break;
+                case LsSize.S8:
+                    value = SignExtendTo32(context, value, 8);
+                    break;
+                case LsSize.S16:
+                    value = SignExtendTo32(context, value, 16);
+                    break;
             }
 
             return value;

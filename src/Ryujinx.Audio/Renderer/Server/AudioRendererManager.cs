@@ -19,17 +19,17 @@ namespace Ryujinx.Audio.Renderer.Server
         /// <summary>
         /// Lock used for session allocation.
         /// </summary>
-        private object _sessionLock = new object();
+        private readonly object _sessionLock = new();
 
         /// <summary>
         /// Lock used to control the <see cref="AudioProcessor"/> running state.
         /// </summary>
-        private object _audioProcessorLock = new object();
+        private readonly object _audioProcessorLock = new();
 
         /// <summary>
         /// The session ids allocation table.
         /// </summary>
-        private int[] _sessionIds;
+        private readonly int[] _sessionIds;
 
         /// <summary>
         /// The events linked to each session.
@@ -39,7 +39,7 @@ namespace Ryujinx.Audio.Renderer.Server
         /// <summary>
         /// The <see cref="AudioRenderSystem"/> sessions instances.
         /// </summary>
-        private AudioRenderSystem[] _sessions;
+        private readonly AudioRenderSystem[] _sessions;
 
         /// <summary>
         /// The count of active sessions.
@@ -186,7 +186,7 @@ namespace Ryujinx.Audio.Renderer.Server
 
             _workerThread = new Thread(SendCommands)
             {
-                Name = "AudioRendererManager.Worker"
+                Name = "AudioRendererManager.Worker",
             };
 
             _workerThread.Start();
@@ -317,7 +317,7 @@ namespace Ryujinx.Audio.Renderer.Server
         {
             int sessionId = AcquireSessionId();
 
-            AudioRenderSystem audioRenderer = new AudioRenderSystem(this, _sessionsSystemEvent[sessionId]);
+            AudioRenderSystem audioRenderer = new(this, _sessionsSystemEvent[sessionId]);
 
             // TODO: Eventually, we should try to use the guest supplied work buffer instead of allocating
             // our own. However, it was causing problems on some applications that would unmap the memory
@@ -367,6 +367,8 @@ namespace Ryujinx.Audio.Renderer.Server
 
         public void Dispose()
         {
+            GC.SuppressFinalize(this);
+
             if (Interlocked.CompareExchange(ref _disposeState, 1, 0) == 0)
             {
                 Dispose(true);

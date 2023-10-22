@@ -11,9 +11,9 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Glsl
     {
         private const string MainFunctionName = "main";
 
-        public static string Generate(StructuredProgramInfo info, ShaderConfig config)
+        public static string Generate(StructuredProgramInfo info, CodeGenParameters parameters)
         {
-            CodeGenContext context = new CodeGenContext(info, config);
+            CodeGenContext context = new(info, parameters);
 
             Declarations.Declare(context, info);
 
@@ -28,18 +28,18 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Glsl
 
                 for (int i = 1; i < info.Functions.Count; i++)
                 {
-                    PrintFunction(context, info, info.Functions[i]);
+                    PrintFunction(context, info.Functions[i]);
 
                     context.AppendLine();
                 }
             }
 
-            PrintFunction(context, info, info.Functions[0], MainFunctionName);
+            PrintFunction(context, info.Functions[0], MainFunctionName);
 
             return context.GetCode();
         }
 
-        private static void PrintFunction(CodeGenContext context, StructuredProgramInfo info, StructuredFunction function, string funcName = null)
+        private static void PrintFunction(CodeGenContext context, StructuredFunction function, string funcName = null)
         {
             context.CurrentFunction = function;
 
@@ -48,7 +48,7 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Glsl
 
             Declarations.DeclareLocals(context, function);
 
-            PrintBlock(context, function.MainBlock);
+            PrintBlock(context, function.MainBlock, funcName == MainFunctionName);
 
             context.LeaveScope();
         }
@@ -72,9 +72,9 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Glsl
             return $"{Declarations.GetVarTypeName(context, function.ReturnType)} {funcName ?? function.Name}({string.Join(", ", args)})";
         }
 
-        private static void PrintBlock(CodeGenContext context, AstBlock block)
+        private static void PrintBlock(CodeGenContext context, AstBlock block, bool isMainFunction)
         {
-            AstBlockVisitor visitor = new AstBlockVisitor(block);
+            AstBlockVisitor visitor = new(block);
 
             visitor.BlockEntered += (sender, e) =>
             {
@@ -96,7 +96,8 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Glsl
                         context.AppendLine($"if ({GetCondExpr(context, e.Block.Condition)})");
                         break;
 
-                    default: throw new InvalidOperationException($"Found unexpected block type \"{e.Block.Type}\".");
+                    default:
+                        throw new InvalidOperationException($"Found unexpected block type \"{e.Block.Type}\".");
                 }
 
                 context.EnterScope();
@@ -112,10 +113,32 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Glsl
                 }
             };
 
+            bool supportsBarrierDivergence = context.HostCapabilities.SupportsShaderBarrierDivergence;
+            bool mayHaveReturned = false;
+
             foreach (IAstNode node in visitor.Visit())
             {
                 if (node is AstOperation operation)
                 {
+                    if (!supportsBarrierDivergence)
+                    {
+                        if (operation.Inst == IntermediateRepresentation.Instruction.Barrier)
+                        {
+                            // Barrier on divergent control flow paths may cause the GPU to hang,
+                            // so skip emitting the barrier for those cases.
+                            if (visitor.Block.Type != AstBlockType.Main || mayHaveReturned || !isMainFunction)
+                            {
+                                context.Logger.Log("Shader has barrier on potentially divergent block, the barrier will be removed.");
+
+                                continue;
+                            }
+                        }
+                        else if (operation.Inst == IntermediateRepresentation.Instruction.Return)
+                        {
+                            mayHaveReturned = true;
+                        }
+                    }
+
                     string expr = InstGen.GetExpression(context, operation);
 
                     if (expr != null)

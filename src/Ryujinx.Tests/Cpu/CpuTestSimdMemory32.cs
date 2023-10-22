@@ -2,6 +2,7 @@
 
 using ARMeilleure.State;
 using NUnit.Framework;
+using Ryujinx.Memory;
 using System;
 
 namespace Ryujinx.Tests.Cpu
@@ -9,9 +10,10 @@ namespace Ryujinx.Tests.Cpu
     [Category("SimdMemory32")]
     public sealed class CpuTestSimdMemory32 : CpuTest32
     {
+        private static readonly uint _testOffset = DataBaseAddress + 0x500;
 #if SimdMemory32
 
-        private uint[] _ldStModes =
+        private readonly uint[] _ldStModes =
         {
             // LD1
             0b0111,
@@ -30,7 +32,7 @@ namespace Ryujinx.Tests.Cpu
 
             // LD4
             0b0000,
-            0b0001
+            0b0001,
         };
 
         [Test, Pairwise, Description("VLDn.<size> <list>, [<Rn> {:<align>}]{ /!/, <Rm>} (single n element structure)")]
@@ -42,23 +44,23 @@ namespace Ryujinx.Tests.Cpu
                                 [Range(0u, 3u)] uint n,
                                 [Values(0x0u)] uint offset)
         {
-            var data = GenerateVectorSequence(0x1000);
+            var data = GenerateVectorSequence((int)MemoryBlock.GetPageSize());
             SetWorkingMemory(0, data);
 
             uint opcode = 0xf4a00000u; // VLD1.8 {D0[0]}, [R0], R0
 
             opcode |= ((size & 3) << 10) | ((rn & 15) << 16) | (rm & 15);
 
-            uint index_align = (index << (int)(1 + size)) & 15;
+            uint indexAlign = (index << (int)(1 + size)) & 15;
 
-            opcode |= (index_align) << 4;
+            opcode |= (indexAlign) << 4;
 
             opcode |= ((vd & 0x10) << 18);
             opcode |= ((vd & 0xf) << 12);
 
             opcode |= (n & 3) << 8; // LD1 is 0, LD2 is 1 etc.
 
-            SingleOpcode(opcode, r0: 0x2500, r1: offset, sp: 0x2500);
+            SingleOpcode(opcode, r0: _testOffset, r1: offset, sp: _testOffset);
 
             CompareAgainstUnicorn();
         }
@@ -72,7 +74,7 @@ namespace Ryujinx.Tests.Cpu
                              [Values] bool t,
                              [Values(0x0u)] uint offset)
         {
-            var data = GenerateVectorSequence(0x1000);
+            var data = GenerateVectorSequence((int)MemoryBlock.GetPageSize());
             SetWorkingMemory(0, data);
 
             uint opcode = 0xf4a00c00u; // VLD1.8 {D0[0]}, [R0], R0
@@ -83,9 +85,12 @@ namespace Ryujinx.Tests.Cpu
             opcode |= ((vd & 0xf) << 12);
 
             opcode |= (n & 3) << 8; // LD1 is 0, LD2 is 1 etc.
-            if (t) opcode |= 1 << 5;
+            if (t)
+            {
+                opcode |= 1 << 5;
+            }
 
-            SingleOpcode(opcode, r0: 0x2500, r1: offset, sp: 0x2500);
+            SingleOpcode(opcode, r0: _testOffset, r1: offset, sp: _testOffset);
 
             CompareAgainstUnicorn();
         }
@@ -98,7 +103,7 @@ namespace Ryujinx.Tests.Cpu
                               [Range(0u, 10u)] uint mode,
                               [Values(0x0u)] uint offset)
         {
-            var data = GenerateVectorSequence(0x1000);
+            var data = GenerateVectorSequence((int)MemoryBlock.GetPageSize());
             SetWorkingMemory(0, data);
 
             uint opcode = 0xf4200000u; // VLD4.8 {D0, D1, D2, D3}, [R0], R0
@@ -114,7 +119,7 @@ namespace Ryujinx.Tests.Cpu
             opcode |= ((vd & 0x10) << 18);
             opcode |= ((vd & 0xf) << 12);
 
-            SingleOpcode(opcode, r0: 0x2500, r1: offset, sp: 0x2500);
+            SingleOpcode(opcode, r0: _testOffset, r1: offset, sp: _testOffset);
 
             CompareAgainstUnicorn();
         }
@@ -128,7 +133,7 @@ namespace Ryujinx.Tests.Cpu
                                 [Range(0u, 3u)] uint n,
                                 [Values(0x0u)] uint offset)
         {
-            var data = GenerateVectorSequence(0x1000);
+            var data = GenerateVectorSequence((int)MemoryBlock.GetPageSize());
             SetWorkingMemory(0, data);
 
             (V128 vec1, V128 vec2, V128 vec3, V128 vec4) = GenerateTestVectors();
@@ -137,16 +142,16 @@ namespace Ryujinx.Tests.Cpu
 
             opcode |= ((size & 3) << 10) | ((rn & 15) << 16) | (rm & 15);
 
-            uint index_align = (index << (int)(1 + size)) & 15;
+            uint indexAlign = (index << (int)(1 + size)) & 15;
 
-            opcode |= (index_align) << 4;
+            opcode |= (indexAlign) << 4;
 
             opcode |= ((vd & 0x10) << 18);
             opcode |= ((vd & 0xf) << 12);
 
             opcode |= (n & 3) << 8; // ST1 is 0, ST2 is 1 etc.
 
-            SingleOpcode(opcode, r0: 0x2500, r1: offset, v1: vec1, v2: vec2, v3: vec3, v4: vec4, sp: 0x2500);
+            SingleOpcode(opcode, r0: _testOffset, r1: offset, v1: vec1, v2: vec2, v3: vec3, v4: vec4, sp: _testOffset);
 
             CompareAgainstUnicorn();
         }
@@ -159,7 +164,7 @@ namespace Ryujinx.Tests.Cpu
                               [Range(0u, 10u)] uint mode,
                               [Values(0x0u)] uint offset)
         {
-            var data = GenerateVectorSequence(0x1000);
+            var data = GenerateVectorSequence((int)MemoryBlock.GetPageSize());
             SetWorkingMemory(0, data);
 
             (V128 vec1, V128 vec2, V128 vec3, V128 vec4) = GenerateTestVectors();
@@ -177,7 +182,7 @@ namespace Ryujinx.Tests.Cpu
             opcode |= ((vd & 0x10) << 18);
             opcode |= ((vd & 0xf) << 12);
 
-            SingleOpcode(opcode, r0: 0x2500, r1: offset, v1: vec1, v2: vec2, v3: vec3, v4: vec4, sp: 0x2500);
+            SingleOpcode(opcode, r0: _testOffset, r1: offset, v1: vec1, v2: vec2, v3: vec3, v4: vec4, sp: _testOffset);
 
             CompareAgainstUnicorn();
         }
@@ -189,7 +194,7 @@ namespace Ryujinx.Tests.Cpu
                          [Values(0x1u, 0x32u)] uint regs,
                          [Values] bool single)
         {
-            var data = GenerateVectorSequence(0x1000);
+            var data = GenerateVectorSequence((int)MemoryBlock.GetPageSize());
             SetWorkingMemory(0, data);
 
             uint opcode = 0xec100a00u; // VST4.8 {D0, D1, D2, D3}, [R0], R0
@@ -199,7 +204,7 @@ namespace Ryujinx.Tests.Cpu
                 // Note: 3rd 0 leaves a space for "D".
                 0b0100, // Increment after.
                 0b0101, // Increment after. (!)
-                0b1001  // Decrement before. (!)
+                0b1001, // Decrement before. (!)
             };
 
             opcode |= ((vldmModes[mode] & 15) << 21);
@@ -210,7 +215,11 @@ namespace Ryujinx.Tests.Cpu
 
             opcode |= ((uint)(single ? 0 : 1) << 8);
 
-            if (!single) regs = (regs << 1); // Low bit must be 0 - must be even number of registers.
+            if (!single)
+            {
+                regs <<= 1; // Low bit must be 0 - must be even number of registers.
+            }
+
             uint regSize = single ? 1u : 2u;
 
             if (vd + (regs / regSize) > 32) // Can't address further than S31 or D31.
@@ -225,7 +234,7 @@ namespace Ryujinx.Tests.Cpu
 
             opcode |= regs & 0xff;
 
-            SingleOpcode(opcode, r0: 0x2500, sp: 0x2500);
+            SingleOpcode(opcode, r0: _testOffset, sp: _testOffset);
 
             CompareAgainstUnicorn();
         }
@@ -237,7 +246,7 @@ namespace Ryujinx.Tests.Cpu
                          [Values(0x0u)] uint imm,
                          [Values] bool sub)
         {
-            var data = GenerateVectorSequence(0x1000);
+            var data = GenerateVectorSequence((int)MemoryBlock.GetPageSize());
             SetWorkingMemory(0, data);
 
             uint opcode = 0xed900a00u; // VLDR.32 S0, [R0, #0]
@@ -260,7 +269,7 @@ namespace Ryujinx.Tests.Cpu
             }
             opcode |= imm & 0xff;
 
-            SingleOpcode(opcode, r0: 0x2500);
+            SingleOpcode(opcode, r0: _testOffset);
 
             CompareAgainstUnicorn();
         }
@@ -272,7 +281,7 @@ namespace Ryujinx.Tests.Cpu
                 [Values(0x0u)] uint imm,
                 [Values] bool sub)
         {
-            var data = GenerateVectorSequence(0x1000);
+            var data = GenerateVectorSequence((int)MemoryBlock.GetPageSize());
             SetWorkingMemory(0, data);
 
             uint opcode = 0xed800a00u; // VSTR.32 S0, [R0, #0]
@@ -297,12 +306,12 @@ namespace Ryujinx.Tests.Cpu
 
             (V128 vec1, V128 vec2, _, _) = GenerateTestVectors();
 
-            SingleOpcode(opcode, r0: 0x2500, v0: vec1, v1: vec2);
+            SingleOpcode(opcode, r0: _testOffset, v0: vec1, v1: vec2);
 
             CompareAgainstUnicorn();
         }
 
-        private (V128, V128, V128, V128) GenerateTestVectors()
+        private static (V128, V128, V128, V128) GenerateTestVectors()
         {
             return (
                 new V128(-12.43f, 1872.23f, 4456.23f, -5622.2f),
@@ -312,7 +321,7 @@ namespace Ryujinx.Tests.Cpu
                 );
         }
 
-        private byte[] GenerateVectorSequence(int length)
+        private static byte[] GenerateVectorSequence(int length)
         {
             int floatLength = length >> 2;
             float[] data = new float[floatLength];

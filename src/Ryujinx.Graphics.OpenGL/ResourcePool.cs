@@ -9,7 +9,6 @@ namespace Ryujinx.Graphics.OpenGL
     {
         public TextureCreateInfo Info;
         public TextureView View;
-        public float ScaleFactor;
         public int RemainingFrames;
     }
 
@@ -20,8 +19,8 @@ namespace Ryujinx.Graphics.OpenGL
     {
         private const int DisposedLiveFrames = 2;
 
-        private readonly object _lock = new object();
-        private readonly Dictionary<TextureCreateInfo, List<DisposedTexture>> _textures = new Dictionary<TextureCreateInfo, List<DisposedTexture>>();
+        private readonly object _lock = new();
+        private readonly Dictionary<TextureCreateInfo, List<DisposedTexture>> _textures = new();
 
         /// <summary>
         /// Add a texture that is not being used anymore to the resource pool to be used later.
@@ -32,8 +31,7 @@ namespace Ryujinx.Graphics.OpenGL
         {
             lock (_lock)
             {
-                List<DisposedTexture> list;
-                if (!_textures.TryGetValue(view.Info, out list))
+                if (!_textures.TryGetValue(view.Info, out List<DisposedTexture> list))
                 {
                     list = new List<DisposedTexture>();
                     _textures.Add(view.Info, list);
@@ -43,8 +41,7 @@ namespace Ryujinx.Graphics.OpenGL
                 {
                     Info = view.Info,
                     View = view,
-                    ScaleFactor = view.ScaleFactor,
-                    RemainingFrames = DisposedLiveFrames
+                    RemainingFrames = DisposedLiveFrames,
                 });
             }
         }
@@ -53,25 +50,20 @@ namespace Ryujinx.Graphics.OpenGL
         /// Attempt to obtain a texture from the resource cache with the desired parameters.
         /// </summary>
         /// <param name="info">The creation info for the desired texture</param>
-        /// <param name="scaleFactor">The scale factor for the desired texture</param>
         /// <returns>A TextureView with the description specified, or null if one was not found.</returns>
-        public TextureView GetTextureOrNull(TextureCreateInfo info, float scaleFactor)
+        public TextureView GetTextureOrNull(TextureCreateInfo info)
         {
             lock (_lock)
             {
-                List<DisposedTexture> list;
-                if (!_textures.TryGetValue(info, out list))
+                if (!_textures.TryGetValue(info, out List<DisposedTexture> list))
                 {
                     return null;
                 }
 
                 foreach (DisposedTexture texture in list)
                 {
-                    if (scaleFactor == texture.ScaleFactor)
-                    {
-                        list.Remove(texture);
-                        return texture.View;
-                    }
+                    list.Remove(texture);
+                    return texture.View;
                 }
 
                 return null;

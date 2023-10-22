@@ -1,8 +1,7 @@
-﻿using Ryujinx.Cpu.Tracking;
-using Ryujinx.Graphics.Gpu.Synchronization;
+﻿using Ryujinx.Graphics.Gpu.Synchronization;
+using Ryujinx.Memory.Tracking;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 
 namespace Ryujinx.Graphics.Gpu.Image
@@ -22,10 +21,10 @@ namespace Ryujinx.Graphics.Gpu.Image
         private const int FlushBalanceMax = 60;
         private const int FlushBalanceMin = -10;
 
-        private TextureGroup _group;
+        private readonly TextureGroup _group;
         private int _bindCount;
-        private int _firstLevel;
-        private int _firstLayer;
+        private readonly int _firstLevel;
+        private readonly int _firstLayer;
 
         // Sync state for texture flush.
 
@@ -85,7 +84,7 @@ namespace Ryujinx.Graphics.Gpu.Image
         /// <summary>
         /// The CPU memory tracking handles that cover this handle.
         /// </summary>
-        public CpuRegionHandle[] Handles { get; }
+        public RegionHandle[] Handles { get; }
 
         /// <summary>
         /// True if a texture overlapping this handle has been modified. Is set false when the flush action is called.
@@ -127,7 +126,7 @@ namespace Ryujinx.Graphics.Gpu.Image
                                   int firstLevel,
                                   int baseSlice,
                                   int sliceCount,
-                                  CpuRegionHandle[] handles)
+                                  RegionHandle[] handles)
         {
             _group = group;
             _firstLayer = firstLayer;
@@ -152,6 +151,24 @@ namespace Ryujinx.Graphics.Gpu.Image
             {
                 // Linear textures are presumed to be used for readback initially.
                 _flushBalance = FlushBalanceThreshold + FlushBalanceIncrement;
+            }
+        }
+
+        /// <summary>
+        /// Discards all data for this handle.
+        /// This clears all dirty flags, modified flags, and pending copies from other handles.
+        /// </summary>
+        public void DiscardData()
+        {
+            Modified = false;
+            DeferredCopy = null;
+
+            foreach (RegionHandle handle in Handles)
+            {
+                if (handle.Dirty)
+                {
+                    handle.Reprotect();
+                }
             }
         }
 
@@ -463,8 +480,8 @@ namespace Ryujinx.Graphics.Gpu.Image
             _group.HasCopyDependencies = true;
             other._group.HasCopyDependencies = true;
 
-            TextureDependency dependency = new TextureDependency(this);
-            TextureDependency otherDependency = new TextureDependency(other);
+            TextureDependency dependency = new(this);
+            TextureDependency otherDependency = new(other);
 
             dependency.Other = otherDependency;
             otherDependency.Other = dependency;
@@ -512,7 +529,7 @@ namespace Ryujinx.Graphics.Gpu.Image
         /// <returns>True if at least one of the handles is dirty</returns>
         private bool CheckDirty()
         {
-            return Handles.Any(handle => handle.Dirty);
+            return Array.Exists(Handles, handle => handle.Dirty);
         }
 
         /// <summary>
@@ -642,7 +659,7 @@ namespace Ryujinx.Graphics.Gpu.Image
         /// </summary>
         public void Dispose()
         {
-            foreach (CpuRegionHandle handle in Handles)
+            foreach (RegionHandle handle in Handles)
             {
                 handle.Dispose();
             }

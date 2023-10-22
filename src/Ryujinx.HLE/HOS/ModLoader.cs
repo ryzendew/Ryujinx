@@ -7,6 +7,7 @@ using LibHac.Tools.FsSystem;
 using LibHac.Tools.FsSystem.RomFs;
 using Ryujinx.Common.Configuration;
 using Ryujinx.Common.Logging;
+using Ryujinx.Common.Utilities;
 using Ryujinx.HLE.HOS.Kernel.Process;
 using Ryujinx.HLE.Loaders.Executables;
 using Ryujinx.HLE.Loaders.Mods;
@@ -37,15 +38,19 @@ namespace Ryujinx.HLE.HOS
         private const string AmsNroPatchDir = "nro_patches";
         private const string AmsKipPatchDir = "kip_patches";
 
+        private static readonly ModMetadataJsonSerializerContext _serializerContext = new(JsonHelper.GetDefaultSerializerOptions());
+
         public readonly struct Mod<T> where T : FileSystemInfo
         {
             public readonly string Name;
             public readonly T Path;
+            public readonly bool Enabled;
 
-            public Mod(string name, T path)
+            public Mod(string name, T path, bool enabled)
             {
                 Name = name;
                 Path = path;
+                Enabled = enabled;
             }
         }
 
@@ -89,7 +94,7 @@ namespace Ryujinx.HLE.HOS
         }
 
         // Title independent mods
-        public class PatchCache
+        private class PatchCache
         {
             public List<Mod<DirectoryInfo>> NsoPatches { get; }
             public List<Mod<DirectoryInfo>> NroPatches { get; }
@@ -107,8 +112,8 @@ namespace Ryujinx.HLE.HOS
             }
         }
 
-        public Dictionary<ulong, ModCache> AppMods; // key is TitleId
-        public PatchCache Patches;
+        private readonly Dictionary<ulong, ModCache> _appMods; // key is TitleId
+        private PatchCache _patches;
 
         private static readonly EnumerationOptions _dirEnumOptions;
 
@@ -119,43 +124,116 @@ namespace Ryujinx.HLE.HOS
                 MatchCasing = MatchCasing.CaseInsensitive,
                 MatchType = MatchType.Simple,
                 RecurseSubdirectories = false,
-                ReturnSpecialDirectories = false
+                ReturnSpecialDirectories = false,
             };
         }
 
         public ModLoader()
         {
-            AppMods = new Dictionary<ulong, ModCache>();
-            Patches = new PatchCache();
+            _appMods = new Dictionary<ulong, ModCache>();
+            _patches = new PatchCache();
         }
 
-        public void Clear()
+        private void Clear()
         {
-            AppMods.Clear();
-            Patches = new PatchCache();
+            _appMods.Clear();
+            _patches = new PatchCache();
         }
 
         private static bool StrEquals(string s1, string s2) => string.Equals(s1, s2, StringComparison.OrdinalIgnoreCase);
 
-        public string GetModsBasePath()   => EnsureBaseDirStructure(AppDataManager.GetModsPath());
-        public string GetSdModsBasePath() => EnsureBaseDirStructure(AppDataManager.GetSdModsPath());
+        public static string GetModsBasePath() => EnsureBaseDirStructure(AppDataManager.GetModsPath());
 
-        private string EnsureBaseDirStructure(string modsBasePath)
+        private static string EnsureBaseDirStructure(string modsBasePath)
         {
             var modsDir = new DirectoryInfo(modsBasePath);
 
             modsDir.CreateSubdirectory(AmsContentsDir);
             modsDir.CreateSubdirectory(AmsNsoPatchDir);
             modsDir.CreateSubdirectory(AmsNroPatchDir);
-            // modsDir.CreateSubdirectory(AmsKipPatchDir); // uncomment when KIPs are supported
+            // TODO: uncomment when KIPs are supported
+            // modsDir.CreateSubdirectory(AmsKipPatchDir);
 
             return modsDir.FullName;
         }
 
         private static DirectoryInfo FindTitleDir(DirectoryInfo contentsDir, string titleId)
-            => contentsDir.EnumerateDirectories($"{titleId}*", _dirEnumOptions).FirstOrDefault();
+            => contentsDir.EnumerateDirectories(titleId, _dirEnumOptions).FirstOrDefault();
 
-        public string GetTitleDir(string modsBasePath, string titleId)
+        private static void AddModsFromDirectory(ModCache mods, DirectoryInfo dir, string titleId)
+        {
+            System.Text.StringBuilder types = new();
+
+            string modJsonPath = Path.Combine(AppDataManager.GamesDirPath, titleId, "mods.json");
+            ModMetadata modMetadata = new();
+
+            try
+            {
+                modMetadata = JsonHelper.DeserializeFromFile(modJsonPath, _serializerContext.ModMetadata);
+            }
+            catch
+            {
+                Logger.Warning?.Print(LogClass.ModLoader, $"Failed to deserialize mod data for {titleId} at {modJsonPath}");
+            }
+
+            foreach (var modDir in dir.EnumerateDirectories())
+            {
+                types.Clear();
+                Mod<DirectoryInfo> mod = new("", null, true);
+
+                if (StrEquals(RomfsDir, modDir.Name))
+                {
+                    bool enabled;
+
+                    try
+                    {
+                        var modData = modMetadata.Mods.Find(x => modDir.FullName.Contains(x.Path));
+                        enabled = modData.Enabled;
+                    }
+                    catch
+                    {
+                        // Mod is not in the list yet. New mods should be enabled by default.
+                        enabled = true;
+                    }
+
+                    mods.RomfsDirs.Add(mod = new Mod<DirectoryInfo>(dir.Name, modDir, enabled));
+                    types.Append('R');
+                }
+                else if (StrEquals(ExefsDir, modDir.Name))
+                {
+                    bool enabled;
+
+                    try
+                    {
+                        var modData = modMetadata.Mods.Find(x => modDir.FullName.Contains(x.Path));
+                        enabled = modData.Enabled;
+                    }
+                    catch
+                    {
+                        // Mod is not in the list yet. New mods should be enabled by default.
+                        enabled = true;
+                    }
+
+                    mods.ExefsDirs.Add(mod = new Mod<DirectoryInfo>(dir.Name, modDir, enabled));
+                    types.Append('E');
+                }
+                else if (StrEquals(CheatDir, modDir.Name))
+                {
+                    types.Append('C', QueryCheatsDir(mods, modDir));
+                }
+                else
+                {
+                    AddModsFromDirectory(mods, modDir, titleId);
+                }
+
+                if (types.Length > 0)
+                {
+                    Logger.Info?.Print(LogClass.ModLoader, $"Found mod '{mod.Name}' [{types}]");
+                }
+            }
+        }
+
+        public static string GetTitleDir(string modsBasePath, string titleId)
         {
             var contentsDir = new DirectoryInfo(Path.Combine(modsBasePath, AmsContentsDir));
             var titleModsPath = FindTitleDir(contentsDir, titleId);
@@ -170,99 +248,109 @@ namespace Ryujinx.HLE.HOS
         }
 
         // Static Query Methods
-        public static void QueryPatchDirs(PatchCache cache, DirectoryInfo patchDir)
+        private static void QueryPatchDirs(PatchCache cache, DirectoryInfo patchDir)
         {
-            if (cache.Initialized || !patchDir.Exists) return;
+            if (cache.Initialized || !patchDir.Exists)
+            {
+                return;
+            }
 
-            var patches = cache.KipPatches;
-            string type = null;
+            List<Mod<DirectoryInfo>> patches;
+            string type;
 
-            if (StrEquals(AmsNsoPatchDir, patchDir.Name)) { patches = cache.NsoPatches; type = "NSO"; }
-            else if (StrEquals(AmsNroPatchDir, patchDir.Name)) { patches = cache.NroPatches; type = "NRO"; }
-            else if (StrEquals(AmsKipPatchDir, patchDir.Name)) { patches = cache.KipPatches; type = "KIP"; }
-            else return;
+            if (StrEquals(AmsNsoPatchDir, patchDir.Name))
+            {
+                patches = cache.NsoPatches;
+                type = "NSO";
+            }
+            else if (StrEquals(AmsNroPatchDir, patchDir.Name))
+            {
+                patches = cache.NroPatches;
+                type = "NRO";
+            }
+            else if (StrEquals(AmsKipPatchDir, patchDir.Name))
+            {
+                patches = cache.KipPatches;
+                type = "KIP";
+            }
+            else
+            {
+                return;
+            }
 
             foreach (var modDir in patchDir.EnumerateDirectories())
             {
-                patches.Add(new Mod<DirectoryInfo>(modDir.Name, modDir));
+                patches.Add(new Mod<DirectoryInfo>(modDir.Name, modDir, true));
                 Logger.Info?.Print(LogClass.ModLoader, $"Found {type} patch '{modDir.Name}'");
             }
         }
 
-        public static void QueryTitleDir(ModCache mods, DirectoryInfo titleDir)
+        private static void QueryTitleDir(ModCache mods, DirectoryInfo titleDir, ulong titleId)
         {
-            if (!titleDir.Exists) return;
+            if (!titleDir.Exists)
+            {
+                return;
+            }
+
+            string modJsonPath = Path.Combine(AppDataManager.GamesDirPath, titleId.ToString("x16"), "mods.json");
+            ModMetadata modMetadata = new();
+
+            try
+            {
+                modMetadata = JsonHelper.DeserializeFromFile(modJsonPath, _serializerContext.ModMetadata);
+            }
+            catch
+            {
+                Logger.Warning?.Print(LogClass.ModLoader, $"Failed to deserialize mod data for {titleId} at {modJsonPath}");
+            }
 
             var fsFile = new FileInfo(Path.Combine(titleDir.FullName, RomfsContainer));
             if (fsFile.Exists)
             {
-                mods.RomfsContainers.Add(new Mod<FileInfo>($"<{titleDir.Name} RomFs>", fsFile));
+                bool enabled;
+
+                try
+                {
+                    var modData = modMetadata.Mods.Find(x => fsFile.FullName.Contains(x.Path));
+                    enabled = modData.Enabled;
+                }
+                catch
+                {
+                    // Mod is not in the list yet. New mods should be enabled by default.
+                    enabled = true;
+                }
+
+                mods.RomfsContainers.Add(new Mod<FileInfo>($"<{titleDir.Name} RomFs>", fsFile, enabled));
             }
 
             fsFile = new FileInfo(Path.Combine(titleDir.FullName, ExefsContainer));
             if (fsFile.Exists)
             {
-                mods.ExefsContainers.Add(new Mod<FileInfo>($"<{titleDir.Name} ExeFs>", fsFile));
+                bool enabled;
+
+                try
+                {
+                    var modData = modMetadata.Mods.Find(x => fsFile.FullName.Contains(x.Path));
+                    enabled = modData.Enabled;
+                }
+                catch
+                {
+                    // Mod is not in the list yet. New mods should be enabled by default.
+                    enabled = true;
+                }
+
+                mods.ExefsContainers.Add(new Mod<FileInfo>($"<{titleDir.Name} ExeFs>", fsFile, enabled));
             }
 
-            System.Text.StringBuilder types = new System.Text.StringBuilder(5);
-
-            foreach (var modDir in titleDir.EnumerateDirectories())
-            {
-                types.Clear();
-                Mod<DirectoryInfo> mod = new Mod<DirectoryInfo>("", null);
-
-                if (StrEquals(RomfsDir, modDir.Name))
-                {
-                    mods.RomfsDirs.Add(mod = new Mod<DirectoryInfo>($"<{titleDir.Name} RomFs>", modDir));
-                    types.Append('R');
-                }
-                else if (StrEquals(ExefsDir, modDir.Name))
-                {
-                    mods.ExefsDirs.Add(mod = new Mod<DirectoryInfo>($"<{titleDir.Name} ExeFs>", modDir));
-                    types.Append('E');
-                }
-                else if (StrEquals(CheatDir, modDir.Name))
-                {
-                    for (int i = 0; i < QueryCheatsDir(mods, modDir); i++)
-                    {
-                        types.Append('C');
-                    }
-                }
-                else
-                {
-                    var romfs = new DirectoryInfo(Path.Combine(modDir.FullName, RomfsDir));
-                    var exefs = new DirectoryInfo(Path.Combine(modDir.FullName, ExefsDir));
-                    var cheat = new DirectoryInfo(Path.Combine(modDir.FullName, CheatDir));
-
-                    if (romfs.Exists)
-                    {
-                        mods.RomfsDirs.Add(mod = new Mod<DirectoryInfo>(modDir.Name, romfs));
-                        types.Append('R');
-                    }
-
-                    if (exefs.Exists)
-                    {
-                        mods.ExefsDirs.Add(mod = new Mod<DirectoryInfo>(modDir.Name, exefs));
-                        types.Append('E');
-                    }
-
-                    if (cheat.Exists)
-                    {
-                        for (int i = 0; i < QueryCheatsDir(mods, cheat); i++)
-                        {
-                            types.Append('C');
-                        }
-                    }
-                }
-
-                if (types.Length > 0) Logger.Info?.Print(LogClass.ModLoader, $"Found mod '{mod.Name}' [{types}]");
-            }
+            AddModsFromDirectory(mods, titleDir, titleDir.Name);
         }
 
         public static void QueryContentsDir(ModCache mods, DirectoryInfo contentsDir, ulong titleId)
         {
-            if (!contentsDir.Exists) return;
+            if (!contentsDir.Exists)
+            {
+                return;
+            }
 
             Logger.Info?.Print(LogClass.ModLoader, $"Searching mods for {((titleId & 0x1000) != 0 ? "DLC" : "Title")} {titleId:X16}");
 
@@ -270,7 +358,7 @@ namespace Ryujinx.HLE.HOS
 
             if (titleDir != null)
             {
-                QueryTitleDir(mods, titleDir);
+                QueryTitleDir(mods, titleDir, titleId);
             }
         }
 
@@ -302,9 +390,16 @@ namespace Ryujinx.HLE.HOS
                     continue;
                 }
 
+                int oldCheatsCount = mods.Cheats.Count;
+
                 // A cheat file can contain several cheats for the same executable, so the file must be parsed in
                 // order to properly enumerate them.
                 mods.Cheats.AddRange(GetCheatsInFile(file));
+
+                if (mods.Cheats.Count - oldCheatsCount > 0)
+                {
+                    numMods++;
+                }
             }
 
             return numMods;
@@ -313,57 +408,54 @@ namespace Ryujinx.HLE.HOS
         private static IEnumerable<Cheat> GetCheatsInFile(FileInfo cheatFile)
         {
             string cheatName = DefaultCheatName;
-            List<string> instructions = new List<string>();
-            List<Cheat> cheats = new List<Cheat>();
+            List<string> instructions = new();
+            List<Cheat> cheats = new();
 
-            using (StreamReader cheatData = cheatFile.OpenText())
+            using StreamReader cheatData = cheatFile.OpenText();
+            while (cheatData.ReadLine() is { } line)
             {
-                string line;
-                while ((line = cheatData.ReadLine()) != null)
+                line = line.Trim();
+
+                if (line.StartsWith('['))
                 {
-                    line = line.Trim();
-
-                    if (line.StartsWith('['))
+                    // This line starts a new cheat section.
+                    if (!line.EndsWith(']') || line.Length < 3)
                     {
-                        // This line starts a new cheat section.
-                        if (!line.EndsWith(']') || line.Length < 3)
-                        {
-                            // Skip the entire file if there's any error while parsing the cheat file.
+                        // Skip the entire file if there's any error while parsing the cheat file.
 
-                            Logger.Warning?.Print(LogClass.ModLoader, $"Ignoring cheat '{cheatFile.FullName}' because it is malformed");
+                        Logger.Warning?.Print(LogClass.ModLoader, $"Ignoring cheat '{cheatFile.FullName}' because it is malformed");
 
-                            return new List<Cheat>();
-                        }
-
-                        // Add the previous section to the list.
-                        if (instructions.Count != 0)
-                        {
-                            cheats.Add(new Cheat($"<{cheatName} Cheat>", cheatFile, instructions));
-                        }
-
-                        // Start a new cheat section.
-                        cheatName = line.Substring(1, line.Length - 2);
-                        instructions = new List<string>();
+                        return Array.Empty<Cheat>();
                     }
-                    else if (line.Length > 0)
+
+                    // Add the previous section to the list.
+                    if (instructions.Count > 0)
                     {
-                        // The line contains an instruction.
-                        instructions.Add(line);
+                        cheats.Add(new Cheat($"<{cheatName} Cheat>", cheatFile, instructions));
                     }
+
+                    // Start a new cheat section.
+                    cheatName = line[1..^1];
+                    instructions = new List<string>();
                 }
-
-                // Add the last section being processed.
-                if (instructions.Count != 0)
+                else if (line.Length > 0)
                 {
-                    cheats.Add(new Cheat($"<{cheatName} Cheat>", cheatFile, instructions));
+                    // The line contains an instruction.
+                    instructions.Add(line);
                 }
+            }
+
+            // Add the last section being processed.
+            if (instructions.Count > 0)
+            {
+                cheats.Add(new Cheat($"<{cheatName} Cheat>", cheatFile, instructions));
             }
 
             return cheats;
         }
 
         // Assumes searchDirPaths don't overlap
-        public static void CollectMods(Dictionary<ulong, ModCache> modCaches, PatchCache patches, params string[] searchDirPaths)
+        private static void CollectMods(Dictionary<ulong, ModCache> modCaches, PatchCache patches)
         {
             static bool IsPatchesDir(string name) => StrEquals(AmsNsoPatchDir, name) ||
                                                      StrEquals(AmsNroPatchDir, name) ||
@@ -375,7 +467,7 @@ namespace Ryujinx.HLE.HOS
             {
                 if (IsContentsDir(searchDir.Name))
                 {
-                    foreach (var (titleId, cache) in modCaches)
+                    foreach ((ulong titleId, ModCache cache) in modCaches)
                     {
                         QueryContentsDir(cache, searchDir, titleId);
                     }
@@ -392,42 +484,39 @@ namespace Ryujinx.HLE.HOS
                 return false;
             }
 
-            foreach (var path in searchDirPaths)
+            var searchDir = new DirectoryInfo(GetModsBasePath());
+            if (!searchDir.Exists)
             {
-                var searchDir = new DirectoryInfo(path);
-                if (!searchDir.Exists)
-                {
-                    Logger.Warning?.Print(LogClass.ModLoader, $"Mod Search Dir '{searchDir.FullName}' doesn't exist");
-                    continue;
-                }
+                Logger.Warning?.Print(LogClass.ModLoader, $"Mod Search Dir '{searchDir.FullName}' doesn't exist");
+                return;
+            }
 
-                if (!TryQuery(searchDir, patches, modCaches))
+            if (!TryQuery(searchDir, patches, modCaches))
+            {
+                foreach (var subdir in searchDir.EnumerateDirectories())
                 {
-                    foreach (var subdir in searchDir.EnumerateDirectories())
-                    {
-                        TryQuery(subdir, patches, modCaches);
-                    }
+                    TryQuery(subdir, patches, modCaches);
                 }
             }
 
             patches.Initialized = true;
         }
 
-        public void CollectMods(IEnumerable<ulong> titles, params string[] searchDirPaths)
+        public void CollectMods(IEnumerable<ulong> titles)
         {
             Clear();
 
             foreach (ulong titleId in titles)
             {
-                AppMods[titleId] = new ModCache();
+                _appMods[titleId] = new ModCache();
             }
 
-            CollectMods(AppMods, Patches, searchDirPaths);
+            CollectMods(_appMods, _patches);
         }
 
         internal IStorage ApplyRomFsMods(ulong titleId, IStorage baseStorage)
         {
-            if (!AppMods.TryGetValue(titleId, out ModCache mods) || mods.RomfsDirs.Count + mods.RomfsContainers.Count == 0)
+            if (!_appMods.TryGetValue(titleId, out ModCache mods) || mods.RomfsDirs.Count + mods.RomfsContainers.Count == 0)
             {
                 return baseStorage;
             }
@@ -441,6 +530,11 @@ namespace Ryujinx.HLE.HOS
             // Prioritize loose files first
             foreach (var mod in mods.RomfsDirs)
             {
+                if (!mod.Enabled)
+                {
+                    continue;
+                }
+
                 using (IFileSystem fs = new LocalFileSystem(mod.Path.FullName))
                 {
                     AddFiles(fs, mod.Name, fileSet, builder);
@@ -451,6 +545,11 @@ namespace Ryujinx.HLE.HOS
             // Then files inside images
             foreach (var mod in mods.RomfsContainers)
             {
+                if (!mod.Enabled)
+                {
+                    continue;
+                }
+
                 Logger.Info?.Print(LogClass.ModLoader, $"Found 'romfs.bin' for Title {titleId:X16}");
                 using (IFileSystem fs = new RomFsFileSystem(mod.Path.OpenRead().AsStorage()))
                 {
@@ -487,7 +586,7 @@ namespace Ryujinx.HLE.HOS
             return newStorage;
         }
 
-        private static void AddFiles(IFileSystem fs, string modName, HashSet<string> fileSet, RomFsBuilder builder)
+        private static void AddFiles(IFileSystem fs, string modName, ISet<string> fileSet, RomFsBuilder builder)
         {
             foreach (var entry in fs.EnumerateEntries()
                                     .Where(f => f.Type == DirectoryEntryType.File)
@@ -509,7 +608,7 @@ namespace Ryujinx.HLE.HOS
 
         internal bool ReplaceExefsPartition(ulong titleId, ref IFileSystem exefs)
         {
-            if (!AppMods.TryGetValue(titleId, out ModCache mods) || mods.ExefsContainers.Count == 0)
+            if (!_appMods.TryGetValue(titleId, out ModCache mods) || mods.ExefsContainers.Count == 0)
             {
                 return false;
             }
@@ -519,7 +618,7 @@ namespace Ryujinx.HLE.HOS
                 Logger.Warning?.Print(LogClass.ModLoader, "Multiple ExeFS partition replacements detected");
             }
 
-            Logger.Info?.Print(LogClass.ModLoader, $"Using replacement ExeFS partition");
+            Logger.Info?.Print(LogClass.ModLoader, "Using replacement ExeFS partition");
 
             exefs = new PartitionFileSystem(mods.ExefsContainers[0].Path.OpenRead().AsStorage());
 
@@ -537,31 +636,36 @@ namespace Ryujinx.HLE.HOS
 
         internal ModLoadResult ApplyExefsMods(ulong titleId, NsoExecutable[] nsos)
         {
-            ModLoadResult modLoadResult = new ModLoadResult
+            ModLoadResult modLoadResult = new()
             {
                 Stubs = new BitVector32(),
-                Replaces = new BitVector32()
+                Replaces = new BitVector32(),
             };
 
-            if (!AppMods.TryGetValue(titleId, out ModCache mods) || mods.ExefsDirs.Count == 0)
+            if (!_appMods.TryGetValue(titleId, out ModCache mods) || mods.ExefsDirs.Count == 0)
             {
                 return modLoadResult;
             }
 
             if (nsos.Length != ProcessConst.ExeFsPrefixes.Length)
             {
-                throw new ArgumentOutOfRangeException("NSO Count is incorrect");
+                throw new ArgumentOutOfRangeException(nameof(nsos), nsos.Length, "NSO Count is incorrect");
             }
 
             var exeMods = mods.ExefsDirs;
 
             foreach (var mod in exeMods)
             {
+                if (!mod.Enabled)
+                {
+                    continue;
+                }
+
                 for (int i = 0; i < ProcessConst.ExeFsPrefixes.Length; ++i)
                 {
                     var nsoName = ProcessConst.ExeFsPrefixes[i];
 
-                    FileInfo nsoFile = new FileInfo(Path.Combine(mod.Path.FullName, nsoName));
+                    FileInfo nsoFile = new(Path.Combine(mod.Path.FullName, nsoName));
                     if (nsoFile.Exists)
                     {
                         if (modLoadResult.Replaces[1 << i])
@@ -580,7 +684,7 @@ namespace Ryujinx.HLE.HOS
                     modLoadResult.Stubs[1 << i] |= File.Exists(Path.Combine(mod.Path.FullName, nsoName + StubExtension));
                 }
 
-                FileInfo npdmFile = new FileInfo(Path.Combine(mod.Path.FullName, "main.npdm"));
+                FileInfo npdmFile = new(Path.Combine(mod.Path.FullName, "main.npdm"));
                 if (npdmFile.Exists)
                 {
                     if (modLoadResult.Npdm != null)
@@ -611,9 +715,12 @@ namespace Ryujinx.HLE.HOS
 
         internal void ApplyNroPatches(NroExecutable nro)
         {
-            var nroPatches = Patches.NroPatches;
+            var nroPatches = _patches.NroPatches;
 
-            if (nroPatches.Count == 0) return;
+            if (nroPatches.Count == 0)
+            {
+                return;
+            }
 
             // NRO patches aren't offset relative to header unlike NSO
             // according to Atmosphere's ro patcher module
@@ -622,9 +729,9 @@ namespace Ryujinx.HLE.HOS
 
         internal bool ApplyNsoPatches(ulong titleId, params IExecutable[] programs)
         {
-            IEnumerable<Mod<DirectoryInfo>> nsoMods = Patches.NsoPatches;
+            IEnumerable<Mod<DirectoryInfo>> nsoMods = _patches.NsoPatches;
 
-            if (AppMods.TryGetValue(titleId, out ModCache mods))
+            if (_appMods.TryGetValue(titleId, out ModCache mods))
             {
                 nsoMods = nsoMods.Concat(mods.ExefsDirs);
             }
@@ -636,7 +743,7 @@ namespace Ryujinx.HLE.HOS
 
         internal void LoadCheats(ulong titleId, ProcessTamperInfo tamperInfo, TamperMachine tamperMachine)
         {
-            if (tamperInfo == null || tamperInfo.BuildIds == null || tamperInfo.CodeAddresses == null)
+            if (tamperInfo?.BuildIds == null || tamperInfo.CodeAddresses == null)
             {
                 Logger.Error?.Print(LogClass.ModLoader, "Unable to install cheat because the associated process is invalid");
 
@@ -645,14 +752,14 @@ namespace Ryujinx.HLE.HOS
 
             Logger.Info?.Print(LogClass.ModLoader, $"Build ids found for title {titleId:X16}:\n    {String.Join("\n    ", tamperInfo.BuildIds)}");
 
-            if (!AppMods.TryGetValue(titleId, out ModCache mods) || mods.Cheats.Count == 0)
+            if (!_appMods.TryGetValue(titleId, out ModCache mods) || mods.Cheats.Count == 0)
             {
                 return;
             }
 
             var cheats = mods.Cheats;
             var processExes = tamperInfo.BuildIds.Zip(tamperInfo.CodeAddresses, (k, v) => new { k, v })
-                .ToDictionary(x => x.k.Substring(0, Math.Min(Cheat.CheatIdSize, x.k.Length)), x => x.v);
+                .ToDictionary(x => x.k[..Math.Min(Cheat.CheatIdSize, x.k.Length)], x => x.v);
 
             foreach (var cheat in cheats)
             {
@@ -673,7 +780,7 @@ namespace Ryujinx.HLE.HOS
             EnableCheats(titleId, tamperMachine);
         }
 
-        internal void EnableCheats(ulong titleId, TamperMachine tamperMachine)
+        internal static void EnableCheats(ulong titleId, TamperMachine tamperMachine)
         {
             var contentDirectory = FindTitleDir(new DirectoryInfo(Path.Combine(GetModsBasePath(), AmsContentsDir)), $"{titleId:x16}");
             string enabledCheatsPath = Path.Combine(contentDirectory.FullName, CheatDir, "enabled.txt");
@@ -699,7 +806,7 @@ namespace Ryujinx.HLE.HOS
             {
                 NsoExecutable nso => Convert.ToHexString(nso.BuildId.ItemsRo.ToArray()).TrimEnd('0'),
                 NroExecutable nro => Convert.ToHexString(nro.Header.BuildId).TrimEnd('0'),
-                _ => string.Empty
+                _ => string.Empty,
             }).ToList();
 
             int GetIndex(string buildId) => buildIds.FindIndex(id => id == buildId); // O(n) but list is small
@@ -707,6 +814,11 @@ namespace Ryujinx.HLE.HOS
             // Collect patches
             foreach (var mod in mods)
             {
+                if (!mod.Enabled)
+                {
+                    continue;
+                }
+
                 var patchDir = mod.Path;
                 foreach (var patchFile in patchDir.EnumerateFiles())
                 {

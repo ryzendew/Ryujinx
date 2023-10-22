@@ -5,7 +5,7 @@ namespace Ryujinx.Graphics.OpenGL.Queries
 {
     class Counters : IDisposable
     {
-        private CounterQueue[] _counterQueues;
+        private readonly CounterQueue[] _counterQueues;
 
         public Counters()
         {
@@ -14,18 +14,18 @@ namespace Ryujinx.Graphics.OpenGL.Queries
             _counterQueues = new CounterQueue[count];
         }
 
-        public void Initialize(Pipeline pipeline)
+        public void Initialize()
         {
             for (int index = 0; index < _counterQueues.Length; index++)
             {
                 CounterType type = (CounterType)index;
-                _counterQueues[index] = new CounterQueue(pipeline, type);
+                _counterQueues[index] = new CounterQueue(type);
             }
         }
 
-        public CounterQueueEvent QueueReport(CounterType type, EventHandler<ulong> resultHandler, ulong lastDrawIndex, bool hostReserved)
+        public CounterQueueEvent QueueReport(CounterType type, EventHandler<ulong> resultHandler, float divisor, ulong lastDrawIndex, bool hostReserved)
         {
-            return _counterQueues[(int)type].QueueReport(resultHandler, lastDrawIndex, hostReserved);
+            return _counterQueues[(int)type].QueueReport(resultHandler, divisor, lastDrawIndex, hostReserved);
         }
 
         public void QueueReset(CounterType type)

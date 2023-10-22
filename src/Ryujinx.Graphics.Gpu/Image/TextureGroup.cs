@@ -1,10 +1,10 @@
 ﻿using Ryujinx.Common.Memory;
-using Ryujinx.Cpu.Tracking;
 using Ryujinx.Graphics.GAL;
 using Ryujinx.Graphics.Gpu.Memory;
 using Ryujinx.Graphics.Texture;
 using Ryujinx.Memory;
 using Ryujinx.Memory.Range;
+using Ryujinx.Memory.Tracking;
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
@@ -68,16 +68,22 @@ namespace Ryujinx.Graphics.Gpu.Image
         /// </summary>
         public bool HasIncompatibleOverlaps => _incompatibleOverlaps.Count > 0;
 
+        /// <summary>
+        /// Number indicating the order this texture group was modified relative to others.
+        /// </summary>
+        public long ModifiedSequence { get; private set; }
+
         private readonly GpuContext _context;
         private readonly PhysicalMemory _physicalMemory;
 
         private int[] _allOffsets;
         private int[] _sliceSizes;
-        private bool _is3D;
+        private readonly bool _is3D;
+        private readonly bool _isBuffer;
         private bool _hasMipViews;
         private bool _hasLayerViews;
-        private int _layers;
-        private int _levels;
+        private readonly int _layers;
+        private readonly int _levels;
 
         private MultiRange TextureRange => Storage.Range;
 
@@ -91,9 +97,9 @@ namespace Ryujinx.Graphics.Gpu.Image
         /// <summary>
         /// Other texture groups that have incompatible overlaps with this one.
         /// </summary>
-        private List<TextureIncompatibleOverlap> _incompatibleOverlaps;
+        private readonly List<TextureIncompatibleOverlap> _incompatibleOverlaps;
         private bool _incompatibleOverlapsDirty = true;
-        private bool _flushIncompatibleOverlaps;
+        private readonly bool _flushIncompatibleOverlaps;
 
         private BufferHandle _flushBuffer;
         private bool _flushBufferImported;
@@ -113,6 +119,7 @@ namespace Ryujinx.Graphics.Gpu.Image
             _physicalMemory = physicalMemory;
 
             _is3D = storage.Info.Target == Target.Texture3D;
+            _isBuffer = storage.Info.Target == Target.TextureBuffer;
             _layers = storage.Info.GetSlices();
             _levels = storage.Info.Levels;
 
@@ -255,7 +262,7 @@ namespace Ryujinx.Graphics.Gpu.Image
                 {
                     TextureGroupHandle group = _handles[baseHandle + i];
 
-                    foreach (CpuRegionHandle handle in group.Handles)
+                    foreach (RegionHandle handle in group.Handles)
                     {
                         if (handle.Dirty)
                         {
@@ -271,6 +278,24 @@ namespace Ryujinx.Graphics.Gpu.Image
             });
 
             return dirty;
+        }
+
+        /// <summary>
+        /// Discards all data for a given texture.
+        /// This clears all dirty flags, modified flags, and pending copies from other textures.
+        /// </summary>
+        /// <param name="texture">The texture being discarded</param>
+        public void DiscardData(Texture texture)
+        {
+            EvaluateRelevantHandles(texture, (baseHandle, regionCount, split) =>
+            {
+                for (int i = 0; i < regionCount; i++)
+                {
+                    TextureGroupHandle group = _handles[baseHandle + i];
+
+                    group.DiscardData();
+                }
+            });
         }
 
         /// <summary>
@@ -296,7 +321,7 @@ namespace Ryujinx.Graphics.Gpu.Image
                     bool handleDirty = false;
                     bool handleUnmapped = false;
 
-                    foreach (CpuRegionHandle handle in group.Handles)
+                    foreach (RegionHandle handle in group.Handles)
                     {
                         if (handle.Dirty)
                         {
@@ -418,7 +443,7 @@ namespace Ryujinx.Graphics.Gpu.Image
                             int offsetIndex = GetOffsetIndex(info.BaseLayer + layer, info.BaseLevel + level);
                             int offset = _allOffsets[offsetIndex];
 
-                            ReadOnlySpan<byte> data = dataSpan.Slice(offset - spanBase);
+                            ReadOnlySpan<byte> data = dataSpan[(offset - spanBase)..];
 
                             SpanOrArray<byte> result = Storage.ConvertToHostCompatibleFormat(data, info.BaseLevel + level, true);
 
@@ -664,6 +689,8 @@ namespace Ryujinx.Graphics.Gpu.Image
         /// <param name="texture">The texture that has been modified</param>
         public void SignalModified(Texture texture)
         {
+            ModifiedSequence = _context.GetModifiedSequence();
+
             ClearIncompatibleOverlaps(texture);
 
             EvaluateRelevantHandles(texture, (baseHandle, regionCount, split) =>
@@ -684,6 +711,8 @@ namespace Ryujinx.Graphics.Gpu.Image
         /// <param name="bound">True if this texture is being bound, false if unbound</param>
         public void SignalModifying(Texture texture, bool bound)
         {
+            ModifiedSequence = _context.GetModifiedSequence();
+
             ClearIncompatibleOverlaps(texture);
 
             EvaluateRelevantHandles(texture, (baseHandle, regionCount, split) =>
@@ -703,7 +732,7 @@ namespace Ryujinx.Graphics.Gpu.Image
         /// <param name="group">The group to register an action for</param>
         public void RegisterAction(TextureGroupHandle group)
         {
-            foreach (CpuRegionHandle handle in group.Handles)
+            foreach (RegionHandle handle in group.Handles)
             {
                 handle.RegisterAction((address, size) => FlushAction(group, address, size));
             }
@@ -767,7 +796,11 @@ namespace Ryujinx.Graphics.Gpu.Image
             int targetLayerHandles = _hasLayerViews ? slices : 1;
             int targetLevelHandles = _hasMipViews ? levels : 1;
 
-            if (_is3D)
+            if (_isBuffer)
+            {
+                return;
+            }
+            else if (_is3D)
             {
                 // Future mip levels come after all layers of the last mip level. Each mipmap has less layers (depth) than the last.
 
@@ -985,7 +1018,7 @@ namespace Ryujinx.Graphics.Gpu.Image
         /// <param name="address">The start address of the tracked region</param>
         /// <param name="size">The size of the tracked region</param>
         /// <returns>A CpuRegionHandle covering the given range</returns>
-        private CpuRegionHandle GenerateHandle(ulong address, ulong size)
+        private RegionHandle GenerateHandle(ulong address, ulong size)
         {
             return _physicalMemory.BeginTracking(address, size, ResourceKind.Texture);
         }
@@ -1005,7 +1038,7 @@ namespace Ryujinx.Graphics.Gpu.Image
             int endOffset = _allOffsets[viewEnd] + _sliceSizes[lastLevel];
             int size = endOffset - offset;
 
-            var result = new List<CpuRegionHandle>();
+            var result = new List<RegionHandle>();
 
             for (int i = 0; i < TextureRange.Count; i++)
             {
@@ -1050,7 +1083,7 @@ namespace Ryujinx.Graphics.Gpu.Image
                 views,
                 result.ToArray());
 
-            foreach (CpuRegionHandle handle in result)
+            foreach (RegionHandle handle in result)
             {
                 handle.RegisterDirtyEvent(() => DirtyAction(groupHandle));
             }
@@ -1248,7 +1281,7 @@ namespace Ryujinx.Graphics.Gpu.Image
                                 continue;
                             }
 
-                            foreach (CpuRegionHandle handle in groupHandle.Handles)
+                            foreach (RegionHandle handle in groupHandle.Handles)
                             {
                                 bool hasMatch = false;
 
@@ -1270,7 +1303,7 @@ namespace Ryujinx.Graphics.Gpu.Image
                     }
                     else
                     {
-                        foreach (CpuRegionHandle handle in groupHandle.Handles)
+                        foreach (RegionHandle handle in groupHandle.Handles)
                         {
                             handle.Reprotect();
                         }
@@ -1300,10 +1333,14 @@ namespace Ryujinx.Graphics.Gpu.Image
         {
             TextureGroupHandle[] handles;
 
-            if (!(_hasMipViews || _hasLayerViews))
+            if (_isBuffer)
+            {
+                handles = Array.Empty<TextureGroupHandle>();
+            }
+            else if (!(_hasMipViews || _hasLayerViews))
             {
                 // Single dirty region.
-                var cpuRegionHandles = new CpuRegionHandle[TextureRange.Count];
+                var cpuRegionHandles = new RegionHandle[TextureRange.Count];
                 int count = 0;
 
                 for (int i = 0; i < TextureRange.Count; i++)
@@ -1322,7 +1359,7 @@ namespace Ryujinx.Graphics.Gpu.Image
 
                 var groupHandle = new TextureGroupHandle(this, 0, Storage.Size, _views, 0, 0, 0, _allOffsets.Length, cpuRegionHandles);
 
-                foreach (CpuRegionHandle handle in cpuRegionHandles)
+                foreach (RegionHandle handle in cpuRegionHandles)
                 {
                     handle.RegisterDirtyEvent(() => DirtyAction(groupHandle));
                 }
@@ -1491,13 +1528,13 @@ namespace Ryujinx.Graphics.Gpu.Image
         {
             for (int i = 0; i < _allOffsets.Length; i++)
             {
-                (int layer, int level) = GetLayerLevelForView(i);
+                (_, int level) = GetLayerLevelForView(i);
                 MultiRange handleRange = Storage.Range.Slice((ulong)_allOffsets[i], 1);
                 ulong handleBase = handleRange.GetSubRange(0).Address;
 
                 for (int j = 0; j < other._handles.Length; j++)
                 {
-                    (int otherLayer, int otherLevel) = other.GetLayerLevelForView(j);
+                    (_, int otherLevel) = other.GetLayerLevelForView(j);
                     MultiRange otherHandleRange = other.Storage.Range.Slice((ulong)other._allOffsets[j], 1);
                     ulong otherHandleBase = otherHandleRange.GetSubRange(0).Address;
 

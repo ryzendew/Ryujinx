@@ -1,9 +1,39 @@
 ﻿using Ryujinx.Graphics.Shader.IntermediateRepresentation;
+using System.Collections.Generic;
 
 namespace Ryujinx.Graphics.Shader.Translation.Optimizations
 {
     static class Utils
     {
+        public static bool IsInputLoad(INode node)
+        {
+            return (node is Operation operation) &&
+                   operation.Inst == Instruction.Load &&
+                   operation.StorageKind == StorageKind.Input;
+        }
+
+        public static bool IsInputLoad(INode node, IoVariable ioVariable, int elemIndex)
+        {
+            if (node is not Operation operation ||
+                operation.Inst != Instruction.Load ||
+                operation.StorageKind != StorageKind.Input ||
+                operation.SourcesCount != 2)
+            {
+                return false;
+            }
+
+            Operand ioVariableSrc = operation.GetSource(0);
+
+            if (ioVariableSrc.Type != OperandType.Constant || (IoVariable)ioVariableSrc.Value != ioVariable)
+            {
+                return false;
+            }
+
+            Operand elemIndexSrc = operation.GetSource(1);
+
+            return elemIndexSrc.Type == OperandType.Constant && elemIndexSrc.Value == elemIndex;
+        }
+
         private static Operation FindBranchSource(BasicBlock block)
         {
             foreach (BasicBlock sourceBlock in block.Predecessors)
@@ -63,6 +93,18 @@ namespace Ryujinx.Graphics.Shader.Translation.Optimizations
             }
 
             return source;
+        }
+
+        public static void DeleteNode(LinkedListNode<INode> node, Operation operation)
+        {
+            node.List.Remove(node);
+
+            for (int srcIndex = 0; srcIndex < operation.SourcesCount; srcIndex++)
+            {
+                operation.SetSource(srcIndex, null);
+            }
+
+            operation.Dest = null;
         }
     }
 }

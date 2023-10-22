@@ -1,5 +1,6 @@
 using Ryujinx.Graphics.Shader.IntermediateRepresentation;
 using Ryujinx.Graphics.Shader.Translation;
+using System;
 using static Spv.Specification;
 
 namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
@@ -21,6 +22,7 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
                 IoVariable.FragmentCoord => (BuiltIn.FragCoord, AggregateType.Vector4 | AggregateType.FP32),
                 IoVariable.FragmentOutputDepth => (BuiltIn.FragDepth, AggregateType.FP32),
                 IoVariable.FrontFacing => (BuiltIn.FrontFacing, AggregateType.Bool),
+                IoVariable.GlobalId => (BuiltIn.GlobalInvocationId, AggregateType.Vector3 | AggregateType.U32),
                 IoVariable.InstanceId => (BuiltIn.InstanceId, AggregateType.S32),
                 IoVariable.InstanceIndex => (BuiltIn.InstanceIndex, AggregateType.S32),
                 IoVariable.InvocationId => (BuiltIn.InvocationId, AggregateType.S32),
@@ -45,7 +47,7 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
                 IoVariable.VertexIndex => (BuiltIn.VertexIndex, AggregateType.S32),
                 IoVariable.ViewportIndex => (BuiltIn.ViewportIndex, AggregateType.S32),
                 IoVariable.ViewportMask => (BuiltIn.ViewportMaskNV, AggregateType.Array | AggregateType.S32),
-                _ => (default, AggregateType.Invalid)
+                _ => (default, AggregateType.Invalid),
             };
         }
 
@@ -58,7 +60,7 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
                 IoVariable.TessellationLevelOuter => 4,
                 IoVariable.ViewportMask => 1,
                 IoVariable.UserDefined => MaxAttributes,
-                _ => 1
+                _ => 1,
             };
         }
 
@@ -74,13 +76,49 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
                 case IoVariable.ClipDistance:
                 case IoVariable.PointCoord:
                 case IoVariable.ViewportMask:
-                return !isOutput &&
-                       (stage == ShaderStage.TessellationControl ||
-                       stage == ShaderStage.TessellationEvaluation ||
-                       stage == ShaderStage.Geometry);
+                    return !isOutput &&
+                           stage is ShaderStage.TessellationControl or ShaderStage.TessellationEvaluation or ShaderStage.Geometry;
             }
 
             return false;
+        }
+
+        public static bool IsPerVertexBuiltIn(IoVariable ioVariable)
+        {
+            switch (ioVariable)
+            {
+                case IoVariable.Position:
+                case IoVariable.PointSize:
+                case IoVariable.ClipDistance:
+                    return true;
+            }
+
+            return false;
+        }
+
+        public static bool IsPerVertexArrayBuiltIn(StorageKind storageKind, ShaderStage stage)
+        {
+            if (storageKind == StorageKind.Output)
+            {
+                return stage == ShaderStage.TessellationControl;
+            }
+            else
+            {
+                return stage == ShaderStage.TessellationControl ||
+                       stage == ShaderStage.TessellationEvaluation ||
+                       stage == ShaderStage.Geometry;
+            }
+        }
+
+        public static int GetPerVertexStructFieldIndex(IoVariable ioVariable)
+        {
+            return ioVariable switch
+            {
+                IoVariable.Position => 0,
+                IoVariable.PointSize => 1,
+                IoVariable.ClipDistance => 2,
+                _ => throw new ArgumentException($"Invalid built-in variable {ioVariable}.")
+            };
         }
     }
 }

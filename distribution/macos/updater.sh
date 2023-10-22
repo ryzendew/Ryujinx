@@ -5,7 +5,7 @@ set -e
 INSTALL_DIRECTORY=$1
 NEW_APP_DIRECTORY=$2
 APP_PID=$3
-APP_ARGUMENTS="${@:4}"
+APP_ARGUMENTS=("${@:4}")
 
 error_handler() {
     local lineno="$1"
@@ -27,13 +27,31 @@ error_handler() {
 
 trap 'error_handler ${LINENO}' ERR
 
-# Wait for Ryujinx to exit
-# NOTE: in case no fds are open, lsof could be returning with a process still living.
-# We wait 1s and assume the process stopped after that
-lsof -p $APP_PID +r 1 &>/dev/null
+# Wait for Ryujinx to exit.
+# If the main process is still acitve, we wait for 1 second and check it again.
+# After the fifth time checking, this script exits with status 1.
+
+attempt=0
+while true; do
+    if lsof -p "$APP_PID" +r 1 &>/dev/null || ps -p "$APP_PID" &>/dev/null; then
+        if [ "$attempt" -eq 4 ]; then
+            exit 1
+        fi
+        sleep 1
+    else
+        break
+    fi
+    (( attempt++ ))
+done
+
 sleep 1
 
 # Now replace and reopen.
 rm -rf "$INSTALL_DIRECTORY"
 mv "$NEW_APP_DIRECTORY" "$INSTALL_DIRECTORY"
-open -a "$INSTALL_DIRECTORY" --args "$APP_ARGUMENTS"
+
+if [ "$#" -le 3 ]; then
+    open -a "$INSTALL_DIRECTORY"
+else
+    open -a "$INSTALL_DIRECTORY" --args "${APP_ARGUMENTS[@]}"
+fi

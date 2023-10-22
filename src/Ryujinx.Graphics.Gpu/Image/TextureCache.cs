@@ -31,7 +31,7 @@ namespace Ryujinx.Graphics.Gpu.Image
         }
 
         private const int OverlapsBufferInitialCapacity = 10;
-        private const int OverlapsBufferMaxCapacity     = 10000;
+        private const int OverlapsBufferMaxCapacity = 10000;
 
         private readonly GpuContext _context;
         private readonly PhysicalMemory _physicalMemory;
@@ -224,7 +224,7 @@ namespace Ryujinx.Graphics.Gpu.Image
             for (int i = 0; i < overlapCount; i++)
             {
                 var other = _textureOverlaps[i];
-                
+
                 if (texture != other &&
                     (texture.IsViewCompatible(other.Info, other.Range, true, other.LayerSize, _context.Capabilities, out _, out _) != TextureViewCompatibility.Incompatible ||
                     other.IsViewCompatible(texture.Info, texture.Range, true, texture.LayerSize, _context.Capabilities, out _, out _) != TextureViewCompatibility.Incompatible))
@@ -278,7 +278,7 @@ namespace Ryujinx.Graphics.Gpu.Image
                 width = copyTexture.Width;
             }
 
-            TextureInfo info = new TextureInfo(
+            TextureInfo info = new(
                 copyTexture.Address.Pack() + offset,
                 GetMinimumWidthInGob(width, sizeHint.Width, formatInfo.BytesPerPixel, copyTexture.LinearLayout),
                 copyTexture.Height,
@@ -311,7 +311,7 @@ namespace Ryujinx.Graphics.Gpu.Image
                 flags |= TextureSearchFlags.NoCreate;
             }
 
-            Texture texture = FindOrCreateTexture(memoryManager, flags, info, 0);
+            Texture texture = FindOrCreateTexture(memoryManager, flags, info, 0, sizeHint: sizeHint);
 
             texture?.SynchronizeMemory();
 
@@ -324,6 +324,7 @@ namespace Ryujinx.Graphics.Gpu.Image
         /// <param name="memoryManager">GPU memory manager where the texture is mapped</param>
         /// <param name="colorState">Color buffer texture to find or create</param>
         /// <param name="layered">Indicates if the texture might be accessed with a non-zero layer index</param>
+        /// <param name="discard">Indicates that the sizeHint region's data will be overwritten</param>
         /// <param name="samplesInX">Number of samples in the X direction, for MSAA</param>
         /// <param name="samplesInY">Number of samples in the Y direction, for MSAA</param>
         /// <param name="sizeHint">A hint indicating the minimum used size for the texture</param>
@@ -332,6 +333,7 @@ namespace Ryujinx.Graphics.Gpu.Image
             MemoryManager memoryManager,
             RtColorState colorState,
             bool layered,
+            bool discard,
             int samplesInX,
             int samplesInY,
             Size sizeHint)
@@ -371,16 +373,16 @@ namespace Ryujinx.Graphics.Gpu.Image
             // so the width we get here is the aligned width.
             if (isLinear)
             {
-                width  = colorState.WidthOrStride / formatInfo.BytesPerPixel;
+                width = colorState.WidthOrStride / formatInfo.BytesPerPixel;
                 stride = colorState.WidthOrStride;
             }
             else
             {
-                width  = colorState.WidthOrStride;
+                width = colorState.WidthOrStride;
                 stride = 0;
             }
 
-            TextureInfo info = new TextureInfo(
+            TextureInfo info = new(
                 colorState.Address.Pack(),
                 GetMinimumWidthInGob(width, sizeHint.Width, formatInfo.BytesPerPixel, isLinear),
                 colorState.Height,
@@ -398,7 +400,14 @@ namespace Ryujinx.Graphics.Gpu.Image
 
             int layerSize = !isLinear ? colorState.LayerSize * 4 : 0;
 
-            Texture texture = FindOrCreateTexture(memoryManager, TextureSearchFlags.WithUpscale, info, layerSize);
+            var flags = TextureSearchFlags.WithUpscale;
+
+            if (discard)
+            {
+                flags |= TextureSearchFlags.DiscardData;
+            }
+
+            Texture texture = FindOrCreateTexture(memoryManager, flags, info, layerSize, sizeHint: sizeHint);
 
             texture?.SynchronizeMemory();
 
@@ -412,6 +421,7 @@ namespace Ryujinx.Graphics.Gpu.Image
         /// <param name="dsState">Depth-stencil buffer texture to find or create</param>
         /// <param name="size">Size of the depth-stencil texture</param>
         /// <param name="layered">Indicates if the texture might be accessed with a non-zero layer index</param>
+        /// <param name="discard">Indicates that the sizeHint region's data will be overwritten</param>
         /// <param name="samplesInX">Number of samples in the X direction, for MSAA</param>
         /// <param name="samplesInY">Number of samples in the Y direction, for MSAA</param>
         /// <param name="sizeHint">A hint indicating the minimum used size for the texture</param>
@@ -421,6 +431,7 @@ namespace Ryujinx.Graphics.Gpu.Image
             RtDepthStencilState dsState,
             Size3D size,
             bool layered,
+            bool discard,
             int samplesInX,
             int samplesInY,
             Size sizeHint)
@@ -449,7 +460,7 @@ namespace Ryujinx.Graphics.Gpu.Image
 
             FormatInfo formatInfo = dsState.Format.Convert();
 
-            TextureInfo info = new TextureInfo(
+            TextureInfo info = new(
                 dsState.Address.Pack(),
                 GetMinimumWidthInGob(size.Width, sizeHint.Width, formatInfo.BytesPerPixel, false),
                 size.Height,
@@ -465,7 +476,14 @@ namespace Ryujinx.Graphics.Gpu.Image
                 target,
                 formatInfo);
 
-            Texture texture = FindOrCreateTexture(memoryManager, TextureSearchFlags.WithUpscale, info, dsState.LayerSize * 4);
+            var flags = TextureSearchFlags.WithUpscale;
+
+            if (discard)
+            {
+                flags |= TextureSearchFlags.DiscardData;
+            }
+
+            Texture texture = FindOrCreateTexture(memoryManager, flags, info, dsState.LayerSize * 4, sizeHint: sizeHint);
 
             texture?.SynchronizeMemory();
 
@@ -501,12 +519,44 @@ namespace Ryujinx.Graphics.Gpu.Image
         }
 
         /// <summary>
+        /// Determines if texture data should be fully discarded
+        /// based on the size hint region and whether it is set to be discarded.
+        /// </summary>
+        /// <param name="discard">Whether the size hint region should be discarded</param>
+        /// <param name="texture">The texture being discarded</param>
+        /// <param name="sizeHint">A hint indicating the minimum used size for the texture</param>
+        /// <returns>True if the data should be discarded, false otherwise</returns>
+        private static bool ShouldDiscard(bool discard, Texture texture, Size? sizeHint)
+        {
+            return discard &&
+                texture.Info.DepthOrLayers == 1 &&
+                sizeHint != null &&
+                texture.Width <= sizeHint.Value.Width &&
+                texture.Height <= sizeHint.Value.Height;
+        }
+
+        /// <summary>
+        /// Discards texture data if requested and possible.
+        /// </summary>
+        /// <param name="discard">Whether the size hint region should be discarded</param>
+        /// <param name="texture">The texture being discarded</param>
+        /// <param name="sizeHint">A hint indicating the minimum used size for the texture</param>
+        private static void DiscardIfNeeded(bool discard, Texture texture, Size? sizeHint)
+        {
+            if (ShouldDiscard(discard, texture, sizeHint))
+            {
+                texture.DiscardData();
+            }
+        }
+
+        /// <summary>
         /// Tries to find an existing texture, or create a new one if not found.
         /// </summary>
         /// <param name="memoryManager">GPU memory manager where the texture is mapped</param>
         /// <param name="flags">The texture search flags, defines texture comparison rules</param>
         /// <param name="info">Texture information of the texture to be found or created</param>
         /// <param name="layerSize">Size in bytes of a single texture layer</param>
+        /// <param name="sizeHint">A hint indicating the minimum used size for the texture</param>
         /// <param name="range">Optional ranges of physical memory where the texture data is located</param>
         /// <returns>The texture</returns>
         public Texture FindOrCreateTexture(
@@ -514,9 +564,11 @@ namespace Ryujinx.Graphics.Gpu.Image
             TextureSearchFlags flags,
             TextureInfo info,
             int layerSize = 0,
+            Size? sizeHint = null,
             MultiRange? range = null)
         {
             bool isSamplerTexture = (flags & TextureSearchFlags.ForSampler) != 0;
+            bool discard = (flags & TextureSearchFlags.DiscardData) != 0;
 
             TextureScaleMode scaleMode = IsUpscaleCompatible(info, (flags & TextureSearchFlags.WithUpscale) != 0);
 
@@ -569,7 +621,7 @@ namespace Ryujinx.Graphics.Gpu.Image
 
             Texture texture = null;
 
-            TextureMatchQuality bestQuality = TextureMatchQuality.NoMatch;
+            long bestSequence = 0;
 
             for (int index = 0; index < sameAddressOverlapsCount; index++)
             {
@@ -601,22 +653,19 @@ namespace Ryujinx.Graphics.Gpu.Image
                             continue;
                         }
                     }
-                }
 
-                if (matchQuality == TextureMatchQuality.Perfect)
-                {
-                    texture = overlap;
-                    break;
-                }
-                else if (matchQuality > bestQuality)
-                {
-                    texture = overlap;
-                    bestQuality = matchQuality;
+                    if (texture == null || overlap.Group.ModifiedSequence - bestSequence > 0)
+                    {
+                        texture = overlap;
+                        bestSequence = overlap.Group.ModifiedSequence;
+                    }
                 }
             }
 
             if (texture != null)
             {
+                DiscardIfNeeded(discard, texture, sizeHint);
+
                 texture.SynchronizeMemory();
 
                 return texture;
@@ -647,11 +696,14 @@ namespace Ryujinx.Graphics.Gpu.Image
             }
 
             // Find view compatible matches.
-            int overlapsCount;
+            int overlapsCount = 0;
 
-            lock (_textures)
+            if (info.Target != Target.TextureBuffer)
             {
-                overlapsCount = _textures.FindOverlaps(range.Value, ref _textureOverlaps);
+                lock (_textures)
+                {
+                    overlapsCount = _textures.FindOverlaps(range.Value, ref _textureOverlaps);
+                }
             }
 
             if (_overlapInfo.Length != _textureOverlaps.Length)
@@ -664,6 +716,7 @@ namespace Ryujinx.Graphics.Gpu.Image
             int fullyCompatible = 0;
 
             // Evaluate compatibility of overlaps, add temporary references
+            int preferredOverlap = -1;
 
             for (int index = 0; index < overlapsCount; index++)
             {
@@ -675,17 +728,26 @@ namespace Ryujinx.Graphics.Gpu.Image
                     sizeInfo.LayerSize,
                     _context.Capabilities,
                     out int firstLayer,
-                    out int firstLevel);
+                    out int firstLevel,
+                    flags);
 
-                if (overlapCompatibility == TextureViewCompatibility.Full)
+                if (overlapCompatibility >= TextureViewCompatibility.FormatAlias)
                 {
                     if (overlap.IsView)
                     {
-                        overlapCompatibility = TextureViewCompatibility.CopyOnly;
+                        overlapCompatibility = overlapCompatibility == TextureViewCompatibility.FormatAlias ?
+                            TextureViewCompatibility.Incompatible :
+                            TextureViewCompatibility.CopyOnly;
                     }
                     else
                     {
                         fullyCompatible++;
+
+                        if (preferredOverlap == -1 || overlap.Group.ModifiedSequence - bestSequence > 0)
+                        {
+                            preferredOverlap = index;
+                            bestSequence = overlap.Group.ModifiedSequence;
+                        }
                     }
                 }
 
@@ -695,37 +757,50 @@ namespace Ryujinx.Graphics.Gpu.Image
 
             // Search through the overlaps to find a compatible view and establish any copy dependencies.
 
-            for (int index = 0; index < overlapsCount; index++)
+            if (preferredOverlap != -1)
             {
-                Texture overlap = _textureOverlaps[index];
-                OverlapInfo oInfo = _overlapInfo[index];
+                Texture overlap = _textureOverlaps[preferredOverlap];
+                OverlapInfo oInfo = _overlapInfo[preferredOverlap];
 
-                if (oInfo.Compatibility == TextureViewCompatibility.Full)
+                bool aliased = oInfo.Compatibility == TextureViewCompatibility.FormatAlias;
+
+                if (!isSamplerTexture)
                 {
-                    if (!isSamplerTexture)
-                    {
-                        // If this is not a sampler texture, the size might be different from the requested size,
-                        // so we need to make sure the texture information has the correct size for this base texture,
-                        // before creating the view.
-                        info = info.CreateInfoForLevelView(overlap, oInfo.FirstLevel);
-                    }
+                    // If this is not a sampler texture, the size might be different from the requested size,
+                    // so we need to make sure the texture information has the correct size for this base texture,
+                    // before creating the view.
 
-                    texture = overlap.CreateView(info, sizeInfo, range.Value, oInfo.FirstLayer, oInfo.FirstLevel);
-                    texture.SynchronizeMemory();
-                    break;
+                    info = info.CreateInfoForLevelView(overlap, oInfo.FirstLevel, aliased);
                 }
-                else if (oInfo.Compatibility == TextureViewCompatibility.CopyOnly && fullyCompatible == 0)
+                else if (aliased)
                 {
-                    // Only copy compatible. If there's another choice for a FULLY compatible texture, choose that instead.
+                    // The format must be changed to match the parent.
+                    info = info.CreateInfoWithFormat(overlap.Info.FormatInfo);
+                }
 
-                    texture = new Texture(_context, _physicalMemory, info, sizeInfo, range.Value, scaleMode);
+                texture = overlap.CreateView(info, sizeInfo, range.Value, oInfo.FirstLayer, oInfo.FirstLevel);
+                texture.SynchronizeMemory();
+            }
+            else
+            {
+                for (int index = 0; index < overlapsCount; index++)
+                {
+                    Texture overlap = _textureOverlaps[index];
+                    OverlapInfo oInfo = _overlapInfo[index];
 
-                    texture.InitializeGroup(true, true, new List<TextureIncompatibleOverlap>());
-                    texture.InitializeData(false, false);
+                    if (oInfo.Compatibility == TextureViewCompatibility.CopyOnly && fullyCompatible == 0)
+                    {
+                        // Only copy compatible. If there's another choice for a FULLY compatible texture, choose that instead.
 
-                    overlap.SynchronizeMemory();
-                    overlap.CreateCopyDependency(texture, oInfo.FirstLayer, oInfo.FirstLevel, true);
-                    break;
+                        texture = new Texture(_context, _physicalMemory, info, sizeInfo, range.Value, scaleMode);
+
+                        texture.InitializeGroup(true, true, new List<TextureIncompatibleOverlap>());
+                        texture.InitializeData(false, false);
+
+                        overlap.SynchronizeMemory();
+                        overlap.CreateCopyDependency(texture, oInfo.FirstLayer, oInfo.FirstLevel, true);
+                        break;
+                    }
                 }
             }
 
@@ -740,7 +815,7 @@ namespace Ryujinx.Graphics.Gpu.Image
                     Texture overlap = _textureOverlaps[index];
                     OverlapInfo oInfo = _overlapInfo[index];
 
-                    if (oInfo.Compatibility <= TextureViewCompatibility.LayoutIncompatible)
+                    if (oInfo.Compatibility <= TextureViewCompatibility.LayoutIncompatible || oInfo.Compatibility == TextureViewCompatibility.FormatAlias)
                     {
                         if (!overlap.IsView && texture.DataOverlaps(overlap, oInfo.Compatibility))
                         {
@@ -889,7 +964,7 @@ namespace Ryujinx.Graphics.Gpu.Image
 
                 // We need to synchronize before copying the old view data to the texture,
                 // otherwise the copied data would be overwritten by a future synchronization.
-                texture.InitializeData(false, setData);
+                texture.InitializeData(false, setData && !ShouldDiscard(discard, texture, sizeHint));
 
                 texture.Group.InitializeOverlaps();
 
@@ -1118,14 +1193,14 @@ namespace Ryujinx.Graphics.Gpu.Image
                 }
             }
 
-            int width  = info.Width  / info.SamplesInX;
+            int width = info.Width / info.SamplesInX;
             int height = info.Height / info.SamplesInY;
 
             int depth = info.GetDepth() * info.GetLayers();
 
             if (scale != 1f)
             {
-                width  = (int)MathF.Ceiling(width  * scale);
+                width = (int)MathF.Ceiling(width * scale);
                 height = (int)MathF.Ceiling(height * scale);
             }
 

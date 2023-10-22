@@ -13,11 +13,11 @@
         }
     }
 
-    enum OpCode32SimdSelMode : int
+    enum OpCode32SimdSelMode
     {
         Eq = 0,
         Vs,
         Ge,
-        Gt
+        Gt,
     }
 }

@@ -19,15 +19,15 @@ namespace Ryujinx.HLE.HOS.Applets.SoftwareKeyboard
 
             public SleepSubstepData(int sleepMilliseconds)
             {
-                SleepMilliseconds          = Math.Min(sleepMilliseconds, MaxThreadSleep);
-                SleepCount                 = sleepMilliseconds / SleepMilliseconds;
+                SleepMilliseconds = Math.Min(sleepMilliseconds, MaxThreadSleep);
+                SleepCount = sleepMilliseconds / SleepMilliseconds;
                 SleepRemainderMilliseconds = sleepMilliseconds - SleepCount * SleepMilliseconds;
             }
         }
 
         private TRef<bool> _cancelled = null;
-        private Thread     _thread    = null;
-        private object     _lock      = new object();
+        private Thread _thread = null;
+        private readonly object _lock = new();
 
         public bool IsRunning
         {

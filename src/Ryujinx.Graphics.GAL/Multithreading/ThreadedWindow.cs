@@ -7,8 +7,8 @@ namespace Ryujinx.Graphics.GAL.Multithreading
 {
     public class ThreadedWindow : IWindow
     {
-        private ThreadedRenderer _renderer;
-        private IRenderer _impl;
+        private readonly ThreadedRenderer _renderer;
+        private readonly IRenderer _impl;
 
         public ThreadedWindow(ThreadedRenderer renderer, IRenderer impl)
         {
@@ -38,5 +38,7 @@ namespace Ryujinx.Graphics.GAL.Multithreading
         public void SetScalingFilter(ScalingFilter type) { }
 
         public void SetScalingFilterLevel(float level) { }
+
+        public void SetColorSpacePassthrough(bool colorSpacePassthroughEnabled) { }
     }
 }

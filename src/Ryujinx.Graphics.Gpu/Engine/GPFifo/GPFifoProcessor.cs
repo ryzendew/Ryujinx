@@ -13,7 +13,7 @@ namespace Ryujinx.Graphics.Gpu.Engine.GPFifo
     /// <summary>
     /// Represents a GPU General Purpose FIFO command processor.
     /// </summary>
-    class GPFifoProcessor
+    class GPFifoProcessor : IDisposable
     {
         private const int MacrosCount = 0x80;
         private const int MacroIndexMask = MacrosCount - 1;
@@ -243,7 +243,7 @@ namespace Ryujinx.Graphics.Gpu.Engine.GPFifo
                 {
                     0 => _3dClass,
                     3 => _2dClass,
-                    _ => null
+                    _ => null,
                 };
 
                 if (state != null)
@@ -326,6 +326,20 @@ namespace Ryujinx.Graphics.Gpu.Engine.GPFifo
         public void PerformDeferredDraws()
         {
             _3dClass.PerformDeferredDraws();
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _3dClass.Dispose();
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
         }
     }
 }

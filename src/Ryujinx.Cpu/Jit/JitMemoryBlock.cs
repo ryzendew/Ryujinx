@@ -15,10 +15,14 @@ namespace Ryujinx.Cpu.Jit
             _impl = new MemoryBlock(size, flags);
         }
 
-        public bool Commit(ulong offset, ulong size) => _impl.Commit(offset, size);
+        public void Commit(ulong offset, ulong size) => _impl.Commit(offset, size);
         public void MapAsRx(ulong offset, ulong size) => _impl.Reprotect(offset, size, MemoryPermission.ReadAndExecute);
         public void MapAsRwx(ulong offset, ulong size) => _impl.Reprotect(offset, size, MemoryPermission.ReadWriteExecute);
 
-        public void Dispose() => _impl.Dispose();
+        public void Dispose()
+        {
+            GC.SuppressFinalize(this);
+            _impl.Dispose();
+        }
     }
 }

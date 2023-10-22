@@ -23,7 +23,7 @@ namespace Ryujinx.Graphics.OpenGL.Image
             TextureStorage parent,
             TextureCreateInfo info,
             int firstLayer,
-            int firstLevel) : base(info, parent.ScaleFactor)
+            int firstLevel) : base(info)
         {
             _renderer = renderer;
             _parent = parent;
@@ -72,7 +72,7 @@ namespace Ryujinx.Graphics.OpenGL.Image
                 (int)Info.SwizzleR.Convert(),
                 (int)Info.SwizzleG.Convert(),
                 (int)Info.SwizzleB.Convert(),
-                (int)Info.SwizzleA.Convert()
+                (int)Info.SwizzleA.Convert(),
             };
 
             if (Info.Format == Format.A1B5G5R5Unorm)
@@ -88,9 +88,7 @@ namespace Ryujinx.Graphics.OpenGL.Image
             {
                 // Swap B <-> R for BGRA formats, as OpenGL has no support for them
                 // and we need to manually swap the components on read/write on the GPU.
-                int temp = swizzleRgba[0];
-                swizzleRgba[0] = swizzleRgba[2];
-                swizzleRgba[2] = temp;
+                (swizzleRgba[2], swizzleRgba[0]) = (swizzleRgba[0], swizzleRgba[2]);
             }
 
             GL.TexParameter(target, TextureParameterName.TextureSwizzleRgba, swizzleRgba);
@@ -186,8 +184,8 @@ namespace Ryujinx.Graphics.OpenGL.Image
             // This approach uses blit, which causes a resolution loss since some samples will be lost
             // in the process.
 
-            Extents2D srcRegion = new Extents2D(0, 0, Width, Height);
-            Extents2D dstRegion = new Extents2D(0, 0, destinationView.Width, destinationView.Height);
+            Extents2D srcRegion = new(0, 0, Width, Height);
+            Extents2D dstRegion = new(0, 0, destinationView.Width, destinationView.Height);
 
             if (destinationView.Target.IsMultisample())
             {
@@ -212,7 +210,7 @@ namespace Ryujinx.Graphics.OpenGL.Image
                 {
                     Target.Texture2DMultisample => Target.Texture2D,
                     Target.Texture2DMultisampleArray => Target.Texture2DArray,
-                    _ => Target
+                    _ => Target,
                 };
 
                 TextureView intermmediate = _renderer.TextureCopy.IntermediatePool.GetOrCreateWithAtLeast(
@@ -306,6 +304,8 @@ namespace Ryujinx.Graphics.OpenGL.Image
             int offset = WriteToPbo2D(range.Offset, layer, level);
 
             Debug.Assert(offset == 0);
+
+            GL.BindBuffer(BufferTarget.PixelPackBuffer, 0);
         }
 
         public void WriteToPbo(int offset, bool forceBgra)
@@ -354,7 +354,7 @@ namespace Ryujinx.Graphics.OpenGL.Image
                     TextureTarget.TextureCubeMapArray => (layer / 6) * mipSize,
                     TextureTarget.Texture1DArray => layer * mipSize,
                     TextureTarget.Texture2DArray => layer * mipSize,
-                    _ => 0
+                    _ => 0,
                 };
             }
 

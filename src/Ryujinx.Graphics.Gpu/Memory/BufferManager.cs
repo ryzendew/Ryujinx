@@ -20,6 +20,8 @@ namespace Ryujinx.Graphics.Gpu.Memory
         private int _unalignedStorageBuffers;
         public bool HasUnalignedStorageBuffers => _unalignedStorageBuffers > 0;
 
+        public bool HasTransformFeedbackOutputs { get; set; }
+
         private IndexBuffer _indexBuffer;
         private readonly VertexBuffer[] _vertexBuffers;
         private readonly BufferBounds[] _transformFeedbackBuffers;
@@ -222,7 +224,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
         /// <param name="gpuVa">Start GPU virtual address of the buffer</param>
         private void RecordStorageAlignment(BuffersPerStage buffers, int index, ulong gpuVa)
         {
-            bool unaligned = (gpuVa & (Constants.StorageAlignment - 1)) != 0;
+            bool unaligned = (gpuVa & ((ulong)_context.Capabilities.StorageBufferOffsetAlignment - 1)) != 0;
 
             if (unaligned || HasUnalignedStorageBuffers)
             {
@@ -317,6 +319,28 @@ namespace Ryujinx.Graphics.Gpu.Memory
 
             _gpUniformBuffers[stage].SetBounds(index, address, size);
             _gpUniformBuffersDirty = true;
+        }
+
+        /// <summary>
+        /// Sets the number of vertices per instance on a instanced draw. Used for transform feedback emulation.
+        /// </summary>
+        /// <param name="vertexCount">Vertex count per instance</param>
+        public void SetInstancedDrawVertexCount(int vertexCount)
+        {
+            if (!_context.Capabilities.SupportsTransformFeedback && HasTransformFeedbackOutputs)
+            {
+                _context.SupportBufferUpdater.SetTfeVertexCount(vertexCount);
+                _context.SupportBufferUpdater.Commit();
+            }
+        }
+
+        /// <summary>
+        /// Forces transform feedback and storage buffers to be updated on the next draw.
+        /// </summary>
+        public void ForceTransformFeedbackAndStorageBuffersDirty()
+        {
+            _transformFeedbackBuffersDirty = true;
+            _gpStorageBuffersDirty = true;
         }
 
         /// <summary>
@@ -439,6 +463,8 @@ namespace Ryujinx.Graphics.Gpu.Memory
 
             // Force rebind after doing compute work.
             Rebind();
+
+            _context.SupportBufferUpdater.Commit();
         }
 
         /// <summary>
@@ -474,24 +500,32 @@ namespace Ryujinx.Graphics.Gpu.Memory
         /// Ensures that the graphics engine bindings are visible to the host GPU.
         /// Note: this actually performs the binding using the host graphics API.
         /// </summary>
-        public void CommitGraphicsBindings()
+        /// <param name="indexed">True if the index buffer is in use</param>
+        public void CommitGraphicsBindings(bool indexed)
         {
             var bufferCache = _channel.MemoryManager.Physical.BufferCache;
 
-            if (_indexBufferDirty || _rebind)
+            if (indexed)
             {
-                _indexBufferDirty = false;
-
-                if (_indexBuffer.Address != 0)
+                if (_indexBufferDirty || _rebind)
                 {
-                    BufferRange buffer = bufferCache.GetBufferRange(_indexBuffer.Address, _indexBuffer.Size);
+                    _indexBufferDirty = false;
 
-                    _context.Renderer.Pipeline.SetIndexBuffer(buffer, _indexBuffer.Type);
+                    if (_indexBuffer.Address != 0)
+                    {
+                        BufferRange buffer = bufferCache.GetBufferRange(_indexBuffer.Address, _indexBuffer.Size);
+
+                        _context.Renderer.Pipeline.SetIndexBuffer(buffer, _indexBuffer.Type);
+                    }
+                }
+                else if (_indexBuffer.Address != 0)
+                {
+                    bufferCache.SynchronizeBufferRange(_indexBuffer.Address, _indexBuffer.Size);
                 }
             }
-            else if (_indexBuffer.Address != 0)
+            else if (_rebind)
             {
-                bufferCache.SynchronizeBufferRange(_indexBuffer.Address, _indexBuffer.Size);
+                _indexBufferDirty = true;
             }
 
             uint vbEnableMask = _vertexBuffersEnableMask;
@@ -537,22 +571,55 @@ namespace Ryujinx.Graphics.Gpu.Memory
             {
                 _transformFeedbackBuffersDirty = false;
 
-                Span<BufferRange> tfbs = stackalloc BufferRange[Constants.TotalTransformFeedbackBuffers];
-
-                for (int index = 0; index < Constants.TotalTransformFeedbackBuffers; index++)
+                if (_context.Capabilities.SupportsTransformFeedback)
                 {
-                    BufferBounds tfb = _transformFeedbackBuffers[index];
+                    Span<BufferRange> tfbs = stackalloc BufferRange[Constants.TotalTransformFeedbackBuffers];
 
-                    if (tfb.Address == 0)
+                    for (int index = 0; index < Constants.TotalTransformFeedbackBuffers; index++)
                     {
-                        tfbs[index] = BufferRange.Empty;
-                        continue;
+                        BufferBounds tfb = _transformFeedbackBuffers[index];
+
+                        if (tfb.Address == 0)
+                        {
+                            tfbs[index] = BufferRange.Empty;
+                            continue;
+                        }
+
+                        tfbs[index] = bufferCache.GetBufferRange(tfb.Address, tfb.Size, write: true);
                     }
 
-                    tfbs[index] = bufferCache.GetBufferRange(tfb.Address, tfb.Size, write: true);
+                    _context.Renderer.Pipeline.SetTransformFeedbackBuffers(tfbs);
                 }
+                else if (HasTransformFeedbackOutputs)
+                {
+                    Span<BufferAssignment> buffers = stackalloc BufferAssignment[Constants.TotalTransformFeedbackBuffers];
 
-                _context.Renderer.Pipeline.SetTransformFeedbackBuffers(tfbs);
+                    int alignment = _context.Capabilities.StorageBufferOffsetAlignment;
+
+                    for (int index = 0; index < Constants.TotalTransformFeedbackBuffers; index++)
+                    {
+                        BufferBounds tfb = _transformFeedbackBuffers[index];
+
+                        if (tfb.Address == 0)
+                        {
+                            buffers[index] = new BufferAssignment(index, BufferRange.Empty);
+                        }
+                        else
+                        {
+                            ulong endAddress = tfb.Address + tfb.Size;
+                            ulong address = BitUtils.AlignDown(tfb.Address, (ulong)alignment);
+                            ulong size = endAddress - address;
+
+                            int tfeOffset = ((int)tfb.Address & (alignment - 1)) / 4;
+
+                            _context.SupportBufferUpdater.SetTfeOffset(index, tfeOffset);
+
+                            buffers[index] = new BufferAssignment(index, bufferCache.GetBufferRange(address, size, write: true));
+                        }
+                    }
+
+                    _context.Renderer.Pipeline.SetStorageBuffers(buffers);
+                }
             }
             else
             {
@@ -594,6 +661,8 @@ namespace Ryujinx.Graphics.Gpu.Memory
             CommitBufferTextureBindings();
 
             _rebind = false;
+
+            _context.SupportBufferUpdater.Commit();
         }
 
         /// <summary>
@@ -623,7 +692,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
                     {
                         var isWrite = bounds.Flags.HasFlag(BufferUsageFlags.Write);
                         var range = isStorage
-                            ? bufferCache.GetBufferRangeTillEnd(bounds.Address, bounds.Size, isWrite)
+                            ? bufferCache.GetBufferRangeAligned(bounds.Address, bounds.Size, isWrite)
                             : bufferCache.GetBufferRange(bounds.Address, bounds.Size);
 
                         ranges[rangesCount++] = new BufferAssignment(bindingInfo.Binding, range);
@@ -660,7 +729,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
                 {
                     var isWrite = bounds.Flags.HasFlag(BufferUsageFlags.Write);
                     var range = isStorage
-                        ? bufferCache.GetBufferRangeTillEnd(bounds.Address, bounds.Size, isWrite)
+                        ? bufferCache.GetBufferRangeAligned(bounds.Address, bounds.Size, isWrite)
                         : bufferCache.GetBufferRange(bounds.Address, bounds.Size);
 
                     ranges[rangesCount++] = new BufferAssignment(bindingInfo.Binding, range);
@@ -685,11 +754,11 @@ namespace Ryujinx.Graphics.Gpu.Memory
         {
             if (isStorage)
             {
-                _context.Renderer.Pipeline.SetStorageBuffers(ranges.Slice(0, count));
+                _context.Renderer.Pipeline.SetStorageBuffers(ranges[..count]);
             }
             else
             {
-                _context.Renderer.Pipeline.SetUniformBuffers(ranges.Slice(0, count));
+                _context.Renderer.Pipeline.SetUniformBuffers(ranges[..count]);
             }
         }
 

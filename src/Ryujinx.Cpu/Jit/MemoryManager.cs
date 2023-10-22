@@ -1,5 +1,4 @@
 ﻿using ARMeilleure.Memory;
-using Ryujinx.Cpu.Tracking;
 using Ryujinx.Memory;
 using Ryujinx.Memory.Range;
 using Ryujinx.Memory.Tracking;
@@ -85,7 +84,6 @@ namespace Ryujinx.Cpu.Jit
 
             ulong remainingSize = size;
             ulong oVa = va;
-            ulong oPa = pa;
             while (remainingSize != 0)
             {
                 _pageTable.Write((va / PageSize) * PteSize, PaToPte(pa));
@@ -247,7 +245,7 @@ namespace Ryujinx.Cpu.Jit
 
                         size = Math.Min(data.Length, PageSize - (int)(va & PageMask));
 
-                        data.Slice(0, size).CopyTo(_backingMemory.GetSpan(pa, size));
+                        data[..size].CopyTo(_backingMemory.GetSpan(pa, size));
 
                         offset += size;
                     }
@@ -299,7 +297,7 @@ namespace Ryujinx.Cpu.Jit
         }
 
         /// <inheritdoc/>
-        public unsafe WritableRegion GetWritableRegion(ulong va, int size, bool tracked = false)
+        public WritableRegion GetWritableRegion(ulong va, int size, bool tracked = false)
         {
             if (size == 0)
             {
@@ -346,7 +344,7 @@ namespace Ryujinx.Cpu.Jit
         /// <param name="startVa">The virtual address of the beginning of the first page</param>
         /// <remarks>This function does not differentiate between allocated and unallocated pages.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private int GetPagesCount(ulong va, uint size, out ulong startVa)
+        private static int GetPagesCount(ulong va, uint size, out ulong startVa)
         {
             // WARNING: Always check if ulong does not overflow during the operations.
             startVa = va & ~(ulong)PageMask;
@@ -483,7 +481,7 @@ namespace Ryujinx.Cpu.Jit
 
                     size = Math.Min(data.Length, PageSize - (int)(va & PageMask));
 
-                    _backingMemory.GetSpan(pa, size).CopyTo(data.Slice(0, size));
+                    _backingMemory.GetSpan(pa, size).CopyTo(data[..size]);
 
                     offset += size;
                 }
@@ -577,6 +575,7 @@ namespace Ryujinx.Cpu.Jit
             }
         }
 
+#pragma warning disable IDE0051 // Remove unused private member
         private ulong GetPhysicalAddress(ulong va)
         {
             // We return -1L if the virtual address is invalid or unmapped.
@@ -587,6 +586,7 @@ namespace Ryujinx.Cpu.Jit
 
             return GetPhysicalAddressInternal(va);
         }
+#pragma warning restore IDE0051
 
         private ulong GetPhysicalAddressInternal(ulong va)
         {
@@ -605,7 +605,7 @@ namespace Ryujinx.Cpu.Jit
             {
                 MemoryPermission.None => 0L,
                 MemoryPermission.Write => 2L << PointerTagBit,
-                _ => 3L << PointerTagBit
+                _ => 3L << PointerTagBit,
             };
 
             int pages = GetPagesCount(va, (uint)size, out va);
@@ -629,21 +629,21 @@ namespace Ryujinx.Cpu.Jit
         }
 
         /// <inheritdoc/>
-        public CpuRegionHandle BeginTracking(ulong address, ulong size, int id)
+        public RegionHandle BeginTracking(ulong address, ulong size, int id)
         {
-            return new CpuRegionHandle(Tracking.BeginTracking(address, size, id));
+            return Tracking.BeginTracking(address, size, id);
         }
 
         /// <inheritdoc/>
-        public CpuMultiRegionHandle BeginGranularTracking(ulong address, ulong size, IEnumerable<IRegionHandle> handles, ulong granularity, int id)
+        public MultiRegionHandle BeginGranularTracking(ulong address, ulong size, IEnumerable<IRegionHandle> handles, ulong granularity, int id)
         {
-            return new CpuMultiRegionHandle(Tracking.BeginGranularTracking(address, size, handles, granularity, id));
+            return Tracking.BeginGranularTracking(address, size, handles, granularity, id);
         }
 
         /// <inheritdoc/>
-        public CpuSmartMultiRegionHandle BeginSmartGranularTracking(ulong address, ulong size, ulong granularity, int id)
+        public SmartMultiRegionHandle BeginSmartGranularTracking(ulong address, ulong size, ulong granularity, int id)
         {
-            return new CpuSmartMultiRegionHandle(Tracking.BeginSmartGranularTracking(address, size, granularity, id));
+            return Tracking.BeginSmartGranularTracking(address, size, granularity, id);
         }
 
         /// <inheritdoc/>
@@ -699,6 +699,8 @@ namespace Ryujinx.Cpu.Jit
         /// </summary>
         protected override void Destroy() => _pageTable.Dispose();
 
-        private void ThrowInvalidMemoryRegionException(string message) => throw new InvalidMemoryRegionException(message);
+#pragma warning disable IDE0051 // Remove unused private member
+        private static void ThrowInvalidMemoryRegionException(string message) => throw new InvalidMemoryRegionException(message);
+#pragma warning restore IDE0051
     }
 }

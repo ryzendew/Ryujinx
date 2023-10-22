@@ -8,6 +8,7 @@ using LibHac.Ns;
 using LibHac.Tools.FsSystem;
 using LibHac.Tools.FsSystem.NcaUtils;
 using Ryujinx.Common.Logging;
+using Ryujinx.HLE.HOS;
 using System.IO;
 using System.Linq;
 using ApplicationId = LibHac.Ncm.ApplicationId;
@@ -19,7 +20,7 @@ namespace Ryujinx.HLE.Loaders.Processes.Extensions
         public static ProcessResult Load(this Nca nca, Switch device, Nca patchNca, Nca controlNca)
         {
             // Extract RomFs and ExeFs from NCA.
-            IStorage    romFs = nca.GetRomFs(device, patchNca);
+            IStorage romFs = nca.GetRomFs(device, patchNca);
             IFileSystem exeFs = nca.GetExeFs(device, patchNca);
 
             if (exeFs == null)
@@ -34,9 +35,7 @@ namespace Ryujinx.HLE.Loaders.Processes.Extensions
 
             // Collecting mods related to AocTitleIds and ProgramId.
             device.Configuration.VirtualFileSystem.ModLoader.CollectMods(
-                device.Configuration.ContentManager.GetAocTitleIds().Prepend(metaLoader.GetProgramId()),
-                device.Configuration.VirtualFileSystem.ModLoader.GetModsBasePath(),
-                device.Configuration.VirtualFileSystem.ModLoader.GetSdModsBasePath());
+                device.Configuration.ContentManager.GetAocTitleIds().Prepend(metaLoader.GetProgramId()));
 
             // Load Nacp file.
             var nacpData = new BlitStruct<ApplicationControlProperty>(1);

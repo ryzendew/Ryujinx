@@ -6,16 +6,16 @@ namespace Ryujinx.Horizon.LogManager
 {
     class LmIpcServer
     {
-        private const int LogMaxSessionsCount = 42;
+        private const int MaxSessionsCount = 42;
 
         private const int PointerBufferSize = 0x400;
-        private const int MaxDomains        = 31;
-        private const int MaxDomainObjects  = 61;
-        private const int MaxPortsCount     = 1;
+        private const int MaxDomains = 31;
+        private const int MaxDomainObjects = 61;
+        private const int MaxPortsCount = 1;
 
-        private static readonly ManagerOptions _logManagerOptions = new(PointerBufferSize, MaxDomains, MaxDomainObjects, false);
+        private static readonly ManagerOptions _managerOptions = new(PointerBufferSize, MaxDomains, MaxDomainObjects, false);
 
-        private SmApi         _sm;
+        private SmApi _sm;
         private ServerManager _serverManager;
 
         public void Initialize()
@@ -25,9 +25,9 @@ namespace Ryujinx.Horizon.LogManager
             _sm = new SmApi();
             _sm.Initialize().AbortOnFailure();
 
-            _serverManager = new ServerManager(allocator, _sm, MaxPortsCount, _logManagerOptions, LogMaxSessionsCount);
+            _serverManager = new ServerManager(allocator, _sm, MaxPortsCount, _managerOptions, MaxSessionsCount);
 
-            _serverManager.RegisterObjectForServer(new LogService(), ServiceName.Encode("lm"), LogMaxSessionsCount);
+            _serverManager.RegisterObjectForServer(new LogService(), ServiceName.Encode("lm"), MaxSessionsCount);
         }
 
         public void ServiceRequests()

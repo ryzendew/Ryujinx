@@ -18,13 +18,13 @@ namespace Ryujinx.Graphics.OpenGL.Queries
 
         public ulong DrawIndex { get; }
 
-        private CounterQueue _queue;
-        private BufferedQuery _counter;
+        private readonly CounterQueue _queue;
+        private readonly BufferedQuery _counter;
 
         private bool _hostAccessReserved = false;
         private int _refCount = 1; // Starts with a reference from the counter queue.
 
-        private object _lock = new object();
+        private readonly object _lock = new();
         private ulong _result = ulong.MaxValue;
         private double _divisor = 1f;
 

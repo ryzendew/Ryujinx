@@ -1,19 +1,22 @@
-﻿using Silk.NET.Vulkan;
+﻿using Ryujinx.Graphics.GAL;
+using IndexType = Silk.NET.Vulkan.IndexType;
 
 namespace Ryujinx.Graphics.Vulkan
 {
     internal struct IndexBufferState
     {
-        public static IndexBufferState Null => new IndexBufferState(GAL.BufferHandle.Null, 0, 0);
+        private const int IndexBufferMaxMirrorable = 0x20000;
+
+        public static IndexBufferState Null => new(BufferHandle.Null, 0, 0);
 
         private readonly int _offset;
         private readonly int _size;
         private readonly IndexType _type;
 
-        private readonly GAL.BufferHandle _handle;
+        private readonly BufferHandle _handle;
         private Auto<DisposableBuffer> _buffer;
 
-        public IndexBufferState(GAL.BufferHandle handle, int offset, int size, IndexType type)
+        public IndexBufferState(BufferHandle handle, int offset, int size, IndexType type)
         {
             _handle = handle;
             _offset = offset;
@@ -22,7 +25,7 @@ namespace Ryujinx.Graphics.Vulkan
             _buffer = null;
         }
 
-        public IndexBufferState(GAL.BufferHandle handle, int offset, int size)
+        public IndexBufferState(BufferHandle handle, int offset, int size)
         {
             _handle = handle;
             _offset = offset;
@@ -36,6 +39,7 @@ namespace Ryujinx.Graphics.Vulkan
             Auto<DisposableBuffer> autoBuffer;
             int offset, size;
             IndexType type = _type;
+            bool mirrorable = false;
 
             if (_type == IndexType.Uint8Ext && !gd.Capabilities.SupportsIndexTypeUint8)
             {
@@ -55,6 +59,8 @@ namespace Ryujinx.Graphics.Vulkan
                     autoBuffer = null;
                 }
 
+                mirrorable = _size < IndexBufferMaxMirrorable;
+
                 offset = _offset;
                 size = _size;
             }
@@ -63,7 +69,9 @@ namespace Ryujinx.Graphics.Vulkan
 
             if (autoBuffer != null)
             {
-                gd.Api.CmdBindIndexBuffer(cbs.CommandBuffer, autoBuffer.Get(cbs, offset, size).Value, (ulong)offset, type);
+                DisposableBuffer buffer = mirrorable ? autoBuffer.GetMirrorable(cbs, ref offset, size, out _) : autoBuffer.Get(cbs, offset, size);
+
+                gd.Api.CmdBindIndexBuffer(cbs.CommandBuffer, buffer.Value, (ulong)offset, type);
             }
         }
 
@@ -97,8 +105,8 @@ namespace Ryujinx.Graphics.Vulkan
         public Auto<DisposableBuffer> BindConvertedIndexBufferIndirect(
             VulkanRenderer gd,
             CommandBufferScoped cbs,
-            GAL.BufferRange indirectBuffer,
-            GAL.BufferRange drawCountBuffer,
+            BufferRange indirectBuffer,
+            BufferRange drawCountBuffer,
             IndexBufferPattern pattern,
             bool hasDrawCount,
             int maxDrawCount,
@@ -110,7 +118,7 @@ namespace Ryujinx.Graphics.Vulkan
             (var indexBufferAuto, var indirectBufferAuto) = gd.BufferManager.GetBufferTopologyConversionIndirect(
                 gd,
                 cbs,
-                new GAL.BufferRange(_handle, _offset, _size),
+                new BufferRange(_handle, _offset, _size),
                 indirectBuffer,
                 drawCountBuffer,
                 pattern,
@@ -132,7 +140,7 @@ namespace Ryujinx.Graphics.Vulkan
             return indirectBufferAuto;
         }
 
-        private int GetIndexSize()
+        private readonly int GetIndexSize()
         {
             return _type switch
             {
@@ -142,7 +150,7 @@ namespace Ryujinx.Graphics.Vulkan
             };
         }
 
-        public bool BoundEquals(Auto<DisposableBuffer> buffer)
+        public readonly bool BoundEquals(Auto<DisposableBuffer> buffer)
         {
             return _buffer == buffer;
         }
@@ -151,11 +159,13 @@ namespace Ryujinx.Graphics.Vulkan
         {
             if (_buffer == from)
             {
-                _buffer.DecrementReferenceCount();
-                to.IncrementReferenceCount();
-
                 _buffer = to;
             }
+        }
+
+        public readonly bool Overlaps(Auto<DisposableBuffer> buffer, int offset, int size)
+        {
+            return buffer == _buffer && offset < _offset + _size && offset + size > _offset;
         }
     }
 }

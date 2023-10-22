@@ -17,26 +17,26 @@ namespace ARMeilleure.Decoders.Optimizations
                 throw new InvalidOperationException("Function entry point is not contained in a block.");
             }
 
-            const ulong allowance = 4;
+            const ulong Allowance = 4;
 
             Block entryBlock = blocks[entryBlockId];
 
             Block startBlock = entryBlock;
-            Block endBlock   = entryBlock;
+            Block endBlock = entryBlock;
 
             int startBlockIndex = entryBlockId;
-            int endBlockIndex   = entryBlockId;
+            int endBlockIndex = entryBlockId;
 
             for (int i = entryBlockId + 1; i < blocks.Count; i++) // Search forwards.
             {
                 Block block = blocks[i];
 
-                if (endBlock.EndAddress < block.Address - allowance)
+                if (endBlock.EndAddress < block.Address - Allowance)
                 {
                     break; // End of contiguous function.
                 }
 
-                endBlock      = block;
+                endBlock = block;
                 endBlockIndex = i;
             }
 
@@ -44,12 +44,12 @@ namespace ARMeilleure.Decoders.Optimizations
             {
                 Block block = blocks[i];
 
-                if (startBlock.Address > block.EndAddress + allowance)
+                if (startBlock.Address > block.EndAddress + Allowance)
                 {
                     break; // End of contiguous function.
                 }
 
-                startBlock      = block;
+                startBlock = block;
                 startBlockIndex = i;
             }
 
@@ -57,7 +57,7 @@ namespace ARMeilleure.Decoders.Optimizations
             {
                 return blocks.ToArray(); // Nothing to do here.
             }
-            
+
             // Mark branches whose target is outside of the contiguous region as an exit block.
             for (int i = startBlockIndex; i <= endBlockIndex; i++)
             {
@@ -69,7 +69,7 @@ namespace ARMeilleure.Decoders.Optimizations
                 }
             }
 
-           var newBlocks = new List<Block>(blocks.Count);
+            var newBlocks = new List<Block>(blocks.Count);
 
             // Finally, rebuild decoded block list, ignoring blocks outside the contiguous range.
             for (int i = 0; i < blocks.Count; i++)

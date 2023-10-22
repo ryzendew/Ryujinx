@@ -1,6 +1,6 @@
 ﻿namespace Ryujinx.Audio.Backends.SoundIo.Native
 {
-    public enum SoundIoBackend : int
+    public enum SoundIoBackend
     {
         None = 0,
         Jack = 1,
@@ -8,6 +8,6 @@
         Alsa = 3,
         CoreAudio = 4,
         Wasapi = 5,
-        Dummy = 6
+        Dummy = 6,
     }
 }

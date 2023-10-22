@@ -125,6 +125,7 @@ namespace Ryujinx.Graphics.Gpu
         /// </summary>
         public void Dispose()
         {
+            GC.SuppressFinalize(this);
             _context.DeferredActions.Enqueue(Destroy);
         }
 
@@ -134,6 +135,7 @@ namespace Ryujinx.Graphics.Gpu
         /// </summary>
         private void Destroy()
         {
+            _processor.Dispose();
             TextureManager.Dispose();
 
             var oldMemoryManager = Interlocked.Exchange(ref _memoryManager, null);

@@ -1,5 +1,6 @@
 ﻿using Microsoft.CodeAnalysis;
 using System.Linq;
+using System.Text;
 
 namespace Ryujinx.Ui.LocaleGenerator
 {
@@ -14,16 +15,18 @@ namespace Ryujinx.Ui.LocaleGenerator
 
             context.RegisterSourceOutput(contents, (spc, content) =>
             {
-                var lines = content.Split('\n').Where(x => x.Trim().StartsWith("\"")).Select(x => x.Split(':').First().Trim().Replace("\"", ""));
-                string enumSource = "namespace Ryujinx.Ava.Common.Locale;\n";
-                enumSource += "internal enum LocaleKeys\n{\n";
+                var lines = content.Split('\n').Where(x => x.Trim().StartsWith("\"")).Select(x => x.Split(':')[0].Trim().Replace("\"", ""));
+                StringBuilder enumSourceBuilder = new();
+                enumSourceBuilder.AppendLine("namespace Ryujinx.Ava.Common.Locale;");
+                enumSourceBuilder.AppendLine("internal enum LocaleKeys");
+                enumSourceBuilder.AppendLine("{");
                 foreach (var line in lines)
                 {
-                    enumSource += $"    {line},\n";
+                    enumSourceBuilder.AppendLine($"    {line},");
                 }
-                enumSource += "}\n";
+                enumSourceBuilder.AppendLine("}");
 
-                spc.AddSource("LocaleKeys", enumSource);
+                spc.AddSource("LocaleKeys", enumSourceBuilder.ToString());
             });
         }
     }

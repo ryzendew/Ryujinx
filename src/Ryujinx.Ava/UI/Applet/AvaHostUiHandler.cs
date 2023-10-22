@@ -53,8 +53,6 @@ namespace Ryujinx.Ava.UI.Applet
 
                     bool opened = false;
 
-                    _parent.Activate();
-
                     UserResult response = await ContentDialogHelper.ShowDeferredContentDialog(_parent,
                        title,
                        message,
@@ -64,7 +62,7 @@ namespace Ryujinx.Ava.UI.Applet
                        LocaleManager.Instance[LocaleKeys.SettingsButtonClose],
                        (int)Symbol.Important,
                        deferEvent,
-                       async (window) =>
+                       async window =>
                        {
                            if (opened)
                            {
@@ -108,11 +106,11 @@ namespace Ryujinx.Ava.UI.Applet
             bool error = false;
             string inputText = args.InitialText ?? "";
 
-            Dispatcher.UIThread.Post(async () =>
+            Dispatcher.UIThread.InvokeAsync(async () =>
             {
                 try
                 {
-                    var response = await SwkbdAppletDialog.ShowInputDialog(_parent, LocaleManager.Instance[LocaleKeys.SoftwareKeyboard], args);
+                    var response = await SwkbdAppletDialog.ShowInputDialog(LocaleManager.Instance[LocaleKeys.SoftwareKeyboard], args);
 
                     if (response.Result == UserResult.Ok)
                     {
@@ -142,10 +140,7 @@ namespace Ryujinx.Ava.UI.Applet
         public void ExecuteProgram(Switch device, ProgramSpecifyKind kind, ulong value)
         {
             device.Configuration.UserChannelPersistence.ExecuteProgram(kind, value);
-            if (_parent.ViewModel.AppHost != null)
-            {
-                _parent.ViewModel.AppHost.Stop();
-            }
+            _parent.ViewModel.AppHost?.Stop();
         }
 
         public bool DisplayErrorAppletDialog(string title, string message, string[] buttons)
@@ -154,7 +149,7 @@ namespace Ryujinx.Ava.UI.Applet
 
             bool showDetails = false;
 
-            Dispatcher.UIThread.Post(async () =>
+            Dispatcher.UIThread.InvokeAsync(async () =>
             {
                 try
                 {
@@ -162,7 +157,7 @@ namespace Ryujinx.Ava.UI.Applet
                     {
                         Title = title,
                         WindowStartupLocation = WindowStartupLocation.CenterScreen,
-                        Width = 400
+                        Width = 400,
                     };
 
                     object response = await msgDialog.Run();

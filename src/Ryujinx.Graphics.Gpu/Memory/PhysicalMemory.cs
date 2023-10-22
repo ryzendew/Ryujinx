@@ -1,5 +1,4 @@
 using Ryujinx.Cpu;
-using Ryujinx.Cpu.Tracking;
 using Ryujinx.Graphics.Gpu.Image;
 using Ryujinx.Graphics.Gpu.Shader;
 using Ryujinx.Memory;
@@ -7,8 +6,8 @@ using Ryujinx.Memory.Range;
 using Ryujinx.Memory.Tracking;
 using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 
 namespace Ryujinx.Graphics.Gpu.Memory
@@ -20,7 +19,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
     class PhysicalMemory : IDisposable
     {
         private readonly GpuContext _context;
-        private IVirtualMemoryManagerTracked _cpuMemory;
+        private readonly IVirtualMemoryManagerTracked _cpuMemory;
         private int _referenceCount;
 
         /// <summary>
@@ -238,6 +237,18 @@ namespace Ryujinx.Graphics.Gpu.Memory
         }
 
         /// <summary>
+        /// Writes data to the application process, triggering a precise memory tracking event.
+        /// </summary>
+        /// <param name="address">Address to write into</param>
+        /// <param name="data">Data to be written</param>
+        /// <param name="kind">Kind of the resource being written, which will not be signalled as CPU modified</param>
+        public void WriteTrackedResource(ulong address, ReadOnlySpan<byte> data, ResourceKind kind)
+        {
+            _cpuMemory.SignalMemoryTracking(address, (ulong)data.Length, true, precise: true, exemptId: (int)kind);
+            _cpuMemory.WriteUntracked(address, data);
+        }
+
+        /// <summary>
         /// Writes data to the application process.
         /// </summary>
         /// <param name="address">Address to write into</param>
@@ -348,7 +359,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
         /// <param name="size">Size of the region</param>
         /// <param name="kind">Kind of the resource being tracked</param>
         /// <returns>The memory tracking handle</returns>
-        public CpuRegionHandle BeginTracking(ulong address, ulong size, ResourceKind kind)
+        public RegionHandle BeginTracking(ulong address, ulong size, ResourceKind kind)
         {
             return _cpuMemory.BeginTracking(address, size, (int)kind);
         }
@@ -361,7 +372,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
         /// <returns>The memory tracking handle</returns>
         public GpuRegionHandle BeginTracking(MultiRange range, ResourceKind kind)
         {
-            var cpuRegionHandles = new CpuRegionHandle[range.Count];
+            var cpuRegionHandles = new RegionHandle[range.Count];
             int count = 0;
 
             for (int i = 0; i < range.Count; i++)
@@ -390,7 +401,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
         /// <param name="handles">Handles to inherit state from or reuse</param>
         /// <param name="granularity">Desired granularity of write tracking</param>
         /// <returns>The memory tracking handle</returns>
-        public CpuMultiRegionHandle BeginGranularTracking(ulong address, ulong size, ResourceKind kind, IEnumerable<IRegionHandle> handles = null, ulong granularity = 4096)
+        public MultiRegionHandle BeginGranularTracking(ulong address, ulong size, ResourceKind kind, IEnumerable<IRegionHandle> handles = null, ulong granularity = 4096)
         {
             return _cpuMemory.BeginGranularTracking(address, size, handles, granularity, (int)kind);
         }
@@ -403,7 +414,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
         /// <param name="kind">Kind of the resource being tracked</param>
         /// <param name="granularity">Desired granularity of write tracking</param>
         /// <returns>The memory tracking handle</returns>
-        public CpuSmartMultiRegionHandle BeginSmartGranularTracking(ulong address, ulong size, ResourceKind kind, ulong granularity = 4096)
+        public SmartMultiRegionHandle BeginSmartGranularTracking(ulong address, ulong size, ResourceKind kind, ulong granularity = 4096)
         {
             return _cpuMemory.BeginSmartGranularTracking(address, size, granularity, (int)kind);
         }

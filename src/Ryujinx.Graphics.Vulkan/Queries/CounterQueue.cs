@@ -18,20 +18,20 @@ namespace Ryujinx.Graphics.Vulkan.Queries
         public CounterType Type { get; }
         public bool Disposed { get; private set; }
 
-        private Queue<CounterQueueEvent> _events = new Queue<CounterQueueEvent>();
+        private readonly Queue<CounterQueueEvent> _events = new();
         private CounterQueueEvent _current;
 
         private ulong _accumulatedCounter;
         private int _waiterCount;
 
-        private object _lock = new object();
+        private readonly object _lock = new();
 
-        private Queue<BufferedQuery> _queryPool;
-        private AutoResetEvent _queuedEvent = new AutoResetEvent(false);
-        private AutoResetEvent _wakeSignal = new AutoResetEvent(false);
-        private AutoResetEvent _eventConsumed = new AutoResetEvent(false);
+        private readonly Queue<BufferedQuery> _queryPool;
+        private readonly AutoResetEvent _queuedEvent = new(false);
+        private readonly AutoResetEvent _wakeSignal = new(false);
+        private readonly AutoResetEvent _eventConsumed = new(false);
 
-        private Thread _consumerThread;
+        private readonly Thread _consumerThread;
 
         public int ResetSequence { get; private set; }
 
@@ -116,10 +116,8 @@ namespace Ryujinx.Graphics.Vulkan.Queries
                     BufferedQuery result = _queryPool.Dequeue();
                     return result;
                 }
-                else
-                {
-                    return new BufferedQuery(_gd, _device, _pipeline, Type, _gd.IsAmdWindows);
-                }
+
+                return new BufferedQuery(_gd, _device, _pipeline, Type, _gd.IsAmdWindows);
             }
         }
 
@@ -132,7 +130,7 @@ namespace Ryujinx.Graphics.Vulkan.Queries
             }
         }
 
-        public CounterQueueEvent QueueReport(EventHandler<ulong> resultHandler, ulong lastDrawIndex, bool hostReserved)
+        public CounterQueueEvent QueueReport(EventHandler<ulong> resultHandler, float divisor, ulong lastDrawIndex, bool hostReserved)
         {
             CounterQueueEvent result;
             ulong draws = lastDrawIndex - _current.DrawIndex;
@@ -148,7 +146,7 @@ namespace Ryujinx.Graphics.Vulkan.Queries
                     _current.ReserveForHostAccess();
                 }
 
-                _current.Complete(draws > 0 && Type != CounterType.TransformFeedbackPrimitivesWritten, _pipeline.GetCounterDivisor(Type));
+                _current.Complete(draws > 0 && Type != CounterType.TransformFeedbackPrimitivesWritten, divisor);
                 _events.Enqueue(_current);
 
                 _current.OnResult += resultHandler;
