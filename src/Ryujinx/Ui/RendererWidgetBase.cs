@@ -24,9 +24,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using Image = SixLabors.ImageSharp.Image;
 using Key = Ryujinx.Input.Key;
-using PresentIntervalState = Ryujinx.Graphics.GAL.PresentIntervalState;
 using ScalingFilter = Ryujinx.Graphics.GAL.ScalingFilter;
 using Switch = Ryujinx.HLE.Switch;
+using VSyncMode = Ryujinx.Graphics.GAL.VSyncMode;
 
 namespace Ryujinx.Ui
 {
@@ -453,7 +453,7 @@ namespace Ryujinx.Ui
                 Device.Gpu.InitializeShaderCache(_gpuCancellationTokenSource.Token);
                 Translator.IsReadyForTranslation.Set();
 
-                Renderer.Window.ChangePresentIntervalState(Device.EnableDeviceVsync ? PresentIntervalState.Switch : PresentIntervalState.Unbounded);
+                Renderer.Window.ChangeVSyncMode(Device.EnableDeviceVsync ? VSyncMode.Switch : VSyncMode.Unbounded);
 
                 (Toplevel as MainWindow)?.ActivatePauseMenu();
 
@@ -490,7 +490,7 @@ namespace Ryujinx.Ui
                         }
 
                         StatusUpdatedEvent?.Invoke(this, new StatusUpdatedEventArgs(
-                            Device.EnableDeviceVsync ? PresentIntervalState.Switch.ToString() : PresentIntervalState.Unbounded.ToString(),
+                            Device.EnableDeviceVsync ? VSyncMode.Switch.ToString() : VSyncMode.Unbounded.ToString(),
                             Device.GetVolume(),
                             _gpuBackendName,
                             dockedMode,
@@ -755,7 +755,7 @@ namespace Ryujinx.Ui
         {
             KeyboardHotkeyState state = KeyboardHotkeyState.None;
 
-            if (_keyboardInterface.IsPressed((Key)ConfigurationState.Instance.Hid.Hotkeys.Value.PresentIntervalState))
+            if (_keyboardInterface.IsPressed((Key)ConfigurationState.Instance.Hid.Hotkeys.Value.VSyncMode))
             {
                 state |= KeyboardHotkeyState.ToggleVSync;
             }

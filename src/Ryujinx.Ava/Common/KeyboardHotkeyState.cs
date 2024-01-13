@@ -3,7 +3,7 @@ namespace Ryujinx.Ava.Common
     public enum KeyboardHotkeyState
     {
         None,
-        TogglePresentIntervalState,
+        ToggleVSyncMode,
         Screenshot,
         ShowUi,
         Pause,
@@ -12,7 +12,7 @@ namespace Ryujinx.Ava.Common
         ResScaleDown,
         VolumeUp,
         VolumeDown,
-        CustomPresentIntervalIncrement,
-        CustomPresentIntervalDecrement,
+        CustomVSyncIntervalIncrement,
+        CustomVSyncIntervalDecrement,
     }
 }
