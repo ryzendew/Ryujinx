@@ -61,6 +61,8 @@ namespace Ryujinx.Graphics.Vulkan
         private BitMapStruct<Array2<long>> _storageSet;
         private BitMapStruct<Array2<long>> _uniformMirrored;
         private BitMapStruct<Array2<long>> _storageMirrored;
+        private int[] _uniformSetPd;
+        private int _pdSequence = 1;
 
         private bool _updateDescriptorCacheCbIndex;
 
@@ -105,6 +107,8 @@ namespace Ryujinx.Graphics.Vulkan
             _images = new DescriptorImageInfo[Constants.MaxImagesPerStage];
             _bufferTextures = new BufferView[Constants.MaxTexturesPerStage];
             _bufferImages = new BufferView[Constants.MaxImagesPerStage];
+
+            _uniformSetPd = new int[Constants.MaxUniformBufferBindings];
 
             var initialImageInfo = new DescriptorImageInfo
             {
@@ -193,6 +197,7 @@ namespace Ryujinx.Graphics.Vulkan
                         if (BindingOverlaps(ref info, bindingOffset, offset, size))
                         {
                             _uniformSet.Clear(binding);
+                            _uniformSetPd[binding] = 0;
                             SignalDirty(DirtyFlags.Uniform);
                         }
                     }
@@ -223,8 +228,23 @@ namespace Ryujinx.Graphics.Vulkan
             });
         }
 
+        public void AdvancePdSequence()
+        {
+            if (++_pdSequence == 0)
+            {
+                _pdSequence = 1;
+            }
+        }
+
         public void SetProgram(ShaderCollection program)
         {
+            if (!program.HasSameLayout(_program))
+            {
+                // When the pipeline layout changes, push descriptor bindings are invalidated.
+
+                AdvancePdSequence();
+            }
+
             _program = program;
             _updateDescriptorCacheCbIndex = true;
             _dirty = DirtyFlags.All;
@@ -402,6 +422,7 @@ namespace Ryujinx.Graphics.Vulkan
                 if (!currentBufferRef.Equals(newRef) || currentInfo.Range != info.Range)
                 {
                     _uniformSet.Clear(index);
+                    _uniformSetPd[index] = 0;
 
                     currentInfo = info;
                     currentBufferRef = newRef;
@@ -671,15 +692,22 @@ namespace Ryujinx.Graphics.Vulkan
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void UpdateAndBindUniformBufferPd(CommandBufferScoped cbs, PipelineBindPoint pbp)
         {
+            int sequence = _pdSequence;
             var bindingSegments = _program.BindingSegments[PipelineBase.UniformSetIndex];
             var dummyBuffer = _dummyBuffer?.GetBuffer();
 
             foreach (ResourceBindingSegment segment in bindingSegments)
             {
+                // Important:
+                // Not all bindings may update in a push descriptor update,
+                // But we still want to group them when consecutive if possible.
+
                 int binding = segment.Binding;
                 int count = segment.Count;
 
-                bool doUpdate = false;
+                int updateFrom = -1;
+
+                ReadOnlySpan<DescriptorBufferInfo> uniformBuffers = _uniformBuffers;
 
                 for (int i = 0; i < count; i++)
                 {
@@ -688,15 +716,36 @@ namespace Ryujinx.Graphics.Vulkan
                     if (_uniformSet.Set(index))
                     {
                         ref BufferRef buffer = ref _uniformBufferRefs[index];
-                        UpdateBuffer(cbs, ref _uniformBuffers[index], ref buffer, dummyBuffer, true);
-                        doUpdate = true;
+
+                        bool mirrored = UpdateBuffer(cbs, ref _uniformBuffers[index], ref buffer, dummyBuffer, true);
+
+                        _uniformMirrored.Set(index, mirrored);
+                    }
+
+                    if (_uniformSetPd[index] != sequence)
+                    {
+                        // Need to set this push descriptor (even if the buffer binding has not changed)
+
+                        _uniformSetPd[index] = sequence;
+
+                        if (updateFrom == -1)
+                        {
+                            updateFrom = index;
+                        }
+                    }
+                    else if (updateFrom != -1)
+                    {
+                        // Need to push updates that have been queued.
+
+                        UpdateBuffers(cbs, pbp, updateFrom, uniformBuffers.Slice(updateFrom, index - updateFrom), DescriptorType.UniformBuffer);
+
+                        updateFrom = -1;
                     }
                 }
 
-                if (doUpdate)
+                if (updateFrom != -1)
                 {
-                    ReadOnlySpan<DescriptorBufferInfo> uniformBuffers = _uniformBuffers;
-                    UpdateBuffers(cbs, pbp, binding, uniformBuffers.Slice(binding, count), DescriptorType.UniformBuffer);
+                    UpdateBuffers(cbs, pbp, updateFrom, uniformBuffers.Slice(updateFrom, binding + count - updateFrom), DescriptorType.UniformBuffer);
                 }
             }
         }
@@ -724,6 +773,7 @@ namespace Ryujinx.Graphics.Vulkan
 
             _uniformSet.Clear();
             _storageSet.Clear();
+            AdvancePdSequence();
         }
 
         private static void SwapBuffer(BufferRef[] list, Auto<DisposableBuffer> from, Auto<DisposableBuffer> to)

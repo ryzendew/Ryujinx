@@ -108,16 +108,23 @@ namespace Ryujinx.Graphics.Vulkan
 
             _shaders = internalShaders;
 
-            bool usePushDescriptors = !isMinimal && VulkanConfiguration.UsePushDescriptors && _gd.Capabilities.SupportsPushDescriptors;
+            bool usePushDescriptors = !isMinimal &&
+                VulkanConfiguration.UsePushDescriptors &&
+                _gd.Capabilities.SupportsPushDescriptors &&
+                !IsCompute &&
+                CanUsePushDescriptors(gd, resourceLayout, IsCompute);
 
-            _plce = gd.PipelineLayoutCache.GetOrCreate(gd, device, resourceLayout.Sets, usePushDescriptors);
+            ReadOnlyCollection<ResourceDescriptorCollection> sets = usePushDescriptors ? 
+                BuildPushDescriptorSets(gd, resourceLayout.Sets) : resourceLayout.Sets;
+
+            _plce = gd.PipelineLayoutCache.GetOrCreate(gd, device, sets, usePushDescriptors);
 
             HasMinimalLayout = isMinimal;
             UsePushDescriptors = usePushDescriptors;
 
             Stages = stages;
 
-            ClearSegments = BuildClearSegments(resourceLayout.Sets);
+            ClearSegments = BuildClearSegments(sets);
             BindingSegments = BuildBindingSegments(resourceLayout.SetUsages);
             Templates = BuildTemplates();
 
@@ -137,6 +144,64 @@ namespace Ryujinx.Graphics.Vulkan
 
             _compileTask = BackgroundCompilation();
             _firstBackgroundUse = !fromCache;
+        }
+
+        private static bool CanUsePushDescriptors(VulkanRenderer gd, ResourceLayout layout, bool isCompute)
+        {
+            // If binding 3 is immediately used, use an alternate set of reserved bindings.
+            ReadOnlyCollection<ResourceUsage> uniformUsage = layout.SetUsages[0].Usages;
+            bool hasBinding3 = uniformUsage.Any(x => x.Binding == 3);
+            int[] reserved = isCompute ? Array.Empty<int>() : gd.GetPushDescriptorReservedBindings(hasBinding3);
+
+            // Can't use any of the reserved usages.
+            for (int i = 0; i < uniformUsage.Count; i++)
+            {
+                var binding = uniformUsage[i].Binding;
+
+                if (reserved.Contains(binding) || binding >= gd.Capabilities.MaxPushDescriptors + reserved.Length)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static ReadOnlyCollection<ResourceDescriptorCollection> BuildPushDescriptorSets(
+            VulkanRenderer gd,
+            ReadOnlyCollection<ResourceDescriptorCollection> sets)
+        {
+            // The reserved bindings were selected when determining if push descriptors could be used.
+            int[] reserved = gd.GetPushDescriptorReservedBindings(false);
+
+            var result = new ResourceDescriptorCollection[sets.Count];
+
+            for (int i = 0; i < sets.Count; i++)
+            {
+                if (i == 0)
+                {
+                    // Push descriptors apply here. Remove reserved bindings.
+                    ResourceDescriptorCollection original = sets[i];
+
+                    var pdUniforms = new List<ResourceDescriptor>();
+
+                    foreach (ResourceDescriptor descriptor in original.Descriptors)
+                    {
+                        if (!reserved.Contains(descriptor.Binding))
+                        {
+                            pdUniforms.Add(descriptor);
+                        }
+                    }
+
+                    result[i] = new ResourceDescriptorCollection(new(pdUniforms));
+                }
+                else
+                {
+                    result[i] = sets[i];
+                }
+            }
+
+            return new(result);
         }
 
         private static ResourceBindingSegment[][] BuildClearSegments(ReadOnlyCollection<ResourceDescriptorCollection> sets)
@@ -491,6 +556,11 @@ namespace Ryujinx.Graphics.Vulkan
         public Auto<DescriptorSetCollection> GetNewDescriptorSetCollection(int setIndex, out bool isNew)
         {
             return _plce.GetNewDescriptorSetCollection(setIndex, out isNew);
+        }
+
+        public bool HasSameLayout(ShaderCollection other)
+        {
+            return other != null && _plce == other._plce;
         }
 
         protected virtual void Dispose(bool disposing)
