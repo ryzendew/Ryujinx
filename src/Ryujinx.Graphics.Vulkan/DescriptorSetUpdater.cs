@@ -4,6 +4,7 @@ using Ryujinx.Graphics.Shader;
 using Silk.NET.Vulkan;
 using System;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using CompareOp = Ryujinx.Graphics.GAL.CompareOp;
 using Format = Ryujinx.Graphics.GAL.Format;
 using SamplerCreateInfo = Ryujinx.Graphics.GAL.SamplerCreateInfo;
@@ -61,7 +62,7 @@ namespace Ryujinx.Graphics.Vulkan
         private BitMapStruct<Array2<long>> _storageSet;
         private BitMapStruct<Array2<long>> _uniformMirrored;
         private BitMapStruct<Array2<long>> _storageMirrored;
-        private int[] _uniformSetPd;
+        private readonly int[] _uniformSetPd;
         private int _pdSequence = 1;
 
         private bool _updateDescriptorCacheCbIndex;
@@ -696,16 +697,13 @@ namespace Ryujinx.Graphics.Vulkan
             var bindingSegments = _program.BindingSegments[PipelineBase.UniformSetIndex];
             var dummyBuffer = _dummyBuffer?.GetBuffer();
 
+            long updatedBindings = 0;
+            DescriptorSetTemplateWriter writer = _templateUpdater.Begin(32 * Unsafe.SizeOf<DescriptorBufferInfo>());
+
             foreach (ResourceBindingSegment segment in bindingSegments)
             {
-                // Important:
-                // Not all bindings may update in a push descriptor update,
-                // But we still want to group them when consecutive if possible.
-
                 int binding = segment.Binding;
                 int count = segment.Count;
-
-                int updateFrom = -1;
 
                 ReadOnlySpan<DescriptorBufferInfo> uniformBuffers = _uniformBuffers;
 
@@ -727,26 +725,17 @@ namespace Ryujinx.Graphics.Vulkan
                         // Need to set this push descriptor (even if the buffer binding has not changed)
 
                         _uniformSetPd[index] = sequence;
+                        updatedBindings |= 1L << index;
 
-                        if (updateFrom == -1)
-                        {
-                            updateFrom = index;
-                        }
-                    }
-                    else if (updateFrom != -1)
-                    {
-                        // Need to push updates that have been queued.
-
-                        UpdateBuffers(cbs, pbp, updateFrom, uniformBuffers.Slice(updateFrom, index - updateFrom), DescriptorType.UniformBuffer);
-
-                        updateFrom = -1;
+                        writer.Push(MemoryMarshal.CreateReadOnlySpan(ref _uniformBuffers[index], 1));
                     }
                 }
+            }
 
-                if (updateFrom != -1)
-                {
-                    UpdateBuffers(cbs, pbp, updateFrom, uniformBuffers.Slice(updateFrom, binding + count - updateFrom), DescriptorType.UniformBuffer);
-                }
+            if (updatedBindings > 0)
+            {
+                DescriptorSetTemplate template = _program.GetPushDescriptorTemplate(updatedBindings);
+                _templateUpdater.CommitPushDescriptor(_gd, cbs, template, _program.PipelineLayout);
             }
         }
 

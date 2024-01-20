@@ -126,7 +126,7 @@ namespace Ryujinx.Graphics.Vulkan
 
             ClearSegments = BuildClearSegments(sets);
             BindingSegments = BuildBindingSegments(resourceLayout.SetUsages);
-            Templates = BuildTemplates();
+            Templates = BuildTemplates(usePushDescriptors);
 
             _compileTask = Task.CompletedTask;
             _firstBackgroundUse = false;
@@ -308,12 +308,18 @@ namespace Ryujinx.Graphics.Vulkan
             return segments;
         }
 
-        private DescriptorSetTemplate[] BuildTemplates()
+        private DescriptorSetTemplate[] BuildTemplates(bool usePushDescriptors)
         {
             var templates = new DescriptorSetTemplate[BindingSegments.Length];
 
             for (int setIndex = 0; setIndex < BindingSegments.Length; setIndex++)
             {
+                if (usePushDescriptors && setIndex == 0)
+                {
+                    // Push descriptors get updated using templates owned by the pipeline layout.
+                    continue;
+                }
+
                 ResourceBindingSegment[] segments = BindingSegments[setIndex];
 
                 if (segments != null && segments.Length > 0)
@@ -496,6 +502,11 @@ namespace Ryujinx.Graphics.Vulkan
         public byte[] GetBinary()
         {
             return null;
+        }
+
+        public DescriptorSetTemplate GetPushDescriptorTemplate(long updateMask)
+        {
+            return _plce.GetPushDescriptorTemplate(IsCompute ? PipelineBindPoint.Compute : PipelineBindPoint.Graphics, updateMask);
         }
 
         public void AddComputePipeline(ref SpecData key, Auto<DisposablePipeline> pipeline)
