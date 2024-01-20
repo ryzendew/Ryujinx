@@ -183,13 +183,23 @@ namespace Ryujinx.Graphics.Vulkan
                     // Push descriptors apply here. Remove reserved bindings.
                     ResourceDescriptorCollection original = sets[i];
 
-                    var pdUniforms = new List<ResourceDescriptor>();
+                    var pdUniforms = new ResourceDescriptor[original.Descriptors.Count];
+                    int j = 0;
 
                     foreach (ResourceDescriptor descriptor in original.Descriptors)
                     {
-                        if (!reserved.Contains(descriptor.Binding))
+                        if (reserved.Contains(descriptor.Binding))
                         {
-                            pdUniforms.Add(descriptor);
+                            // If the binding is reserved, set its descriptor count to 0.
+                            pdUniforms[j++] = new ResourceDescriptor(
+                                descriptor.Binding,
+                                0,
+                                descriptor.Type,
+                                descriptor.Stages);
+                        }
+                        else
+                        {
+                            pdUniforms[j++] = descriptor;
                         }
                     }
 
