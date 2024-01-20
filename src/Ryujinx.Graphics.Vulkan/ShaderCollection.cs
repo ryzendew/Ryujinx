@@ -114,7 +114,7 @@ namespace Ryujinx.Graphics.Vulkan
                 !IsCompute &&
                 CanUsePushDescriptors(gd, resourceLayout, IsCompute);
 
-            ReadOnlyCollection<ResourceDescriptorCollection> sets = usePushDescriptors ? 
+            ReadOnlyCollection<ResourceDescriptorCollection> sets = usePushDescriptors ?
                 BuildPushDescriptorSets(gd, resourceLayout.Sets) : resourceLayout.Sets;
 
             _plce = gd.PipelineLayoutCache.GetOrCreate(gd, device, sets, usePushDescriptors);
