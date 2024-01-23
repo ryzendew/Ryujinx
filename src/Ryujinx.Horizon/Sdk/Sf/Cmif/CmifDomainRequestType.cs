@@ -1,9 +1,9 @@
-﻿namespace Ryujinx.Horizon.Sdk.Sf.Cmif
+namespace Ryujinx.Horizon.Sdk.Sf.Cmif
 {
     enum CmifDomainRequestType : byte
     {
-        Invalid     = 0,
+        Invalid = 0,
         SendMessage = 1,
-        Close       = 2
+        Close = 2,
     }
 }

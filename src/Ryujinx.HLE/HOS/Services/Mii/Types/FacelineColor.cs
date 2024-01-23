@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Mii.Types
+namespace Ryujinx.HLE.HOS.Services.Mii.Types
 {
     enum FacelineColor : byte
     {
@@ -13,7 +13,7 @@
         Almond,
         Espresso,
 
-        Min = 0,
-        Max = 9
+        Min = Beige,
+        Max = Espresso,
     }
 }

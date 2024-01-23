@@ -5,10 +5,12 @@ using Ryujinx.Graphics.Shader.Translation;
 using Silk.NET.Vulkan;
 using System;
 using Extent2D = Ryujinx.Graphics.GAL.Extents2D;
+using Format = Silk.NET.Vulkan.Format;
+using SamplerCreateInfo = Ryujinx.Graphics.GAL.SamplerCreateInfo;
 
 namespace Ryujinx.Graphics.Vulkan.Effects
 {
-    internal partial class FsrScalingFilter : IScalingFilter
+    internal class FsrScalingFilter : IScalingFilter
     {
         private readonly VulkanRenderer _renderer;
         private PipelineHelperShader _pipeline;
@@ -54,36 +56,36 @@ namespace Ryujinx.Graphics.Vulkan.Effects
             var scalingShader = EmbeddedResources.Read("Ryujinx.Graphics.Vulkan/Effects/Shaders/FsrScaling.spv");
             var sharpeningShader = EmbeddedResources.Read("Ryujinx.Graphics.Vulkan/Effects/Shaders/FsrSharpening.spv");
 
-            var computeBindings = new ShaderBindings(
-                new[] { 2 },
-                Array.Empty<int>(),
-                new[] { 1 },
-                new[] { 0 });
+            var scalingResourceLayout = new ResourceLayoutBuilder()
+                .Add(ResourceStages.Compute, ResourceType.UniformBuffer, 2)
+                .Add(ResourceStages.Compute, ResourceType.TextureAndSampler, 1)
+                .Add(ResourceStages.Compute, ResourceType.Image, 0).Build();
 
-            var sharpeningBindings = new ShaderBindings(
-                new[] { 2, 3, 4 },
-                Array.Empty<int>(),
-                new[] { 1 },
-                new[] { 0 });
+            var sharpeningResourceLayout = new ResourceLayoutBuilder()
+                .Add(ResourceStages.Compute, ResourceType.UniformBuffer, 2)
+                .Add(ResourceStages.Compute, ResourceType.UniformBuffer, 3)
+                .Add(ResourceStages.Compute, ResourceType.UniformBuffer, 4)
+                .Add(ResourceStages.Compute, ResourceType.TextureAndSampler, 1)
+                .Add(ResourceStages.Compute, ResourceType.Image, 0).Build();
 
-            _sampler = _renderer.CreateSampler(GAL.SamplerCreateInfo.Create(MinFilter.Linear, MagFilter.Linear));
+            _sampler = _renderer.CreateSampler(SamplerCreateInfo.Create(MinFilter.Linear, MagFilter.Linear));
 
             _scalingProgram = _renderer.CreateProgramWithMinimalLayout(new[]
             {
-                new ShaderSource(scalingShader, computeBindings, ShaderStage.Compute, TargetLanguage.Spirv)
-            });
+                new ShaderSource(scalingShader, ShaderStage.Compute, TargetLanguage.Spirv),
+            }, scalingResourceLayout);
 
             _sharpeningProgram = _renderer.CreateProgramWithMinimalLayout(new[]
             {
-                new ShaderSource(sharpeningShader, sharpeningBindings, ShaderStage.Compute, TargetLanguage.Spirv)
-            });
+                new ShaderSource(sharpeningShader, ShaderStage.Compute, TargetLanguage.Spirv),
+            }, sharpeningResourceLayout);
         }
 
         public void Run(
             TextureView view,
             CommandBufferScoped cbs,
             Auto<DisposableImageView> destinationTexture,
-            Silk.NET.Vulkan.Format format,
+            Format format,
             int width,
             int height,
             Extent2D source,
@@ -95,8 +97,6 @@ namespace Ryujinx.Graphics.Vulkan.Effects
                 || !_intermediaryTexture.Info.Equals(view.Info))
             {
                 var originalInfo = view.Info;
-
-                var swapRB = originalInfo.Format.IsBgr() && originalInfo.SwizzleR == SwizzleComponent.Red;
 
                 var info = new TextureCreateInfo(
                     width,
@@ -110,12 +110,12 @@ namespace Ryujinx.Graphics.Vulkan.Effects
                     originalInfo.Format,
                     originalInfo.DepthStencilMode,
                     originalInfo.Target,
-                    swapRB ? originalInfo.SwizzleB : originalInfo.SwizzleR,
+                    originalInfo.SwizzleR,
                     originalInfo.SwizzleG,
-                    swapRB ? originalInfo.SwizzleR : originalInfo.SwizzleB,
+                    originalInfo.SwizzleB,
                     originalInfo.SwizzleA);
                 _intermediaryTexture?.Dispose();
-                _intermediaryTexture = _renderer.CreateTexture(info, view.ScaleFactor) as TextureView;
+                _intermediaryTexture = _renderer.CreateTexture(info) as TextureView;
             }
 
             _pipeline.SetCommandBuffer(cbs);
@@ -138,14 +138,14 @@ namespace Ryujinx.Graphics.Vulkan.Effects
                 destination.Y1,
                 destination.Y2,
                 scaleX,
-                scaleY
+                scaleY,
             };
 
             int rangeSize = dimensionsBuffer.Length * sizeof(float);
             var bufferHandle = _renderer.BufferManager.CreateWithHandle(_renderer, rangeSize);
             _renderer.BufferManager.SetData(bufferHandle, 0, dimensionsBuffer);
 
-            ReadOnlySpan<float> sharpeningBuffer = stackalloc float[] { 1.5f - (Level * 0.01f * 1.5f)};
+            ReadOnlySpan<float> sharpeningBuffer = stackalloc float[] { 1.5f - (Level * 0.01f * 1.5f) };
             var sharpeningBufferHandle = _renderer.BufferManager.CreateWithHandle(_renderer, sizeof(float));
             _renderer.BufferManager.SetData(sharpeningBufferHandle, 0, sharpeningBuffer);
 
@@ -155,15 +155,13 @@ namespace Ryujinx.Graphics.Vulkan.Effects
 
             var bufferRanges = new BufferRange(bufferHandle, 0, rangeSize);
             _pipeline.SetUniformBuffers(stackalloc[] { new BufferAssignment(2, bufferRanges) });
-            _pipeline.SetImage(0, _intermediaryTexture, GAL.Format.R8G8B8A8Unorm);
+            _pipeline.SetImage(0, _intermediaryTexture, FormatTable.ConvertRgba8SrgbToUnorm(view.Info.Format));
             _pipeline.DispatchCompute(dispatchX, dispatchY, 1);
             _pipeline.ComputeBarrier();
 
             // Sharpening pass
-            _pipeline.SetCommandBuffer(cbs);
             _pipeline.SetProgram(_sharpeningProgram);
             _pipeline.SetTextureAndSampler(ShaderStage.Compute, 1, _intermediaryTexture, _sampler);
-            _pipeline.SetUniformBuffers(stackalloc[] { new BufferAssignment(2, bufferRanges) });
             var sharpeningRange = new BufferRange(sharpeningBufferHandle, 0, sizeof(float));
             _pipeline.SetUniformBuffers(stackalloc[] { new BufferAssignment(4, sharpeningRange) });
             _pipeline.SetImage(0, destinationTexture);

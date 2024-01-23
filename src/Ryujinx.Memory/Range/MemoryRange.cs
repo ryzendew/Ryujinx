@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.Memory.Range
+namespace Ryujinx.Memory.Range
 {
     /// <summary>
     /// Range of memory composed of an address and size.
@@ -8,7 +8,7 @@
         /// <summary>
         /// An empty memory range, with a null address and zero size.
         /// </summary>
-        public static MemoryRange Empty => new MemoryRange(0UL, 0);
+        public static MemoryRange Empty => new(0UL, 0);
 
         /// <summary>
         /// Start address of the range.

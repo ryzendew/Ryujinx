@@ -23,6 +23,10 @@ namespace ARMeilleure.CodeGen.Arm64
         ScalarTernaryShlRd,
         ScalarTernaryShrRd,
 
+        Vector128Unary,
+        Vector128Binary,
+        Vector128BinaryRd,
+
         VectorUnary,
         VectorUnaryBitwise,
         VectorUnaryByElem,
@@ -50,10 +54,7 @@ namespace ARMeilleure.CodeGen.Arm64
         VectorTernaryShlRd,
         VectorTernaryShrRd,
 
-        Vector128Unary,
-        Vector128Binary,
-
         GetRegister,
-        SetRegister
+        SetRegister,
     }
 }

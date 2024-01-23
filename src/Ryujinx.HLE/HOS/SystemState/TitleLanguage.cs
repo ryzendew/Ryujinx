@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.HLE.HOS.SystemState
+namespace Ryujinx.HLE.HOS.SystemState
 {
     public enum TitleLanguage
     {
@@ -17,6 +17,6 @@
         Korean,
         TraditionalChinese,
         SimplifiedChinese,
-        BrazilianPortuguese
+        BrazilianPortuguese,
     }
 }

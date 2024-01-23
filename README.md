@@ -68,7 +68,7 @@ The latest automatic build for Windows, macOS, and Linux can be found on the [Of
 If you wish to build the emulator yourself, follow these steps:
 
 ### Step 1
-Install the X64 version of [.NET 7.0 (or higher) SDK](https://dotnet.microsoft.com/download/dotnet/7.0).
+Install the X64 version of [.NET 8.0 (or higher) SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
 
 ### Step 2
 Either use `git clone https://github.com/Ryujinx/Ryujinx` on the command line to clone the repository or use Code --> Download zip button to get the files.
@@ -141,3 +141,5 @@ See [LICENSE.txt](LICENSE.txt) and [THIRDPARTY.md](distribution/legal/THIRDPARTY
 
 - [LibHac](https://github.com/Thealexbarney/LibHac) is used for our file-system.
 - [AmiiboAPI](https://www.amiiboapi.com) is used in our Amiibo emulation.
+- [ldn_mitm](https://github.com/spacemeowx2/ldn_mitm) is used for one of our available multiplayer modes.
+- [ShellLink](https://github.com/securifybv/ShellLink) is used for Windows shortcut generation.

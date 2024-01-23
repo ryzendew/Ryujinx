@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd.Types
 {
@@ -9,6 +9,6 @@ namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd.Types
         CloseOnExecution = 1,
         NonBlocking = 2,
 
-        FlagsShift = 28
+        FlagsShift = 28,
     }
 }

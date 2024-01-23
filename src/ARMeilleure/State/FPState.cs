@@ -1,4 +1,4 @@
-﻿namespace ARMeilleure.State
+namespace ARMeilleure.State
 {
     public enum FPState
     {
@@ -26,6 +26,6 @@
         RMode1Flag = 23,
         FzFlag = 24,
         DnFlag = 25,
-        AhpFlag = 26
+        AhpFlag = 26,
     }
 }

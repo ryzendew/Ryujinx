@@ -1,4 +1,4 @@
-﻿using Gtk;
+using Gtk;
 using Ryujinx.Common.Utilities;
 using Ryujinx.Ui.Common.Helper;
 using System.Net.Http;
@@ -25,7 +25,7 @@ namespace Ryujinx.Ui.Windows
                 _patreonNamesText.Buffer.Text = "Connection Error.";
             }
 
-            HttpClient httpClient = new HttpClient();
+            HttpClient httpClient = new();
 
             try
             {
@@ -75,6 +75,11 @@ namespace Ryujinx.Ui.Windows
         private void ContributorsButton_Pressed(object sender, ButtonPressEventArgs args)
         {
             OpenHelper.OpenUrl("https://github.com/Ryujinx/Ryujinx/graphs/contributors?type=a");
+        }
+
+        private void ChangelogButton_Pressed(object sender, ButtonPressEventArgs args)
+        {
+            OpenHelper.OpenUrl("https://github.com/Ryujinx/Ryujinx/wiki/Changelog#ryujinx-changelog");
         }
     }
 }

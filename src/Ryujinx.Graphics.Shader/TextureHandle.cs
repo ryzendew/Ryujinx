@@ -8,7 +8,7 @@ namespace Ryujinx.Graphics.Shader
         CombinedSampler = 0, // Must be 0.
         SeparateSamplerHandle = 1,
         SeparateSamplerId = 2,
-        SeparateConstantSamplerHandle = 3
+        SeparateConstantSamplerHandle = 3,
     }
 
     public static class TextureHandle
@@ -61,7 +61,7 @@ namespace Ryujinx.Graphics.Shader
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int UnpackTextureId(int packedId)
         {
-            return (packedId >> 0) & 0xfffff;
+            return packedId & 0xfffff;
         }
 
         /// <summary>

@@ -1,4 +1,4 @@
-﻿using Ryujinx.Common.Logging;
+using Ryujinx.Common.Logging;
 using Ryujinx.HLE.Exceptions;
 using Ryujinx.HLE.HOS.Kernel.Process;
 using System.Runtime.CompilerServices;
@@ -7,7 +7,7 @@ namespace Ryujinx.HLE.HOS.Tamper
 {
     class TamperedKProcess : ITamperedProcess
     {
-        private KProcess _process;
+        private readonly KProcess _process;
 
         public ProcessState State => _process.State;
 

@@ -1,4 +1,4 @@
-﻿using Ryujinx.SDL2.Common;
+using Ryujinx.SDL2.Common;
 using System;
 
 namespace Ryujinx.Input.SDL2
@@ -38,6 +38,7 @@ namespace Ryujinx.Input.SDL2
 
         public void Dispose()
         {
+            GC.SuppressFinalize(this);
             Dispose(true);
         }
 

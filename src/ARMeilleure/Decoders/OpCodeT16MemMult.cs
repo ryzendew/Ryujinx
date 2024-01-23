@@ -1,4 +1,4 @@
-﻿using ARMeilleure.Instructions;
+using ARMeilleure.Instructions;
 using System;
 using System.Numerics;
 
@@ -27,7 +27,7 @@ namespace ARMeilleure.Decoders
             {
                 InstName.Ldm => true,
                 InstName.Stm => false,
-                _ => throw new InvalidOperationException()
+                _ => throw new InvalidOperationException(),
             };
         }
     }

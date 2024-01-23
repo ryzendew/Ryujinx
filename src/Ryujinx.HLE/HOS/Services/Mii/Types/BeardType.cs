@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Mii.Types
+namespace Ryujinx.HLE.HOS.Services.Mii.Types
 {
     enum BeardType : byte
     {
@@ -9,7 +9,7 @@
         LionsMane,
         Full,
 
-        Min = 0,
-        Max = 5
+        Min = None,
+        Max = Full,
     }
 }

@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 
 namespace Ryujinx.HLE.HOS.Services.Nifm.StaticService.Types
 {
@@ -6,8 +6,8 @@ namespace Ryujinx.HLE.HOS.Services.Nifm.StaticService.Types
     struct IpSettingData
     {
         public IpAddressSetting IpAddressSetting;
-        public DnsSetting       DnsSetting;
-        public ProxySetting     ProxySetting;
-        public short            Mtu;
+        public DnsSetting DnsSetting;
+        public ProxySetting ProxySetting;
+        public short Mtu;
     }
 }

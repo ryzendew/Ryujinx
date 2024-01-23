@@ -1,4 +1,4 @@
-﻿using Ryujinx.Horizon.Common;
+using Ryujinx.Horizon.Common;
 
 namespace Ryujinx.Horizon.Sdk.OsTypes
 {
@@ -6,6 +6,6 @@ namespace Ryujinx.Horizon.Sdk.OsTypes
     {
         private const int ModuleId = 3;
 
-        public static Result OutOfResource => new Result(ModuleId, 9);
+        public static Result OutOfResource => new(ModuleId, 9);
     }
 }

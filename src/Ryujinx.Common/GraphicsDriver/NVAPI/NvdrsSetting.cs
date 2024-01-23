@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 
 namespace Ryujinx.Common.GraphicsDriver.NVAPI
 {
@@ -19,7 +19,7 @@ namespace Ryujinx.Common.GraphicsDriver.NVAPI
     }
 
     [StructLayout(LayoutKind.Explicit, Size = 0x3020)]
-    unsafe struct NvdrsSetting
+    struct NvdrsSetting
     {
         [FieldOffset(0x0)]
         public uint Version;

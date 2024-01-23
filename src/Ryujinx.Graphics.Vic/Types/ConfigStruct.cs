@@ -1,10 +1,10 @@
-﻿using Ryujinx.Common.Memory;
+using Ryujinx.Common.Memory;
 
 namespace Ryujinx.Graphics.Vic.Types
 {
     struct ConfigStruct
     {
-#pragma warning disable CS0649
+#pragma warning disable CS0649 // Field is never assigned to
         public PipeConfig PipeConfig;
         public OutputConfig OutputConfig;
         public OutputSurfaceConfig OutputSurfaceConfig;

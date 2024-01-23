@@ -29,14 +29,24 @@ namespace Ryujinx.Ava.UI.Applet
 
         public bool DisplayMessageDialog(ControllerAppletUiArgs args)
         {
-            string message = LocaleManager.Instance.UpdateAndGetDynamicValue(
-                args.PlayerCountMin == args.PlayerCountMax ? LocaleKeys.DialogControllerAppletMessage : LocaleKeys.DialogControllerAppletMessagePlayerRange,
-                args.PlayerCountMin == args.PlayerCountMax ? args.PlayerCountMin.ToString() : $"{args.PlayerCountMin}-{args.PlayerCountMax}",
-                args.SupportedStyles,
-                string.Join(", ", args.SupportedPlayers),
-                args.IsDocked ? LocaleManager.Instance[LocaleKeys.DialogControllerAppletDockModeSet] : "");
+            ManualResetEvent dialogCloseEvent = new(false);
 
-            return DisplayMessageDialog(LocaleManager.Instance[LocaleKeys.DialogControllerAppletTitle], message);
+            bool okPressed = false;
+
+            Dispatcher.UIThread.InvokeAsync(async () =>
+            {
+                var response = await ControllerAppletDialog.ShowControllerAppletDialog(_parent, args);
+                if (response == UserResult.Ok)
+                {
+                    okPressed = true;
+                }
+
+                dialogCloseEvent.Set();
+            });
+
+            dialogCloseEvent.WaitOne();
+
+            return okPressed;
         }
 
         public bool DisplayMessageDialog(string title, string message)
@@ -53,8 +63,6 @@ namespace Ryujinx.Ava.UI.Applet
 
                     bool opened = false;
 
-                    _parent.Activate();
-
                     UserResult response = await ContentDialogHelper.ShowDeferredContentDialog(_parent,
                        title,
                        message,
@@ -64,7 +72,7 @@ namespace Ryujinx.Ava.UI.Applet
                        LocaleManager.Instance[LocaleKeys.SettingsButtonClose],
                        (int)Symbol.Important,
                        deferEvent,
-                       async (window) =>
+                       async window =>
                        {
                            if (opened)
                            {
@@ -76,6 +84,8 @@ namespace Ryujinx.Ava.UI.Applet
                            _parent.SettingsWindow = new SettingsWindow(_parent.VirtualFileSystem, _parent.ContentManager);
 
                            await _parent.SettingsWindow.ShowDialog(window);
+
+                           _parent.SettingsWindow = null;
 
                            opened = false;
                        });
@@ -108,11 +118,11 @@ namespace Ryujinx.Ava.UI.Applet
             bool error = false;
             string inputText = args.InitialText ?? "";
 
-            Dispatcher.UIThread.Post(async () =>
+            Dispatcher.UIThread.InvokeAsync(async () =>
             {
                 try
                 {
-                    var response = await SwkbdAppletDialog.ShowInputDialog(_parent, LocaleManager.Instance[LocaleKeys.SoftwareKeyboard], args);
+                    var response = await SwkbdAppletDialog.ShowInputDialog(LocaleManager.Instance[LocaleKeys.SoftwareKeyboard], args);
 
                     if (response.Result == UserResult.Ok)
                     {
@@ -142,10 +152,7 @@ namespace Ryujinx.Ava.UI.Applet
         public void ExecuteProgram(Switch device, ProgramSpecifyKind kind, ulong value)
         {
             device.Configuration.UserChannelPersistence.ExecuteProgram(kind, value);
-            if (_parent.ViewModel.AppHost != null)
-            {
-                _parent.ViewModel.AppHost.Stop();
-            }
+            _parent.ViewModel.AppHost?.Stop();
         }
 
         public bool DisplayErrorAppletDialog(string title, string message, string[] buttons)
@@ -154,7 +161,7 @@ namespace Ryujinx.Ava.UI.Applet
 
             bool showDetails = false;
 
-            Dispatcher.UIThread.Post(async () =>
+            Dispatcher.UIThread.InvokeAsync(async () =>
             {
                 try
                 {
@@ -162,7 +169,7 @@ namespace Ryujinx.Ava.UI.Applet
                     {
                         Title = title,
                         WindowStartupLocation = WindowStartupLocation.CenterScreen,
-                        Width = 400
+                        Width = 400,
                     };
 
                     object response = await msgDialog.Run();

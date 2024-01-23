@@ -1,4 +1,4 @@
-﻿using NUnit.Framework;
+using NUnit.Framework;
 using Ryujinx.HLE.HOS.Applets;
 using System.Text;
 
@@ -21,8 +21,7 @@ namespace Ryujinx.Tests.HLE
         [Test]
         public void StripUnicodeControlCodes_Passthrough()
         {
-            string[] prompts = new string[]
-            {
+            string[] prompts = {
                 "Please name him.",
                 "Name her, too.",
                 "Name your friend.",

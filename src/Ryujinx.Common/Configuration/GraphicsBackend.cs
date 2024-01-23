@@ -1,4 +1,4 @@
-﻿using Ryujinx.Common.Utilities;
+using Ryujinx.Common.Utilities;
 using System.Text.Json.Serialization;
 
 namespace Ryujinx.Common.Configuration
@@ -7,6 +7,6 @@ namespace Ryujinx.Common.Configuration
     public enum GraphicsBackend
     {
         Vulkan,
-        OpenGl
+        OpenGl,
     }
 }

@@ -1,4 +1,4 @@
-﻿using Ryujinx.Common.Configuration;
+using Ryujinx.Common.Configuration;
 using Ryujinx.Common.Logging;
 using Ryujinx.Input.HLE;
 using Ryujinx.SDL2.Common;
@@ -10,7 +10,7 @@ namespace Ryujinx.Headless.SDL2.Vulkan
 {
     class VulkanWindow : WindowBase
     {
-        private GraphicsDebugLevel _glLogLevel;
+        private readonly GraphicsDebugLevel _glLogLevel;
 
         public VulkanWindow(
             InputManager inputManager,
@@ -29,20 +29,28 @@ namespace Ryujinx.Headless.SDL2.Vulkan
 
         protected override void InitializeRenderer()
         {
-            Renderer?.Window.SetSize(DefaultWidth, DefaultHeight);
-            MouseDriver.SetClientSize(DefaultWidth, DefaultHeight);
+            if (IsExclusiveFullscreen)
+            {
+                Renderer?.Window.SetSize(ExclusiveFullscreenWidth, ExclusiveFullscreenHeight);
+                MouseDriver.SetClientSize(ExclusiveFullscreenWidth, ExclusiveFullscreenHeight);
+            }
+            else
+            {
+                Renderer?.Window.SetSize(DefaultWidth, DefaultHeight);
+                MouseDriver.SetClientSize(DefaultWidth, DefaultHeight);
+            }
         }
 
-        private void BasicInvoke(Action action)
+        private static void BasicInvoke(Action action)
         {
             action();
         }
 
-        public unsafe IntPtr CreateWindowSurface(IntPtr instance)
+        public IntPtr CreateWindowSurface(IntPtr instance)
         {
             ulong surfaceHandle = 0;
 
-            Action createSurface = () =>
+            void CreateSurface()
             {
                 if (SDL_Vulkan_CreateSurface(WindowHandle, instance, out surfaceHandle) == SDL_bool.SDL_FALSE)
                 {
@@ -52,15 +60,15 @@ namespace Ryujinx.Headless.SDL2.Vulkan
 
                     throw new Exception(errorMessage);
                 }
-            };
+            }
 
             if (SDL2Driver.MainThreadDispatcher != null)
             {
-                SDL2Driver.MainThreadDispatcher(createSurface);
+                SDL2Driver.MainThreadDispatcher(CreateSurface);
             }
             else
             {
-                createSurface();
+                CreateSurface();
             }
 
             return (IntPtr)surfaceHandle;

@@ -1,11 +1,11 @@
-﻿using Ryujinx.Common.Utilities;
+using Ryujinx.Common.Utilities;
 
 namespace Ryujinx.Graphics.Vic.Types
 {
-    struct LumaKeyStruct
+    readonly struct LumaKeyStruct
     {
-        private long _word0;
-        private long _word1;
+        private readonly long _word0;
+        private readonly long _word1;
 
         public int LumaCoeff0 => (int)_word0.Extract(0, 20);
         public int LumaCoeff1 => (int)_word0.Extract(20, 20);

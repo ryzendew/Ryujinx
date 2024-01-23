@@ -1,4 +1,4 @@
-﻿using Ryujinx.Graphics.GAL;
+using Ryujinx.Graphics.GAL;
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -14,7 +14,7 @@ namespace Ryujinx.Graphics.Vulkan
         public int IndexStride { get; }
         public bool RepeatStart { get; }
 
-        private VulkanRenderer _gd;
+        private readonly VulkanRenderer _gd;
         private int _currentSize;
         private BufferHandle _repeatingBuffer;
 

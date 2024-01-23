@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Hid.Types.SharedMemory.Keyboard
+namespace Ryujinx.HLE.HOS.Services.Hid.Types.SharedMemory.Keyboard
 {
     enum KeyboardKeyShift
     {
@@ -133,6 +133,6 @@
         RightControl = 228,
         RightShift = 229,
         RightAlt = 230,
-        RightGui = 231
+        RightGui = 231,
     }
 }

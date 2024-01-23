@@ -1,4 +1,4 @@
-﻿using Ryujinx.Ava.UI.ViewModels;
+using Ryujinx.Ava.UI.ViewModels;
 using Ryujinx.Common;
 using Ryujinx.Common.Utilities;
 using Ryujinx.Ui.Common.Configuration;
@@ -13,17 +13,19 @@ namespace Ryujinx.Ava.Common.Locale
     {
         private const string DefaultLanguageCode = "en_US";
 
-        private Dictionary<LocaleKeys, string>                      _localeStrings;
-        private Dictionary<LocaleKeys, string>                      _localeDefaultStrings;
+        private readonly Dictionary<LocaleKeys, string> _localeStrings;
+        private Dictionary<LocaleKeys, string> _localeDefaultStrings;
         private readonly ConcurrentDictionary<LocaleKeys, object[]> _dynamicValues;
+        private string _localeLanguageCode;
 
-        public static LocaleManager Instance { get; } = new LocaleManager();
+        public static LocaleManager Instance { get; } = new();
+        public event Action LocaleChanged;
 
         public LocaleManager()
         {
-            _localeStrings        = new Dictionary<LocaleKeys, string>();
+            _localeStrings = new Dictionary<LocaleKeys, string>();
             _localeDefaultStrings = new Dictionary<LocaleKeys, string>();
-            _dynamicValues        = new ConcurrentDictionary<LocaleKeys, object[]>();
+            _dynamicValues = new ConcurrentDictionary<LocaleKeys, object[]>();
 
             Load();
         }
@@ -104,6 +106,15 @@ namespace Ryujinx.Ava.Common.Locale
             }
         }
 
+        public bool IsRTL()
+        {
+            return _localeLanguageCode switch
+            {
+                "he_IL" => true,
+                _ => false
+            };
+        }
+
         public string UpdateAndGetDynamicValue(LocaleKeys key, params object[] values)
         {
             _dynamicValues[key] = values;
@@ -124,13 +135,16 @@ namespace Ryujinx.Ava.Common.Locale
             {
                 this[item.Key] = item.Value;
             }
+
+            _localeLanguageCode = languageCode;
+            LocaleChanged?.Invoke();
         }
 
-        private Dictionary<LocaleKeys, string> LoadJsonLanguage(string languageCode = DefaultLanguageCode)
+        private static Dictionary<LocaleKeys, string> LoadJsonLanguage(string languageCode = DefaultLanguageCode)
         {
-            var    localeStrings = new Dictionary<LocaleKeys, string>();
-            string languageJson  = EmbeddedResources.ReadAllText($"Ryujinx.Ava/Assets/Locales/{languageCode}.json");
-            var    strings       = JsonHelper.Deserialize(languageJson, CommonJsonContext.Default.StringDictionary);
+            var localeStrings = new Dictionary<LocaleKeys, string>();
+            string languageJson = EmbeddedResources.ReadAllText($"Ryujinx.Ava/Assets/Locales/{languageCode}.json");
+            var strings = JsonHelper.Deserialize(languageJson, CommonJsonContext.Default.StringDictionary);
 
             foreach (var item in strings)
             {

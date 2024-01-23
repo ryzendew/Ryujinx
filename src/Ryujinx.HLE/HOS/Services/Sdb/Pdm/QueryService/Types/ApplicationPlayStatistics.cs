@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 
 namespace Ryujinx.HLE.HOS.Services.Sdb.Pdm.QueryService.Types
 {
@@ -6,7 +6,7 @@ namespace Ryujinx.HLE.HOS.Services.Sdb.Pdm.QueryService.Types
     struct ApplicationPlayStatistics
     {
         public ulong TitleId;
-        public long  TotalPlayTime; // In nanoseconds.
-        public long  TotalLaunchCount;
+        public long TotalPlayTime; // In nanoseconds.
+        public long TotalLaunchCount;
     }
 }

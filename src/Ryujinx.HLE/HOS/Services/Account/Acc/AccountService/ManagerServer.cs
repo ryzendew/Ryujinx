@@ -1,10 +1,12 @@
-﻿using Microsoft.IdentityModel.Tokens;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 using Ryujinx.Common.Logging;
 using Ryujinx.HLE.HOS.Kernel.Threading;
 using Ryujinx.HLE.HOS.Services.Account.Acc.AsyncContext;
 using System;
-using System.IdentityModel.Tokens.Jwt;
+using System.Collections.Generic;
 using System.Security.Cryptography;
+using System.Security.Principal;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,7 +18,9 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.AccountService
         // TODO: Determine where and how NetworkServiceAccountId is set.
         private const long NetworkServiceAccountId = 0xcafe;
 
-        private UserId _userId;
+#pragma warning disable IDE0052 // Remove unread private member
+        private readonly UserId _userId;
+#pragma warning restore IDE0052
 
         public ManagerServer(UserId userId)
         {
@@ -29,16 +33,11 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.AccountService
 
             RSAParameters parameters = provider.ExportParameters(true);
 
-            RsaSecurityKey secKey = new RsaSecurityKey(parameters);
+            RsaSecurityKey secKey = new(parameters);
 
-            SigningCredentials credentials = new SigningCredentials(secKey, "RS256");
+            SigningCredentials credentials = new(secKey, "RS256");
 
             credentials.Key.KeyId = parameters.ToString();
-
-            var header = new JwtHeader(credentials)
-            {
-                { "jku", "https://e0d67c509fb203858ebcb2fe3f88c2aa.baas.nintendo.com/1.0.0/certificates" }
-            };
 
             byte[] rawUserId = new byte[0x10];
             RandomNumberGenerator.Fill(rawUserId);
@@ -49,23 +48,25 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.AccountService
             byte[] deviceAccountId = new byte[0x10];
             RandomNumberGenerator.Fill(deviceId);
 
-            var payload = new JwtPayload
+            var descriptor = new SecurityTokenDescriptor
             {
-                { "sub", Convert.ToHexString(rawUserId).ToLower() },
-                { "aud", "ed9e2f05d286f7b8" },
-                { "di", Convert.ToHexString(deviceId).ToLower() },
-                { "sn", "XAW10000000000" },
-                { "bs:did", Convert.ToHexString(deviceAccountId).ToLower() },
-                { "iss", "https://e0d67c509fb203858ebcb2fe3f88c2aa.baas.nintendo.com" },
-                { "typ", "id_token" },
-                { "iat", DateTimeOffset.UtcNow.ToUnixTimeSeconds() },
-                { "jti", Guid.NewGuid().ToString() },
-                { "exp", (DateTimeOffset.UtcNow + TimeSpan.FromHours(3)).ToUnixTimeSeconds() }
+                Subject = new GenericIdentity(Convert.ToHexString(rawUserId).ToLower()),
+                SigningCredentials = credentials,
+                Audience = "ed9e2f05d286f7b8",
+                Issuer = "https://e0d67c509fb203858ebcb2fe3f88c2aa.baas.nintendo.com",
+                TokenType = "id_token",
+                IssuedAt = DateTime.UtcNow,
+                Expires = DateTime.UtcNow + TimeSpan.FromHours(3),
+                Claims = new Dictionary<string, object>
+                {
+                    { "jku", "https://e0d67c509fb203858ebcb2fe3f88c2aa.baas.nintendo.com/1.0.0/certificates" },
+                    { "di", Convert.ToHexString(deviceId).ToLower() },
+                    { "sn", "XAW10000000000" },
+                    { "bs:did", Convert.ToHexString(deviceAccountId).ToLower() }
+                }
             };
 
-            JwtSecurityToken securityToken = new JwtSecurityToken(header, payload);
-
-            return new JwtSecurityTokenHandler().WriteToken(securityToken);
+            return new JsonWebTokenHandler().CreateToken(descriptor);
         }
 
         public ResultCode CheckAvailability(ServiceCtx context)
@@ -94,8 +95,8 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.AccountService
 
         public ResultCode EnsureIdTokenCacheAsync(ServiceCtx context, out IAsyncContext asyncContext)
         {
-            KEvent         asyncEvent     = new KEvent(context.Device.System.KernelContext);
-            AsyncExecution asyncExecution = new AsyncExecution(asyncEvent);
+            KEvent asyncEvent = new(context.Device.System.KernelContext);
+            AsyncExecution asyncExecution = new(asyncEvent);
 
             asyncExecution.Initialize(1000, EnsureIdTokenCacheAsyncImpl);
 
@@ -123,7 +124,9 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.AccountService
         public ResultCode LoadIdTokenCache(ServiceCtx context)
         {
             ulong bufferPosition = context.Request.ReceiveBuff[0].Position;
-            ulong bufferSize     = context.Request.ReceiveBuff[0].Size;
+#pragma warning disable IDE0059 // Remove unnecessary value assignment
+            ulong bufferSize = context.Request.ReceiveBuff[0].Size;
+#pragma warning restore IDE0059
 
             // NOTE: This opens the file at "su/cache/USERID_IN_UUID_STRING.dat" (where USERID_IN_UUID_STRING is formatted as "%08x-%04x-%04x-%02x%02x-%08x%04x")
             //       in the "account:/" savedata and writes some data in the buffer.
@@ -169,8 +172,8 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.AccountService
 
         public ResultCode LoadNetworkServiceLicenseKindAsync(ServiceCtx context, out IAsyncNetworkServiceLicenseKindContext asyncContext)
         {
-            KEvent asyncEvent = new KEvent(context.Device.System.KernelContext);
-            AsyncExecution asyncExecution = new AsyncExecution(asyncEvent);
+            KEvent asyncEvent = new(context.Device.System.KernelContext);
+            AsyncExecution asyncExecution = new(asyncEvent);
 
             Logger.Stub?.PrintStub(LogClass.ServiceAcc);
 

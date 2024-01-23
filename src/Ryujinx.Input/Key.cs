@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.Input
+namespace Ryujinx.Input
 {
     /// <summary>
     /// Represent a key from a keyboard.
@@ -137,6 +137,6 @@
         BackSlash,
         Unbound,
 
-        Count
+        Count,
     }
 }

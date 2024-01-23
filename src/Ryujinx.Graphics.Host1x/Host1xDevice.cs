@@ -1,7 +1,6 @@
-﻿using Ryujinx.Common;
+using Ryujinx.Common;
 using Ryujinx.Common.Logging;
 using Ryujinx.Graphics.Device;
-using Ryujinx.Graphics.Gpu.Synchronization;
 using System;
 using System.Numerics;
 
@@ -24,7 +23,7 @@ namespace Ryujinx.Graphics.Host1x
         private readonly SyncptIncrManager _syncptIncrMgr;
         private readonly AsyncWorkQueue<Command> _commandQueue;
 
-        private readonly Devices _devices = new Devices();
+        private readonly Devices _devices = new();
 
         public Host1xClass Class { get; }
 
@@ -35,7 +34,7 @@ namespace Ryujinx.Graphics.Host1x
         private int _mask;
         private bool _incrementing;
 
-        public Host1xDevice(SynchronizationManager syncMgr)
+        public Host1xDevice(ISynchronizationManager syncMgr)
         {
             _syncptIncrMgr = new SyncptIncrManager(syncMgr);
             _commandQueue = new AsyncWorkQueue<Command>(Process, "Ryujinx.Host1xProcessor");

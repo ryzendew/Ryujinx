@@ -1,11 +1,11 @@
-﻿using Ryujinx.Graphics.GAL.Multithreading.Model;
+using Ryujinx.Graphics.GAL.Multithreading.Model;
 using System;
 
 namespace Ryujinx.Graphics.GAL.Multithreading.Commands
 {
     struct SetVertexAttribsCommand : IGALCommand, IGALCommand<SetVertexAttribsCommand>
     {
-        public CommandType CommandType => CommandType.SetVertexAttribs;
+        public readonly CommandType CommandType => CommandType.SetVertexAttribs;
         private SpanRef<VertexAttribDescriptor> _vertexAttribs;
 
         public void Set(SpanRef<VertexAttribDescriptor> vertexAttribs)

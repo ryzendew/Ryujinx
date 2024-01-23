@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.Graphics.Nvdec.Vp9
+namespace Ryujinx.Graphics.Nvdec.Vp9
 {
     internal enum CodecErr
     {
@@ -51,6 +51,6 @@
         /*!\brief An iterator reached the end of list.
          *
          */
-        CodecListEnd
+        CodecListEnd,
     }
 }

@@ -1,4 +1,4 @@
-﻿using Ryujinx.Common;
+using Ryujinx.Common;
 using Ryujinx.Common.Logging;
 using Ryujinx.Graphics.Gpu.Memory;
 using Ryujinx.Memory;
@@ -10,7 +10,7 @@ namespace Ryujinx.HLE.HOS.Services.Nv.NvDrvServices.NvMap
     {
         private const int FlagNotFreedYet = 1;
 
-        private static NvMapIdDictionary _maps = new NvMapIdDictionary();
+        private static readonly NvMapIdDictionary _maps = new();
 
         public NvMapDeviceFile(ServiceCtx context, IVirtualMemoryManager memory, ulong owner) : base(context, owner)
         {
@@ -69,7 +69,7 @@ namespace Ryujinx.HLE.HOS.Services.Nv.NvDrvServices.NvMap
                 return NvInternalResult.InvalidInput;
             }
 
-            int size = BitUtils.AlignUp(arguments.Size, (int)MemoryManager.PageSize);
+            uint size = BitUtils.AlignUp(arguments.Size, (uint)MemoryManager.PageSize);
 
             arguments.Handle = CreateHandleFromMap(new NvMapHandle(size));
 
@@ -125,10 +125,10 @@ namespace Ryujinx.HLE.HOS.Services.Nv.NvDrvServices.NvMap
             {
                 map.Allocated = true;
 
-                map.Align =       arguments.Align;
-                map.Kind  = (byte)arguments.Kind;
+                map.Align = arguments.Align;
+                map.Kind = (byte)arguments.Kind;
 
-                int size = BitUtils.AlignUp(map.Size, (int)MemoryManager.PageSize);
+                uint size = BitUtils.AlignUp(map.Size, (uint)MemoryManager.PageSize);
 
                 ulong address = arguments.Address;
 
@@ -142,7 +142,7 @@ namespace Ryujinx.HLE.HOS.Services.Nv.NvDrvServices.NvMap
 
                 if (result == NvInternalResult.Success)
                 {
-                    map.Size    = size;
+                    map.Size = size;
                     map.Address = address;
                 }
             }
@@ -164,12 +164,12 @@ namespace Ryujinx.HLE.HOS.Services.Nv.NvDrvServices.NvMap
             if (DecrementMapRefCount(Owner, arguments.Handle))
             {
                 arguments.Address = map.Address;
-                arguments.Flags   = 0;
+                arguments.Flags = 0;
             }
             else
             {
                 arguments.Address = 0;
-                arguments.Flags   = FlagNotFreedYet;
+                arguments.Flags = FlagNotFreedYet;
             }
 
             arguments.Size = map.Size;
@@ -190,15 +190,26 @@ namespace Ryujinx.HLE.HOS.Services.Nv.NvDrvServices.NvMap
 
             switch (arguments.Param)
             {
-                case NvMapHandleParam.Size:  arguments.Result = map.Size;   break;
-                case NvMapHandleParam.Align: arguments.Result = map.Align;  break;
-                case NvMapHandleParam.Heap:  arguments.Result = 0x40000000; break;
-                case NvMapHandleParam.Kind:  arguments.Result = map.Kind;   break;
-                case NvMapHandleParam.Compr: arguments.Result = 0;          break;
+                case NvMapHandleParam.Size:
+                    arguments.Result = (int)map.Size;
+                    break;
+                case NvMapHandleParam.Align:
+                    arguments.Result = map.Align;
+                    break;
+                case NvMapHandleParam.Heap:
+                    arguments.Result = 0x40000000;
+                    break;
+                case NvMapHandleParam.Kind:
+                    arguments.Result = map.Kind;
+                    break;
+                case NvMapHandleParam.Compr:
+                    arguments.Result = 0;
+                    break;
 
                 // Note: Base is not supported and returns an error.
                 // Any other value also returns an error.
-                default: return NvInternalResult.InvalidInput;
+                default:
+                    return NvInternalResult.InvalidInput;
             }
 
             return NvInternalResult.Success;

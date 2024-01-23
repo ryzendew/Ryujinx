@@ -1,4 +1,4 @@
-﻿using Ryujinx.Input;
+using Ryujinx.Input;
 using System;
 using System.Collections.Generic;
 using AvaKey = Avalonia.Input.Key;
@@ -143,7 +143,7 @@ namespace Ryujinx.Ava.Input
             AvaKey.OemBackslash,
 
             // NOTE: invalid
-            AvaKey.None
+            AvaKey.None,
         };
 
         private static readonly Dictionary<AvaKey, Key> _avaKeyMapping;

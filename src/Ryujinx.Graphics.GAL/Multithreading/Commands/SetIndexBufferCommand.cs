@@ -1,8 +1,8 @@
-﻿namespace Ryujinx.Graphics.GAL.Multithreading.Commands
+namespace Ryujinx.Graphics.GAL.Multithreading.Commands
 {
     struct SetIndexBufferCommand : IGALCommand, IGALCommand<SetIndexBufferCommand>
     {
-        public CommandType CommandType => CommandType.SetIndexBuffer;
+        public readonly CommandType CommandType => CommandType.SetIndexBuffer;
         private BufferRange _buffer;
         private IndexType _type;
 

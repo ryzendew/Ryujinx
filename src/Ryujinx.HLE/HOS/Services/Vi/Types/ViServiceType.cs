@@ -1,9 +1,9 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Vi.Types
+namespace Ryujinx.HLE.HOS.Services.Vi.Types
 {
     enum ViServiceType
     {
         Application,
         Manager,
-        System
+        System,
     }
 }

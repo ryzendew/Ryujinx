@@ -1,4 +1,4 @@
-﻿using Ryujinx.Audio.Common;
+using Ryujinx.Audio.Common;
 using Ryujinx.Audio.Input;
 using Ryujinx.Audio.Integration;
 using Ryujinx.HLE.HOS.Kernel;
@@ -10,9 +10,9 @@ namespace Ryujinx.HLE.HOS.Services.Audio.AudioIn
 {
     class AudioIn : IAudioIn
     {
-        private AudioInputSystem _system;
-        private uint _processHandle;
-        private KernelContext _kernelContext;
+        private readonly AudioInputSystem _system;
+        private readonly uint _processHandle;
+        private readonly KernelContext _kernelContext;
 
         public AudioIn(AudioInputSystem system, KernelContext kernelContext, uint processHandle)
         {
@@ -80,9 +80,9 @@ namespace Ryujinx.HLE.HOS.Services.Audio.AudioIn
         {
             IWritableEvent outEvent = _system.RegisterBufferEvent();
 
-            if (outEvent is AudioKernelEvent)
+            if (outEvent is AudioKernelEvent kernelEvent)
             {
-                return ((AudioKernelEvent)outEvent).Event;
+                return kernelEvent.Event;
             }
             else
             {

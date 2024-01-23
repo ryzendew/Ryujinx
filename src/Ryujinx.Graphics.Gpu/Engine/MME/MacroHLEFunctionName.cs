@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.Graphics.Gpu.Engine.MME
+namespace Ryujinx.Graphics.Gpu.Engine.MME
 {
     /// <summary>
     /// Name of the High-level implementation of a Macro function.
@@ -6,11 +6,19 @@
     enum MacroHLEFunctionName
     {
         None,
+        BindShaderProgram,
         ClearColor,
         ClearDepthStencil,
         DrawArraysInstanced,
+        DrawElements,
         DrawElementsInstanced,
         DrawElementsIndirect,
-        MultiDrawElementsIndirectCount
+        MultiDrawElementsIndirectCount,
+
+        UpdateBlendState,
+        UpdateColorMasks,
+        UpdateUniformBufferState,
+        UpdateUniformBufferStateCbu,
+        UpdateUniformBufferStateCbuV2
     }
 }

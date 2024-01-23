@@ -11,7 +11,6 @@
     Width="500"
     Height="380"
     mc:Ignorable="d"
-    x:CompileBindings="True"
     x:DataType="viewModels:DownloadableContentManagerViewModel"
     Focusable="True">
     <Grid>
@@ -40,21 +39,21 @@
                         Name="EnableAllButton"
                         MinWidth="90"
                         Margin="5"
-                        Command="{ReflectionBinding EnableAll}">
+                        Command="{Binding EnableAll}">
                         <TextBlock Text="{locale:Locale DlcManagerEnableAllButton}" />
                     </Button>
                     <Button
                         Name="DisableAllButton"
                         MinWidth="90"
                         Margin="5"
-                        Command="{ReflectionBinding DisableAll}">
+                        Command="{Binding DisableAll}">
                         <TextBlock Text="{locale:Locale DlcManagerDisableAllButton}" />
                     </Button>
                 </StackPanel>
                 <TextBox
                     Grid.Column="2"
-                    MinHeight="27"
-                    MaxHeight="27"
+                    MinHeight="29"
+                    MaxHeight="29"
                     HorizontalAlignment="Stretch"
                     Watermark="{locale:Locale Search}"
                     Text="{Binding Search}" />
@@ -71,12 +70,11 @@
             Padding="2.5">
             <ListBox
                 AutoScrollToSelectedItem="False"
-                VirtualizationMode="None"
                 SelectionMode="Multiple, Toggle"
                 Background="Transparent"
                 SelectionChanged="OnSelectionChanged"
                 SelectedItems="{Binding SelectedDownloadableContents, Mode=TwoWay}"
-                Items="{Binding Views}">
+                ItemsSource="{Binding Views}">
                 <ListBox.DataTemplates>
                     <DataTemplate
                         DataType="models:DownloadableContentModel">
@@ -89,8 +87,8 @@
                                 <Grid
                                     Grid.Column="0">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"></ColumnDefinition>
-                                        <ColumnDefinition Width="Auto"></ColumnDefinition>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock
                                         Grid.Column="0"
@@ -159,14 +157,14 @@
                     Name="AddButton"
                     MinWidth="90"
                     Margin="5"
-                    Command="{ReflectionBinding Add}">
+                    Command="{Binding Add}">
                     <TextBlock Text="{locale:Locale SettingsTabGeneralAdd}" />
                 </Button>
                 <Button
                     Name="RemoveAllButton"
                     MinWidth="90"
                     Margin="5"
-                    Command="{ReflectionBinding RemoveAll}">
+                    Command="{Binding RemoveAll}">
                     <TextBlock Text="{locale:Locale DlcManagerRemoveAllButton}" />
                 </Button>
             </StackPanel>

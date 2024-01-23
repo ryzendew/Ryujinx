@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.HLE.HOS.Applets.Browser
+namespace Ryujinx.HLE.HOS.Applets.Browser
 {
     public enum WebExitReason : uint
     {
@@ -6,6 +6,6 @@
         BackButton,
         Requested,
         LastUrl,
-        ErrorDialog = 7
+        ErrorDialog = 7,
     }
 }

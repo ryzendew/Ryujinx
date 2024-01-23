@@ -1,6 +1,7 @@
 using LibHac;
 using LibHac.Common;
 using LibHac.Fs;
+using LibHac.Fs.Fsa;
 using Path = LibHac.FsSrv.Sf.Path;
 
 namespace Ryujinx.HLE.HOS.Services.Fs.FileSystemProxy
@@ -115,7 +116,7 @@ namespace Ryujinx.HLE.HOS.Services.Fs.FileSystemProxy
 
             if (result.IsSuccess())
             {
-                IFile fileInterface = new IFile(ref file.Ref);
+                IFile fileInterface = new(ref file.Ref);
 
                 MakeObject(context, fileInterface);
             }
@@ -136,7 +137,7 @@ namespace Ryujinx.HLE.HOS.Services.Fs.FileSystemProxy
 
             if (result.IsSuccess())
             {
-                IDirectory dirInterface = new IDirectory(ref dir.Ref);
+                IDirectory dirInterface = new(ref dir.Ref);
 
                 MakeObject(context, dirInterface);
             }
@@ -198,6 +199,16 @@ namespace Ryujinx.HLE.HOS.Services.Fs.FileSystemProxy
             context.ResponseData.Write(timestamp.Modified);
             context.ResponseData.Write(timestamp.Accessed);
             context.ResponseData.Write(1L); // Is valid?
+
+            return (ResultCode)result.Value;
+        }
+
+        [CommandCmif(16)]
+        public ResultCode GetFileSystemAttribute(ServiceCtx context)
+        {
+            Result result = _fileSystem.Get.GetFileSystemAttribute(out FileSystemAttribute attribute);
+
+            context.ResponseData.Write(SpanHelpers.AsReadOnlyByteSpan(in attribute));
 
             return (ResultCode)result.Value;
         }

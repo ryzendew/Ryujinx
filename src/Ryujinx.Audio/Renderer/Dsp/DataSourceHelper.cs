@@ -44,9 +44,9 @@ namespace Ryujinx.Audio.Renderer.Dsp
 
         public static void ProcessWaveBuffers(IVirtualMemoryManager memoryManager, Span<float> outputBuffer, ref WaveBufferInformation info, Span<WaveBuffer> wavebuffers, ref VoiceUpdateState voiceState, uint targetSampleRate, int sampleCount)
         {
-            const int tempBufferSize = 0x3F00;
+            const int TempBufferSize = 0x3F00;
 
-            Span<short> tempBuffer = stackalloc short[tempBufferSize];
+            Span<short> tempBuffer = stackalloc short[TempBufferSize];
 
             float sampleRateRatio = (float)info.SourceSampleRate / targetSampleRate * info.Pitch;
 
@@ -60,11 +60,11 @@ namespace Ryujinx.Audio.Renderer.Dsp
 
             int totalNeededSize = (int)MathF.Truncate(fraction + sampleRateRatio * sampleCount);
 
-            if (totalNeededSize + pitchMaxLength <= tempBufferSize && totalNeededSize >= 0)
+            if (totalNeededSize + pitchMaxLength <= TempBufferSize && totalNeededSize >= 0)
             {
                 int sourceSampleCountToProcess = sampleCount;
 
-                int maxSampleCountPerIteration = Math.Min((int)MathF.Truncate((tempBufferSize - fraction) / sampleRateRatio), sampleCount);
+                int maxSampleCountPerIteration = Math.Min((int)MathF.Truncate((TempBufferSize - fraction) / sampleRateRatio), sampleCount);
 
                 bool isStarving = false;
 
@@ -76,7 +76,7 @@ namespace Ryujinx.Audio.Renderer.Dsp
 
                     if (!info.DecodingBehaviour.HasFlag(DecodingBehaviour.SkipPitchAndSampleRateConversion))
                     {
-                        voiceState.Pitch.AsSpan().Slice(0, pitchMaxLength).CopyTo(tempBuffer);
+                        voiceState.Pitch.AsSpan()[..pitchMaxLength].CopyTo(tempBuffer);
                         tempBufferIndex += pitchMaxLength;
                     }
 
@@ -107,7 +107,7 @@ namespace Ryujinx.Audio.Renderer.Dsp
                             voiceState.LoopContext = memoryManager.Read<AdpcmLoopContext>(waveBuffer.Context);
                         }
 
-                        Span<short> tempSpan = tempBuffer.Slice(tempBufferIndex + y);
+                        Span<short> tempSpan = tempBuffer[(tempBufferIndex + y)..];
 
                         int decodedSampleCount = -1;
 
@@ -168,7 +168,7 @@ namespace Ryujinx.Audio.Renderer.Dsp
                                 decodedSampleCount = PcmHelper.Decode(tempSpan, waveBufferPcmFloat, targetSampleStartOffset, targetSampleEndOffset, info.ChannelIndex, info.ChannelCount);
                                 break;
                             default:
-                                Logger.Error?.Print(LogClass.AudioRenderer, $"Unsupported sample format " + info.SampleFormat);
+                                Logger.Error?.Print(LogClass.AudioRenderer, "Unsupported sample format " + info.SampleFormat);
                                 break;
                         }
 
@@ -220,7 +220,7 @@ namespace Ryujinx.Audio.Renderer.Dsp
                         }
                     }
 
-                    Span<int> outputSpanInt = MemoryMarshal.Cast<float, int>(outputBuffer.Slice(i));
+                    Span<int> outputSpanInt = MemoryMarshal.Cast<float, int>(outputBuffer[i..]);
 
                     if (info.DecodingBehaviour.HasFlag(DecodingBehaviour.SkipPitchAndSampleRateConversion))
                     {
@@ -231,9 +231,9 @@ namespace Ryujinx.Audio.Renderer.Dsp
                     }
                     else
                     {
-                        Span<short> tempSpan = tempBuffer.Slice(tempBufferIndex + y);
+                        Span<short> tempSpan = tempBuffer[(tempBufferIndex + y)..];
 
-                        tempSpan.Slice(0, sampleCountToDecode - y).Fill(0);
+                        tempSpan[..(sampleCountToDecode - y)].Clear();
 
                         ToFloat(outputBuffer, outputSpanInt, sampleCountToProcess);
 
@@ -430,9 +430,9 @@ namespace Ryujinx.Audio.Renderer.Dsp
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void RemapLegacyChannelEffectMappingToChannelResourceMapping(bool isSupported, Span<ushort> bufferIndices)
+        public static void RemapLegacyChannelEffectMappingToChannelResourceMapping(bool isSupported, Span<ushort> bufferIndices, uint channelCount)
         {
-            if (!isSupported && bufferIndices.Length == 6)
+            if (!isSupported && channelCount == 6)
             {
                 ushort backLeft = bufferIndices[2];
                 ushort backRight = bufferIndices[3];
@@ -447,9 +447,9 @@ namespace Ryujinx.Audio.Renderer.Dsp
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void RemapChannelResourceMappingToLegacy(bool isSupported, Span<ushort> bufferIndices)
+        public static void RemapChannelResourceMappingToLegacy(bool isSupported, Span<ushort> bufferIndices, uint channelCount)
         {
-            if (isSupported && bufferIndices.Length == 6)
+            if (isSupported && channelCount == 6)
             {
                 ushort frontCenter = bufferIndices[2];
                 ushort lowFrequency = bufferIndices[3];

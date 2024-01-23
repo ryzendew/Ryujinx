@@ -1,4 +1,4 @@
-﻿using LibHac.Common;
+using LibHac.Common;
 using LibHac.Fs;
 using LibHac.Fs.Fsa;
 using LibHac.FsSystem;
@@ -17,16 +17,20 @@ namespace Ryujinx.HLE.Loaders.Processes.Extensions
 {
     public static class PartitionFileSystemExtensions
     {
-        private static readonly DownloadableContentJsonSerializerContext ContentSerializerContext = new(JsonHelper.GetDefaultSerializerOptions());
-        private static readonly TitleUpdateMetadataJsonSerializerContext TitleSerializerContext = new(JsonHelper.GetDefaultSerializerOptions());
+        private static readonly DownloadableContentJsonSerializerContext _contentSerializerContext = new(JsonHelper.GetDefaultSerializerOptions());
+        private static readonly TitleUpdateMetadataJsonSerializerContext _titleSerializerContext = new(JsonHelper.GetDefaultSerializerOptions());
 
-        internal static (bool, ProcessResult) TryLoad(this PartitionFileSystem partitionFileSystem, Switch device, string path, out string errorMessage)
+        internal static (bool, ProcessResult) TryLoad<TMetaData, TFormat, THeader, TEntry>(this PartitionFileSystemCore<TMetaData, TFormat, THeader, TEntry> partitionFileSystem, Switch device, string path, out string errorMessage)
+            where TMetaData : PartitionFileSystemMetaCore<TFormat, THeader, TEntry>, new()
+            where TFormat : IPartitionFileSystemFormat
+            where THeader : unmanaged, IPartitionFileSystemHeader
+            where TEntry : unmanaged, IPartitionFileSystemEntry
         {
             errorMessage = null;
 
             // Load required NCAs.
-            Nca mainNca    = null;
-            Nca patchNca   = null;
+            Nca mainNca = null;
+            Nca patchNca = null;
             Nca controlNca = null;
 
             try
@@ -88,10 +92,11 @@ namespace Ryujinx.HLE.Loaders.Processes.Extensions
                     string titleUpdateMetadataPath = System.IO.Path.Combine(AppDataManager.GamesDirPath, titleIdBase.ToString("x16"), "updates.json");
                     if (File.Exists(titleUpdateMetadataPath))
                     {
-                        string updatePath = JsonHelper.DeserializeFromFile(titleUpdateMetadataPath, TitleSerializerContext.TitleUpdateMetadata).Selected;
+                        string updatePath = JsonHelper.DeserializeFromFile(titleUpdateMetadataPath, _titleSerializerContext.TitleUpdateMetadata).Selected;
                         if (File.Exists(updatePath))
                         {
-                            PartitionFileSystem updatePartitionFileSystem = new(new FileStream(updatePath, FileMode.Open, FileAccess.Read).AsStorage());
+                            PartitionFileSystem updatePartitionFileSystem = new();
+                            updatePartitionFileSystem.Initialize(new FileStream(updatePath, FileMode.Open, FileAccess.Read).AsStorage()).ThrowIfFailure();
 
                             device.Configuration.VirtualFileSystem.ImportTickets(updatePartitionFileSystem);
 
@@ -142,7 +147,7 @@ namespace Ryujinx.HLE.Loaders.Processes.Extensions
                 string addOnContentMetadataPath = System.IO.Path.Combine(AppDataManager.GamesDirPath, mainNca.Header.TitleId.ToString("x16"), "dlc.json");
                 if (File.Exists(addOnContentMetadataPath))
                 {
-                    List<DownloadableContentContainer> dlcContainerList = JsonHelper.DeserializeFromFile(addOnContentMetadataPath, ContentSerializerContext.ListDownloadableContentContainer);
+                    List<DownloadableContentContainer> dlcContainerList = JsonHelper.DeserializeFromFile(addOnContentMetadataPath, _contentSerializerContext.ListDownloadableContentContainer);
 
                     foreach (DownloadableContentContainer downloadableContentContainer in dlcContainerList)
                     {

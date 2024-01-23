@@ -1,4 +1,4 @@
-﻿using Ryujinx.Common.Utilities;
+using Ryujinx.Common.Utilities;
 using System.Text.Json.Serialization;
 
 namespace Ryujinx.Common.Configuration.Hid
@@ -138,6 +138,6 @@ namespace Ryujinx.Common.Configuration.Hid
         BackSlash,
         Unbound,
 
-        Count
+        Count,
     }
 }

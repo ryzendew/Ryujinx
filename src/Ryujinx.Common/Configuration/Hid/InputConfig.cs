@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 
@@ -30,7 +30,7 @@ namespace Ryujinx.Common.Configuration.Hid
         ///  Player's Index for the controller
         /// </summary>
         public PlayerIndex PlayerIndex { get; set; }
-        
+
         public event PropertyChangedEventHandler PropertyChanged;
 
         protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)

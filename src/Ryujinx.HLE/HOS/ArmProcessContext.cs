@@ -1,4 +1,4 @@
-﻿using ARMeilleure.Memory;
+using ARMeilleure.Memory;
 using Ryujinx.Cpu;
 using Ryujinx.Graphics.Gpu;
 using Ryujinx.HLE.HOS.Kernel.Process;
@@ -25,7 +25,15 @@ namespace Ryujinx.HLE.HOS
 
         public IVirtualMemoryManager AddressSpace => _memoryManager;
 
-        public ArmProcessContext(ulong pid, ICpuEngine cpuEngine, GpuContext gpuContext, T memoryManager, bool for64Bit)
+        public ulong AddressSpaceSize { get; }
+
+        public ArmProcessContext(
+            ulong pid,
+            ICpuEngine cpuEngine,
+            GpuContext gpuContext,
+            T memoryManager,
+            ulong addressSpaceSize,
+            bool for64Bit)
         {
             if (memoryManager is IRefCounted rc)
             {
@@ -38,6 +46,8 @@ namespace Ryujinx.HLE.HOS
             _gpuContext = gpuContext;
             _cpuContext = cpuEngine.CreateCpuContext(memoryManager, for64Bit);
             _memoryManager = memoryManager;
+
+            AddressSpaceSize = addressSpaceSize;
         }
 
         public IExecutionContext CreateExecutionContext(ExceptionCallbacks exceptionCallbacks)
@@ -47,6 +57,8 @@ namespace Ryujinx.HLE.HOS
 
         public void Execute(IExecutionContext context, ulong codeAddress)
         {
+            // We must wait until shader cache is loaded, among other things, before executing CPU code.
+            _gpuContext.WaitUntilGpuReady();
             _cpuContext.Execute(context, codeAddress);
         }
 
@@ -75,6 +87,8 @@ namespace Ryujinx.HLE.HOS
                 _memoryManager = null;
                 _gpuContext.UnregisterProcess(_pid);
             }
+
+            _cpuContext.Dispose();
         }
     }
 }

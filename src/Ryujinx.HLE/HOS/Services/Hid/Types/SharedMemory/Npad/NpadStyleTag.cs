@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace Ryujinx.HLE.HOS.Services.Hid.Types.SharedMemory.Npad
 {
@@ -71,6 +71,6 @@ namespace Ryujinx.HLE.HOS.Services.Hid.Types.SharedMemory.Npad
         /// <summary>
         /// Generic controller.
         /// </summary>
-        System = 1 << 30
+        System = 1 << 30,
     }
 }

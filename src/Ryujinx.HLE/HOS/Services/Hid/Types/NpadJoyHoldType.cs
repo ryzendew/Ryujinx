@@ -1,8 +1,8 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Hid.Types
+namespace Ryujinx.HLE.HOS.Services.Hid.Types
 {
     enum NpadJoyHoldType
     {
         Vertical,
-        Horizontal
+        Horizontal,
     }
 }

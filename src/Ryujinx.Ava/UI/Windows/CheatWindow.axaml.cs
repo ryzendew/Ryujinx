@@ -1,9 +1,12 @@
-﻿using Avalonia.Collections;
+using Avalonia.Collections;
 using Ryujinx.Ava.Common.Locale;
 using Ryujinx.Ava.UI.Models;
 using Ryujinx.HLE.FileSystem;
 using Ryujinx.HLE.HOS;
+using Ryujinx.Ui.App.Common;
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 
@@ -14,9 +17,10 @@ namespace Ryujinx.Ava.UI.Windows
         private readonly string _enabledCheatsPath;
         public bool NoCheatsFound { get; }
 
-        private AvaloniaList<CheatsList> LoadedCheats { get; }
+        public AvaloniaList<CheatNode> LoadedCheats { get; }
 
         public string Heading { get; }
+        public string BuildId { get; }
 
         public CheatWindow()
         {
@@ -27,21 +31,22 @@ namespace Ryujinx.Ava.UI.Windows
             Title = $"Ryujinx {Program.Version} - " + LocaleManager.Instance[LocaleKeys.CheatWindowTitle];
         }
 
-        public CheatWindow(VirtualFileSystem virtualFileSystem, string titleId, string titleName)
+        public CheatWindow(VirtualFileSystem virtualFileSystem, string titleId, string titleName, string titlePath)
         {
-            LoadedCheats = new AvaloniaList<CheatsList>();
+            LoadedCheats = new AvaloniaList<CheatNode>();
 
             Heading = LocaleManager.Instance.UpdateAndGetDynamicValue(LocaleKeys.CheatWindowHeading, titleName, titleId.ToUpper());
+            BuildId = ApplicationData.GetApplicationBuildId(virtualFileSystem, titlePath);
 
             InitializeComponent();
 
-            string modsBasePath = virtualFileSystem.ModLoader.GetModsBasePath();
-            string titleModsPath = virtualFileSystem.ModLoader.GetTitleDir(modsBasePath, titleId);
-            ulong titleIdValue = ulong.Parse(titleId, System.Globalization.NumberStyles.HexNumber);
+            string modsBasePath = ModLoader.GetModsBasePath();
+            string titleModsPath = ModLoader.GetTitleDir(modsBasePath, titleId);
+            ulong titleIdValue = ulong.Parse(titleId, NumberStyles.HexNumber);
 
             _enabledCheatsPath = Path.Combine(titleModsPath, "cheats", "enabled.txt");
 
-            string[] enabled = { };
+            string[] enabled = Array.Empty<string>();
 
             if (File.Exists(_enabledCheatsPath))
             {
@@ -56,25 +61,24 @@ namespace Ryujinx.Ava.UI.Windows
 
             string currentCheatFile = string.Empty;
             string buildId = string.Empty;
-            string parentPath = string.Empty;
 
-            CheatsList currentGroup = null;
+            CheatNode currentGroup = null;
 
             foreach (var cheat in mods.Cheats)
             {
                 if (cheat.Path.FullName != currentCheatFile)
                 {
                     currentCheatFile = cheat.Path.FullName;
-                    parentPath = currentCheatFile.Replace(titleModsPath, "");
+                    string parentPath = currentCheatFile.Replace(titleModsPath, "");
 
                     buildId = Path.GetFileNameWithoutExtension(currentCheatFile).ToUpper();
-                    currentGroup = new CheatsList(buildId, parentPath);
+                    currentGroup = new CheatNode("", buildId, parentPath, true);
 
                     LoadedCheats.Add(currentGroup);
                 }
 
-                var model = new CheatModel(cheat.Name, buildId, enabled.Contains($"{buildId}-{cheat.Name}"));
-                currentGroup?.Add(model);
+                var model = new CheatNode(cheat.Name, buildId, "", false, enabled.Contains($"{buildId}-{cheat.Name}"));
+                currentGroup?.SubNodes.Add(model);
 
                 cheatAdded++;
             }
@@ -85,7 +89,7 @@ namespace Ryujinx.Ava.UI.Windows
             }
 
             DataContext = this;
-            
+
             Title = $"Ryujinx {Program.Version} - " + LocaleManager.Instance[LocaleKeys.CheatWindowTitle];
         }
 
@@ -96,11 +100,11 @@ namespace Ryujinx.Ava.UI.Windows
                 return;
             }
 
-            List<string> enabledCheats = new List<string>();
+            List<string> enabledCheats = new();
 
             foreach (var cheats in LoadedCheats)
             {
-                foreach (var cheat in cheats)
+                foreach (var cheat in cheats.SubNodes)
                 {
                     if (cheat.IsEnabled)
                     {

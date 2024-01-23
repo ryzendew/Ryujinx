@@ -1,4 +1,4 @@
-﻿using Silk.NET.Vulkan;
+using Silk.NET.Vulkan;
 using System;
 using System.Runtime.Serialization;
 
@@ -31,10 +31,6 @@ namespace Ryujinx.Graphics.Vulkan
         }
 
         public VulkanException(string message, Exception innerException) : base(message, innerException)
-        {
-        }
-
-        protected VulkanException(SerializationInfo info, StreamingContext context) : base(info, context)
         {
         }
     }

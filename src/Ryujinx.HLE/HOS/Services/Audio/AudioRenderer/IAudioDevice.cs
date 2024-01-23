@@ -1,4 +1,4 @@
-﻿using Ryujinx.HLE.HOS.Kernel.Threading;
+using Ryujinx.HLE.HOS.Kernel.Threading;
 
 namespace Ryujinx.HLE.HOS.Services.Audio.AudioRenderer
 {
@@ -6,7 +6,7 @@ namespace Ryujinx.HLE.HOS.Services.Audio.AudioRenderer
     {
         string[] ListAudioDeviceName();
         ResultCode SetAudioDeviceOutputVolume(string name, float volume);
-        ResultCode GetAudioDeviceOutputVolume(string name,  out float volume);
+        ResultCode GetAudioDeviceOutputVolume(string name, out float volume);
         string GetActiveAudioDeviceName();
         KEvent QueryAudioDeviceSystemEvent();
         uint GetActiveChannelCount();

@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.Graphics.Gpu.Image
+namespace Ryujinx.Graphics.Gpu.Image
 {
     /// <summary>
     /// The scale mode for a given texture.
@@ -11,6 +11,6 @@
         Eligible = 0,
         Scaled = 1,
         Blacklisted = 2,
-        Undesired = 3
+        Undesired = 3,
     }
 }

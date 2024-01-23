@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net7.0</TargetFramework>
-    <RuntimeIdentifiers>win10-x64;osx-x64;linux-x64</RuntimeIdentifiers>
+    <TargetFramework>net8.0</TargetFramework>
+    <RuntimeIdentifiers>win-x64;osx-x64;linux-x64</RuntimeIdentifiers>
     <OutputType>Exe</OutputType>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Version>1.0.0-dirty</Version>
@@ -14,6 +14,7 @@
 
   <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
     <PublishSingleFile>true</PublishSingleFile>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
     <PublishTrimmed>true</PublishTrimmed>
     <TrimMode>partial</TrimMode>
   </PropertyGroup>
@@ -24,7 +25,7 @@
     <PackageReference Include="GtkSharp.Dependencies.osx" Condition="'$(RuntimeIdentifier)' == 'osx-x64' OR '$(RuntimeIdentifier)' == 'osx-arm64'" />
     <PackageReference Include="Ryujinx.Graphics.Nvdec.Dependencies" />
     <PackageReference Include="Ryujinx.Audio.OpenAL.Dependencies" Condition="'$(RuntimeIdentifier)' != 'linux-x64' AND '$(RuntimeIdentifier)' != 'osx-x64' AND '$(RuntimeIdentifier)' != 'osx-arm64'" />
-    <PackageReference Include="Ryujinx.Graphics.Vulkan.Dependencies.MoltenVK" Condition="'$(RuntimeIdentifier)' != 'linux-x64' AND '$(RuntimeIdentifier)' != 'win10-x64'" />
+    <PackageReference Include="Ryujinx.Graphics.Vulkan.Dependencies.MoltenVK" Condition="'$(RuntimeIdentifier)' != 'linux-x64' AND '$(RuntimeIdentifier)' != 'win-x64'" />
     <PackageReference Include="OpenTK.Core" />
     <PackageReference Include="OpenTK.Graphics" />
     <PackageReference Include="SPB" />
@@ -62,15 +63,15 @@
     </Content>
   </ItemGroup>
 
-   <ItemGroup Condition="'$(RuntimeIdentifier)' == 'linux-x64'">
-     <Content Include="..\..\distribution\linux\Ryujinx.sh">
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'linux-x64'">
+    <Content Include="..\..\distribution\linux\Ryujinx.sh">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-     </Content>
-     <Content Include="..\..\distribution\linux\mime\Ryujinx.xml">
-       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-       <TargetPath>mime\Ryujinx.xml</TargetPath>
-     </Content>
-   </ItemGroup>
+    </Content>
+    <Content Include="..\..\distribution\linux\mime\Ryujinx.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <TargetPath>mime\Ryujinx.xml</TargetPath>
+    </Content>
+  </ItemGroup>
 
   <!-- Due to .net core 3.1 embedded resource loading -->
   <PropertyGroup>

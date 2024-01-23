@@ -1,9 +1,9 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Hid
+namespace Ryujinx.HLE.HOS.Services.Hid
 {
     public enum VibrationDevicePosition
     {
         None,
         Left,
-        Right
+        Right,
     }
 }

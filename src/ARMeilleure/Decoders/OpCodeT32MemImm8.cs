@@ -1,4 +1,4 @@
-﻿namespace ARMeilleure.Decoders
+namespace ARMeilleure.Decoders
 {
     class OpCodeT32MemImm8 : OpCodeT32, IOpCode32Mem
     {
@@ -18,7 +18,7 @@
             Rn = (opCode >> 16) & 0xf;
 
             Index = ((opCode >> 10) & 1) != 0;
-            Add   = ((opCode >> 9) & 1) != 0;
+            Add = ((opCode >> 9) & 1) != 0;
             WBack = ((opCode >> 8) & 1) != 0;
 
             Immediate = opCode & 0xff;

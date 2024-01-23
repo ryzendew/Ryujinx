@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 
 namespace Ryujinx.HLE.HOS.Services.Am.AppletAE
 {
@@ -6,7 +6,7 @@ namespace Ryujinx.HLE.HOS.Services.Am.AppletAE
     struct AppletIdentifyInfo
     {
         public AppletId AppletId;
-        public uint     Padding;
-        public ulong    TitleId;
+        public uint Padding;
+        public ulong TitleId;
     }
 }

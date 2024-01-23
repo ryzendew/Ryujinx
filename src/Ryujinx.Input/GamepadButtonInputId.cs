@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.Input
+namespace Ryujinx.Input
 {
     /// <summary>
     /// Represent a button from a gamepad.
@@ -52,6 +52,6 @@
         SingleLeftTrigger1,
         SingleRightTrigger1,
 
-        Count
+        Count,
     }
 }

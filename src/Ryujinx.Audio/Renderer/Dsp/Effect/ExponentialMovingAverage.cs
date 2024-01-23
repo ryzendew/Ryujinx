@@ -1,5 +1,3 @@
-﻿using System.Runtime.CompilerServices;
-
 namespace Ryujinx.Audio.Renderer.Dsp.Effect
 {
     public struct ExponentialMovingAverage
@@ -11,7 +9,7 @@ namespace Ryujinx.Audio.Renderer.Dsp.Effect
             _mean = mean;
         }
 
-        public float Read()
+        public readonly float Read()
         {
             return _mean;
         }

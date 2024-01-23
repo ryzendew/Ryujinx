@@ -1,4 +1,4 @@
-﻿using OpenTK.Graphics.OpenGL;
+using OpenTK.Graphics.OpenGL;
 using Ryujinx.Common;
 using Ryujinx.Graphics.OpenGL.Image;
 
@@ -43,7 +43,7 @@ namespace Ryujinx.Graphics.OpenGL.Effects
             if (_textureStorage == null || _textureStorage.Info.Width != view.Width || _textureStorage.Info.Height != view.Height)
             {
                 _textureStorage?.Dispose();
-                _textureStorage = new TextureStorage(_renderer, view.Info, view.ScaleFactor);
+                _textureStorage = new TextureStorage(_renderer, view.Info);
                 _textureStorage.CreateDefaultView();
             }
 

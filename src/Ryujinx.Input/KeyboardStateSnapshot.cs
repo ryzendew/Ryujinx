@@ -1,4 +1,4 @@
-﻿using System.Runtime.CompilerServices;
+using System.Runtime.CompilerServices;
 
 namespace Ryujinx.Input
 {
@@ -7,7 +7,7 @@ namespace Ryujinx.Input
     /// </summary>
     public class KeyboardStateSnapshot
     {
-        private bool[] _keysState;
+        private readonly bool[] _keysState;
 
         /// <summary>
         /// Create a new <see cref="KeyboardStateSnapshot"/>.

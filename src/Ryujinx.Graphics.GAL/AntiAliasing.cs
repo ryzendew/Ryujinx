@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.Graphics.GAL
+namespace Ryujinx.Graphics.GAL
 {
     public enum AntiAliasing
     {
@@ -7,6 +7,6 @@
         SmaaLow,
         SmaaMedium,
         SmaaHigh,
-        SmaaUltra
+        SmaaUltra,
     }
 }

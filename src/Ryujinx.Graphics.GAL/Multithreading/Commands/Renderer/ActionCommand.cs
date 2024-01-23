@@ -1,11 +1,11 @@
-﻿using Ryujinx.Graphics.GAL.Multithreading.Model;
+using Ryujinx.Graphics.GAL.Multithreading.Model;
 using System;
 
 namespace Ryujinx.Graphics.GAL.Multithreading.Commands.Renderer
 {
     struct ActionCommand : IGALCommand, IGALCommand<ActionCommand>
     {
-        public CommandType CommandType => CommandType.Action;
+        public readonly CommandType CommandType => CommandType.Action;
         private TableRef<Action> _action;
 
         public void Set(TableRef<Action> action)

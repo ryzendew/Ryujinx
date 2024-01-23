@@ -1,4 +1,3 @@
-using Ryujinx.Ava.Common.Locale;
 using Ryujinx.Ui.App.Common;
 using System;
 using System.Collections.Generic;
@@ -14,20 +13,19 @@ namespace Ryujinx.Ava.UI.Models.Generic
 
         public int Compare(ApplicationData x, ApplicationData y)
         {
-            string aValue = x.LastPlayed;
-            string bValue = y.LastPlayed;
+            DateTime aValue = DateTime.UnixEpoch, bValue = DateTime.UnixEpoch;
 
-            if (aValue == LocaleManager.Instance[LocaleKeys.Never])
+            if (x?.LastPlayed != null)
             {
-                aValue = DateTime.UnixEpoch.ToString();
+                aValue = x.LastPlayed.Value;
             }
 
-            if (bValue == LocaleManager.Instance[LocaleKeys.Never])
+            if (y?.LastPlayed != null)
             {
-                bValue = DateTime.UnixEpoch.ToString();
+                bValue = y.LastPlayed.Value;
             }
 
-            return (IsAscending ? 1 : -1) * DateTime.Compare(DateTime.Parse(bValue), DateTime.Parse(aValue));
+            return (IsAscending ? 1 : -1) * DateTime.Compare(aValue, bValue);
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Mii.Types
+namespace Ryujinx.HLE.HOS.Services.Mii.Types
 {
     enum MustacheType : byte
     {
@@ -9,7 +9,7 @@
         Normal,
         Toothbrush,
 
-        Min = 0,
-        Max = 5
+        Min = None,
+        Max = Toothbrush,
     }
 }

@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.HLE.HOS.Applets.Browser
+namespace Ryujinx.HLE.HOS.Applets.Browser
 {
     public enum ShimKind : uint
     {
@@ -8,6 +8,6 @@
         Share,
         Web,
         Wifi,
-        Lobby
+        Lobby,
     }
 }

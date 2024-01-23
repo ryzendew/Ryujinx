@@ -1,4 +1,4 @@
-﻿using Ryujinx.Common;
+using Ryujinx.Common;
 using Ryujinx.Graphics.Shader.IntermediateRepresentation;
 using Ryujinx.Graphics.Shader.StructuredIr;
 using Ryujinx.Graphics.Shader.Translation;
@@ -17,36 +17,31 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
     {
         // Resource pools for Spirv generation. Note: Increase count when more threads are being used.
         private const int GeneratorPoolCount = 1;
-        private static ObjectPool<SpvInstructionPool> InstructionPool;
-        private static ObjectPool<SpvLiteralIntegerPool> IntegerPool;
-        private static object PoolLock;
+        private static readonly ObjectPool<SpvInstructionPool> _instructionPool;
+        private static readonly ObjectPool<SpvLiteralIntegerPool> _integerPool;
+        private static readonly object _poolLock;
 
         static SpirvGenerator()
         {
-            InstructionPool = new (() => new SpvInstructionPool(), GeneratorPoolCount);
-            IntegerPool = new (() => new SpvLiteralIntegerPool(), GeneratorPoolCount);
-            PoolLock = new object();
+            _instructionPool = new(() => new SpvInstructionPool(), GeneratorPoolCount);
+            _integerPool = new(() => new SpvLiteralIntegerPool(), GeneratorPoolCount);
+            _poolLock = new object();
         }
 
-        private const HelperFunctionsMask NeedsInvocationIdMask =
-            HelperFunctionsMask.Shuffle |
-            HelperFunctionsMask.ShuffleDown |
-            HelperFunctionsMask.ShuffleUp |
-            HelperFunctionsMask.ShuffleXor |
-            HelperFunctionsMask.SwizzleAdd;
+        private const HelperFunctionsMask NeedsInvocationIdMask = HelperFunctionsMask.SwizzleAdd;
 
-        public static byte[] Generate(StructuredProgramInfo info, ShaderConfig config)
+        public static byte[] Generate(StructuredProgramInfo info, CodeGenParameters parameters)
         {
             SpvInstructionPool instPool;
             SpvLiteralIntegerPool integerPool;
 
-            lock (PoolLock)
+            lock (_poolLock)
             {
-                instPool = InstructionPool.Allocate();
-                integerPool = IntegerPool.Allocate();
+                instPool = _instructionPool.Allocate();
+                integerPool = _integerPool.Allocate();
             }
 
-            CodeGenContext context = new CodeGenContext(info, config, instPool, integerPool);
+            CodeGenContext context = new(info, parameters, instPool, integerPool);
 
             context.AddCapability(Capability.GroupNonUniformBallot);
             context.AddCapability(Capability.GroupNonUniformShuffle);
@@ -56,41 +51,52 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
             context.AddCapability(Capability.ImageQuery);
             context.AddCapability(Capability.SampledBuffer);
 
-            if (config.TransformFeedbackEnabled && config.LastInVertexPipeline)
+            if (parameters.Definitions.TransformFeedbackEnabled && parameters.Definitions.LastInVertexPipeline)
             {
                 context.AddCapability(Capability.TransformFeedback);
             }
 
-            if (config.Stage == ShaderStage.Fragment)
+            if (parameters.Definitions.Stage == ShaderStage.Fragment)
             {
                 if (context.Info.IoDefinitions.Contains(new IoDefinition(StorageKind.Input, IoVariable.Layer)))
                 {
                     context.AddCapability(Capability.Geometry);
                 }
 
-                if (context.Config.GpuAccessor.QueryHostSupportsFragmentShaderInterlock())
+                if (context.HostCapabilities.SupportsFragmentShaderInterlock)
                 {
                     context.AddCapability(Capability.FragmentShaderPixelInterlockEXT);
                     context.AddExtension("SPV_EXT_fragment_shader_interlock");
                 }
             }
-            else if (config.Stage == ShaderStage.Geometry)
+            else if (parameters.Definitions.Stage == ShaderStage.Geometry)
             {
                 context.AddCapability(Capability.Geometry);
 
-                if (config.GpPassthrough && context.Config.GpuAccessor.QueryHostSupportsGeometryShaderPassthrough())
+                if (parameters.Definitions.GpPassthrough && context.HostCapabilities.SupportsGeometryShaderPassthrough)
                 {
                     context.AddExtension("SPV_NV_geometry_shader_passthrough");
                     context.AddCapability(Capability.GeometryShaderPassthroughNV);
                 }
             }
-            else if (config.Stage == ShaderStage.TessellationControl || config.Stage == ShaderStage.TessellationEvaluation)
+            else if (parameters.Definitions.Stage == ShaderStage.TessellationControl ||
+                     parameters.Definitions.Stage == ShaderStage.TessellationEvaluation)
             {
                 context.AddCapability(Capability.Tessellation);
             }
-            else if (config.Stage == ShaderStage.Vertex)
+            else if (parameters.Definitions.Stage == ShaderStage.Vertex)
             {
                 context.AddCapability(Capability.DrawParameters);
+            }
+
+            if (context.Definitions.Stage != ShaderStage.Fragment &&
+                context.Definitions.Stage != ShaderStage.Geometry &&
+                context.Definitions.Stage != ShaderStage.Compute &&
+                (context.Info.IoDefinitions.Contains(new IoDefinition(StorageKind.Output, IoVariable.Layer)) ||
+                context.Info.IoDefinitions.Contains(new IoDefinition(StorageKind.Output, IoVariable.ViewportIndex))))
+            {
+                context.AddExtension("SPV_EXT_shader_viewport_index_layer");
+                context.AddCapability(Capability.ShaderViewportIndexLayerEXT);
             }
 
             if (context.Info.IoDefinitions.Contains(new IoDefinition(StorageKind.Output, IoVariable.ViewportMask)))
@@ -133,10 +139,10 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
 
             byte[] result = context.Generate();
 
-            lock (PoolLock)
+            lock (_poolLock)
             {
-                InstructionPool.Release(instPool);
-                IntegerPool.Release(integerPool);
+                _instructionPool.Release(instPool);
+                _integerPool.Release(integerPool);
             }
 
             return result;
@@ -144,24 +150,22 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
 
         private static void Generate(CodeGenContext context, StructuredProgramInfo info, int funcIndex)
         {
-            var function = info.Functions[funcIndex];
+            var (function, spvFunc) = context.GetFunction(funcIndex);
 
-            (_, var spvFunc) = context.GetFunction(funcIndex);
-
+            context.CurrentFunction = function;
             context.AddFunction(spvFunc);
-            context.StartFunction();
+            context.StartFunction(isMainFunction: funcIndex == 0);
 
             Declarations.DeclareParameters(context, function);
 
             context.EnterBlock(function.MainBlock);
 
             Declarations.DeclareLocals(context, function);
-            Declarations.DeclareLocalForArgs(context, info.Functions);
 
             Generate(context, function.MainBlock);
 
             // Functions must always end with a return.
-            if (!(function.MainBlock.Last is AstOperation operation) ||
+            if (function.MainBlock.Last is not AstOperation operation ||
                 (operation.Inst != Instruction.Return && operation.Inst != Instruction.Discard))
             {
                 context.Return();
@@ -171,15 +175,15 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
 
             if (funcIndex == 0)
             {
-                context.AddEntryPoint(context.Config.Stage.Convert(), spvFunc, "main", context.GetMainInterface());
+                context.AddEntryPoint(context.Definitions.Stage.Convert(), spvFunc, "main", context.GetMainInterface());
 
-                if (context.Config.Stage == ShaderStage.TessellationControl)
+                if (context.Definitions.Stage == ShaderStage.TessellationControl)
                 {
-                    context.AddExecutionMode(spvFunc, ExecutionMode.OutputVertices, (SpvLiteralInteger)context.Config.ThreadsPerInputPrimitive);
+                    context.AddExecutionMode(spvFunc, ExecutionMode.OutputVertices, (SpvLiteralInteger)context.Definitions.ThreadsPerInputPrimitive);
                 }
-                else if (context.Config.Stage == ShaderStage.TessellationEvaluation)
+                else if (context.Definitions.Stage == ShaderStage.TessellationEvaluation)
                 {
-                    switch (context.Config.GpuAccessor.QueryTessPatchType())
+                    switch (context.Definitions.TessPatchType)
                     {
                         case TessPatchType.Isolines:
                             context.AddExecutionMode(spvFunc, ExecutionMode.Isolines);
@@ -192,7 +196,7 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
                             break;
                     }
 
-                    switch (context.Config.GpuAccessor.QueryTessSpacing())
+                    switch (context.Definitions.TessSpacing)
                     {
                         case TessSpacing.EqualSpacing:
                             context.AddExecutionMode(spvFunc, ExecutionMode.SpacingEqual);
@@ -205,9 +209,9 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
                             break;
                     }
 
-                    bool tessCw = context.Config.GpuAccessor.QueryTessCw();
+                    bool tessCw = context.Definitions.TessCw;
 
-                    if (context.Config.Options.TargetApi == TargetApi.Vulkan)
+                    if (context.TargetApi == TargetApi.Vulkan)
                     {
                         // We invert the front face on Vulkan backend, so we need to do that here as well.
                         tessCw = !tessCw;
@@ -222,37 +226,33 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
                         context.AddExecutionMode(spvFunc, ExecutionMode.VertexOrderCcw);
                     }
                 }
-                else if (context.Config.Stage == ShaderStage.Geometry)
+                else if (context.Definitions.Stage == ShaderStage.Geometry)
                 {
-                    InputTopology inputTopology = context.Config.GpuAccessor.QueryPrimitiveTopology();
-
-                    context.AddExecutionMode(spvFunc, inputTopology switch
+                    context.AddExecutionMode(spvFunc, context.Definitions.InputTopology switch
                     {
                         InputTopology.Points => ExecutionMode.InputPoints,
                         InputTopology.Lines => ExecutionMode.InputLines,
                         InputTopology.LinesAdjacency => ExecutionMode.InputLinesAdjacency,
                         InputTopology.Triangles => ExecutionMode.Triangles,
                         InputTopology.TrianglesAdjacency => ExecutionMode.InputTrianglesAdjacency,
-                        _ => throw new InvalidOperationException($"Invalid input topology \"{inputTopology}\".")
+                        _ => throw new InvalidOperationException($"Invalid input topology \"{context.Definitions.InputTopology}\"."),
                     });
 
-                    context.AddExecutionMode(spvFunc, ExecutionMode.Invocations, (SpvLiteralInteger)context.Config.ThreadsPerInputPrimitive);
+                    context.AddExecutionMode(spvFunc, ExecutionMode.Invocations, (SpvLiteralInteger)context.Definitions.ThreadsPerInputPrimitive);
 
-                    context.AddExecutionMode(spvFunc, context.Config.OutputTopology switch
+                    context.AddExecutionMode(spvFunc, context.Definitions.OutputTopology switch
                     {
                         OutputTopology.PointList => ExecutionMode.OutputPoints,
                         OutputTopology.LineStrip => ExecutionMode.OutputLineStrip,
                         OutputTopology.TriangleStrip => ExecutionMode.OutputTriangleStrip,
-                        _ => throw new InvalidOperationException($"Invalid output topology \"{context.Config.OutputTopology}\".")
+                        _ => throw new InvalidOperationException($"Invalid output topology \"{context.Definitions.OutputTopology}\"."),
                     });
 
-                    int maxOutputVertices = context.Config.GpPassthrough ? context.InputVertices : context.Config.MaxOutputVertices;
-
-                    context.AddExecutionMode(spvFunc, ExecutionMode.OutputVertices, (SpvLiteralInteger)maxOutputVertices);
+                    context.AddExecutionMode(spvFunc, ExecutionMode.OutputVertices, (SpvLiteralInteger)context.Definitions.MaxOutputVertices);
                 }
-                else if (context.Config.Stage == ShaderStage.Fragment)
+                else if (context.Definitions.Stage == ShaderStage.Fragment)
                 {
-                    context.AddExecutionMode(spvFunc, context.Config.Options.TargetApi == TargetApi.Vulkan
+                    context.AddExecutionMode(spvFunc, context.Definitions.OriginUpperLeft
                         ? ExecutionMode.OriginUpperLeft
                         : ExecutionMode.OriginLowerLeft);
 
@@ -261,22 +261,22 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
                         context.AddExecutionMode(spvFunc, ExecutionMode.DepthReplacing);
                     }
 
-                    if (context.Config.GpuAccessor.QueryEarlyZForce())
+                    if (context.Definitions.EarlyZForce)
                     {
                         context.AddExecutionMode(spvFunc, ExecutionMode.EarlyFragmentTests);
                     }
 
                     if ((info.HelperFunctionsMask & HelperFunctionsMask.FSI) != 0 &&
-                        context.Config.GpuAccessor.QueryHostSupportsFragmentShaderInterlock())
+                        context.HostCapabilities.SupportsFragmentShaderInterlock)
                     {
                         context.AddExecutionMode(spvFunc, ExecutionMode.PixelInterlockOrderedEXT);
                     }
                 }
-                else if (context.Config.Stage == ShaderStage.Compute)
+                else if (context.Definitions.Stage == ShaderStage.Compute)
                 {
-                    var localSizeX = (SpvLiteralInteger)context.Config.GpuAccessor.QueryComputeLocalSizeX();
-                    var localSizeY = (SpvLiteralInteger)context.Config.GpuAccessor.QueryComputeLocalSizeY();
-                    var localSizeZ = (SpvLiteralInteger)context.Config.GpuAccessor.QueryComputeLocalSizeZ();
+                    var localSizeX = (SpvLiteralInteger)context.Definitions.ComputeLocalSizeX;
+                    var localSizeY = (SpvLiteralInteger)context.Definitions.ComputeLocalSizeY;
+                    var localSizeZ = (SpvLiteralInteger)context.Definitions.ComputeLocalSizeZ;
 
                     context.AddExecutionMode(
                         spvFunc,
@@ -286,7 +286,7 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
                         localSizeZ);
                 }
 
-                if (context.Config.TransformFeedbackEnabled && context.Config.LastInVertexPipeline)
+                if (context.Definitions.TransformFeedbackEnabled && context.Definitions.LastInVertexPipeline)
                 {
                     context.AddExecutionMode(spvFunc, ExecutionMode.Xfb);
                 }
@@ -295,7 +295,7 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
 
         private static void Generate(CodeGenContext context, AstBlock block)
         {
-            AstBlockVisitor visitor = new AstBlockVisitor(block);
+            AstBlockVisitor visitor = new(block);
 
             var loopTargets = new Dictionary<AstBlock, (SpvInstruction, SpvInstruction)>();
 
@@ -347,7 +347,7 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
                         // if the condition is true.
                         AstBlock mergeBlock = e.Block.Parent;
 
-                        (var loopTarget, var continueTarget) = loopTargets[e.Block];
+                        var (loopTarget, continueTarget) = loopTargets[e.Block];
 
                         context.Branch(continueTarget);
                         context.AddLabel(continueTarget);

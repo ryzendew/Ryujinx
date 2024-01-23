@@ -1,4 +1,4 @@
-﻿using Ryujinx.Common.Utilities;
+using Ryujinx.Common.Utilities;
 using System.Text.Json.Serialization;
 
 namespace Ryujinx.Ui.Common.Configuration
@@ -9,6 +9,6 @@ namespace Ryujinx.Ui.Common.Configuration
         Dummy,
         OpenAl,
         SoundIo,
-        SDL2
+        SDL2,
     }
 }

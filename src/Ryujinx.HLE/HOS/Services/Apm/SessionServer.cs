@@ -1,4 +1,4 @@
-﻿using Ryujinx.Common.Logging;
+using Ryujinx.Common.Logging;
 
 namespace Ryujinx.HLE.HOS.Services.Apm
 {
@@ -6,7 +6,7 @@ namespace Ryujinx.HLE.HOS.Services.Apm
     {
         private readonly ServiceCtx _context;
 
-        public SessionServer(ServiceCtx context) : base(context) 
+        public SessionServer(ServiceCtx context) : base(context)
         {
             _context = context;
         }

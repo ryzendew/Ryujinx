@@ -10,17 +10,19 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
     {
         public Instruction Inst { get; }
         public StorageKind StorageKind { get; }
+        public bool ForcePrecise { get; }
 
         public int Index { get; }
 
-        private IAstNode[] _sources;
+        private readonly IAstNode[] _sources;
 
         public int SourcesCount => _sources.Length;
 
-        public AstOperation(Instruction inst, StorageKind storageKind, IAstNode[] sources, int sourcesCount)
+        public AstOperation(Instruction inst, StorageKind storageKind, bool forcePrecise, IAstNode[] sources, int sourcesCount)
         {
             Inst = inst;
             StorageKind = storageKind;
+            ForcePrecise = forcePrecise;
             _sources = sources;
 
             for (int index = 0; index < sources.Length; index++)
@@ -38,12 +40,18 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
             Index = 0;
         }
 
-        public AstOperation(Instruction inst, StorageKind storageKind, int index, IAstNode[] sources, int sourcesCount) : this(inst, storageKind, sources, sourcesCount)
+        public AstOperation(
+            Instruction inst,
+            StorageKind storageKind,
+            bool forcePrecise,
+            int index,
+            IAstNode[] sources,
+            int sourcesCount) : this(inst, storageKind, forcePrecise, sources, sourcesCount)
         {
             Index = index;
         }
 
-        public AstOperation(Instruction inst, params IAstNode[] sources) : this(inst, StorageKind.None, sources, sources.Length)
+        public AstOperation(Instruction inst, params IAstNode[] sources) : this(inst, StorageKind.None, false, sources, sources.Length)
         {
         }
 
@@ -69,9 +77,15 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
 
             switch (componentsCount)
             {
-                case 2: type |= AggregateType.Vector2; break;
-                case 3: type |= AggregateType.Vector3; break;
-                case 4: type |= AggregateType.Vector4; break;
+                case 2:
+                    type |= AggregateType.Vector2;
+                    break;
+                case 3:
+                    type |= AggregateType.Vector3;
+                    break;
+                case 4:
+                    type |= AggregateType.Vector4;
+                    break;
             }
 
             return type;

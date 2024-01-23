@@ -1,22 +1,37 @@
 using Ryujinx.Graphics.GAL;
 using Silk.NET.Vulkan;
+using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 
 namespace Ryujinx.Graphics.Vulkan
 {
     class PipelineLayoutCacheEntry
     {
+        // Those were adjusted based on current descriptor usage and the descriptor counts usually used on pipeline layouts.
+        // It might be a good idea to tweak them again if those change, or maybe find a way to calculate an optimal value dynamically.
+        private const uint DefaultUniformBufferPoolCapacity = 19 * DescriptorSetManager.MaxSets;
+        private const uint DefaultStorageBufferPoolCapacity = 16 * DescriptorSetManager.MaxSets;
+        private const uint DefaultTexturePoolCapacity = 128 * DescriptorSetManager.MaxSets;
+        private const uint DefaultImagePoolCapacity = 8 * DescriptorSetManager.MaxSets;
+
+        private const int MaxPoolSizesPerSet = 2;
+
         private readonly VulkanRenderer _gd;
         private readonly Device _device;
 
         public DescriptorSetLayout[] DescriptorSetLayouts { get; }
         public PipelineLayout PipelineLayout { get; }
 
+        private readonly int[] _consumedDescriptorsPerSet;
+
         private readonly List<Auto<DescriptorSetCollection>>[][] _dsCache;
+        private List<Auto<DescriptorSetCollection>>[] _currentDsCache;
         private readonly int[] _dsCacheCursor;
         private int _dsLastCbIndex;
+        private int _dsLastSubmissionCount;
 
-        private PipelineLayoutCacheEntry(VulkanRenderer gd, Device device)
+        private PipelineLayoutCacheEntry(VulkanRenderer gd, Device device, int setsCount)
         {
             _gd = gd;
             _device = device;
@@ -25,50 +40,73 @@ namespace Ryujinx.Graphics.Vulkan
 
             for (int i = 0; i < CommandBufferPool.MaxCommandBuffers; i++)
             {
-                _dsCache[i] = new List<Auto<DescriptorSetCollection>>[PipelineBase.DescriptorSetLayouts];
+                _dsCache[i] = new List<Auto<DescriptorSetCollection>>[setsCount];
 
-                for (int j = 0; j < PipelineBase.DescriptorSetLayouts; j++)
+                for (int j = 0; j < _dsCache[i].Length; j++)
                 {
                     _dsCache[i][j] = new List<Auto<DescriptorSetCollection>>();
                 }
             }
 
-            _dsCacheCursor = new int[PipelineBase.DescriptorSetLayouts];
+            _dsCacheCursor = new int[setsCount];
         }
 
-        public PipelineLayoutCacheEntry(VulkanRenderer gd, Device device, uint stages, bool usePd) : this(gd, device)
-        {
-            DescriptorSetLayouts = PipelineLayoutFactory.Create(gd, device, stages, usePd, out var pipelineLayout);
-            PipelineLayout = pipelineLayout;
-        }
-
-        public PipelineLayoutCacheEntry(VulkanRenderer gd, Device device, ShaderSource[] shaders) : this(gd, device)
-        {
-            DescriptorSetLayouts = PipelineLayoutFactory.CreateMinimal(gd, device, shaders, out var pipelineLayout);
-            PipelineLayout = pipelineLayout;
-        }
-
-        public Auto<DescriptorSetCollection> GetNewDescriptorSetCollection(
+        public PipelineLayoutCacheEntry(
             VulkanRenderer gd,
-            int commandBufferIndex,
-            int setIndex,
-            out bool isNew)
+            Device device,
+            ReadOnlyCollection<ResourceDescriptorCollection> setDescriptors,
+            bool usePushDescriptors) : this(gd, device, setDescriptors.Count)
         {
-            if (_dsLastCbIndex != commandBufferIndex)
+            (DescriptorSetLayouts, PipelineLayout) = PipelineLayoutFactory.Create(gd, device, setDescriptors, usePushDescriptors);
+
+            _consumedDescriptorsPerSet = new int[setDescriptors.Count];
+
+            for (int setIndex = 0; setIndex < setDescriptors.Count; setIndex++)
+            {
+                int count = 0;
+
+                foreach (var descriptor in setDescriptors[setIndex].Descriptors)
+                {
+                    count += descriptor.Count;
+                }
+
+                _consumedDescriptorsPerSet[setIndex] = count;
+            }
+        }
+
+        public void UpdateCommandBufferIndex(int commandBufferIndex)
+        {
+            int submissionCount = _gd.CommandBufferPool.GetSubmissionCount(commandBufferIndex);
+
+            if (_dsLastCbIndex != commandBufferIndex || _dsLastSubmissionCount != submissionCount)
             {
                 _dsLastCbIndex = commandBufferIndex;
-
-                for (int i = 0; i < PipelineBase.DescriptorSetLayouts; i++)
-                {
-                    _dsCacheCursor[i] = 0;
-                }
+                _dsLastSubmissionCount = submissionCount;
+                Array.Clear(_dsCacheCursor);
             }
 
-            var list = _dsCache[commandBufferIndex][setIndex];
+            _currentDsCache = _dsCache[commandBufferIndex];
+        }
+
+        public Auto<DescriptorSetCollection> GetNewDescriptorSetCollection(int setIndex, out bool isNew)
+        {
+            var list = _currentDsCache[setIndex];
             int index = _dsCacheCursor[setIndex]++;
             if (index == list.Count)
             {
-                var dsc = gd.DescriptorSetManager.AllocateDescriptorSet(gd.Api, DescriptorSetLayouts[setIndex]);
+                Span<DescriptorPoolSize> poolSizes = stackalloc DescriptorPoolSize[MaxPoolSizesPerSet];
+                poolSizes = GetDescriptorPoolSizes(poolSizes, setIndex);
+
+                int consumedDescriptors = _consumedDescriptorsPerSet[setIndex];
+
+                var dsc = _gd.DescriptorSetManager.AllocateDescriptorSet(
+                    _gd.Api,
+                    DescriptorSetLayouts[setIndex],
+                    poolSizes,
+                    setIndex,
+                    consumedDescriptors,
+                    false);
+
                 list.Add(dsc);
                 isNew = true;
                 return dsc;
@@ -76,6 +114,33 @@ namespace Ryujinx.Graphics.Vulkan
 
             isNew = false;
             return list[index];
+        }
+
+        private static Span<DescriptorPoolSize> GetDescriptorPoolSizes(Span<DescriptorPoolSize> output, int setIndex)
+        {
+            int count = 1;
+
+            switch (setIndex)
+            {
+                case PipelineBase.UniformSetIndex:
+                    output[0] = new(DescriptorType.UniformBuffer, DefaultUniformBufferPoolCapacity);
+                    break;
+                case PipelineBase.StorageSetIndex:
+                    output[0] = new(DescriptorType.StorageBuffer, DefaultStorageBufferPoolCapacity);
+                    break;
+                case PipelineBase.TextureSetIndex:
+                    output[0] = new(DescriptorType.CombinedImageSampler, DefaultTexturePoolCapacity);
+                    output[1] = new(DescriptorType.UniformTexelBuffer, DefaultTexturePoolCapacity);
+                    count = 2;
+                    break;
+                case PipelineBase.ImageSetIndex:
+                    output[0] = new(DescriptorType.StorageImage, DefaultImagePoolCapacity);
+                    output[1] = new(DescriptorType.StorageTexelBuffer, DefaultImagePoolCapacity);
+                    count = 2;
+                    break;
+            }
+
+            return output[..count];
         }
 
         protected virtual unsafe void Dispose(bool disposing)

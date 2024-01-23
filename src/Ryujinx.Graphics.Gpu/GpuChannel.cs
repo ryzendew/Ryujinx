@@ -1,4 +1,4 @@
-﻿using Ryujinx.Graphics.GAL;
+using Ryujinx.Graphics.GAL;
 using Ryujinx.Graphics.Gpu.Engine.GPFifo;
 using Ryujinx.Graphics.Gpu.Image;
 using Ryujinx.Graphics.Gpu.Memory;
@@ -125,6 +125,7 @@ namespace Ryujinx.Graphics.Gpu
         /// </summary>
         public void Dispose()
         {
+            GC.SuppressFinalize(this);
             _context.DeferredActions.Enqueue(Destroy);
         }
 
@@ -134,6 +135,7 @@ namespace Ryujinx.Graphics.Gpu
         /// </summary>
         private void Destroy()
         {
+            _processor.Dispose();
             TextureManager.Dispose();
 
             var oldMemoryManager = Interlocked.Exchange(ref _memoryManager, null);

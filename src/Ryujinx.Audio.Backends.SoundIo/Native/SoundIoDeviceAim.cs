@@ -1,8 +1,8 @@
-﻿namespace Ryujinx.Audio.Backends.SoundIo.Native
+namespace Ryujinx.Audio.Backends.SoundIo.Native
 {
     public enum SoundIoDeviceAim
     {
         SoundIoDeviceAimInput = 0,
-        SoundIoDeviceAimOutput = 1
+        SoundIoDeviceAimOutput = 1,
     }
 }

@@ -1,8 +1,8 @@
-﻿namespace Ryujinx.Graphics.GAL.Multithreading.Commands
+namespace Ryujinx.Graphics.GAL.Multithreading.Commands
 {
     struct SetPrimitiveTopologyCommand : IGALCommand, IGALCommand<SetPrimitiveTopologyCommand>
     {
-        public CommandType CommandType => CommandType.SetPrimitiveTopology;
+        public readonly CommandType CommandType => CommandType.SetPrimitiveTopology;
         private PrimitiveTopology _topology;
 
         public void Set(PrimitiveTopology topology)

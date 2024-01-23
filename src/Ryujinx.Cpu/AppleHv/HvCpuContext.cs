@@ -1,8 +1,9 @@
 using ARMeilleure.Memory;
-using System;
+using System.Runtime.Versioning;
 
 namespace Ryujinx.Cpu.AppleHv
 {
+    [SupportedOSPlatform("macos")]
     class HvCpuContext : ICpuContext
     {
         private readonly ITickSource _tickSource;
@@ -12,10 +13,6 @@ namespace Ryujinx.Cpu.AppleHv
         {
             _tickSource = tickSource;
             _memoryManager = (HvMemoryManager)memory;
-        }
-
-        private void UnmapHandler(ulong address, ulong size)
-        {
         }
 
         /// <inheritdoc/>
@@ -41,6 +38,10 @@ namespace Ryujinx.Cpu.AppleHv
         }
 
         public void PrepareCodeRange(ulong address, ulong size)
+        {
+        }
+
+        public void Dispose()
         {
         }
     }

@@ -1,11 +1,11 @@
-﻿using Ryujinx.Common.Memory;
+using Ryujinx.Common.Memory;
 using System;
 
 namespace Ryujinx.Graphics.Nvdec.FFmpeg.Native
 {
     struct AVCodecContext
     {
-#pragma warning disable CS0649
+#pragma warning disable CS0649 // Field is never assigned to
         public unsafe IntPtr AvClass;
         public int LogLevelOffset;
         public int CodecType;

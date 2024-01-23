@@ -1,4 +1,4 @@
-﻿using Ryujinx.Common.Logging;
+using Ryujinx.Common.Logging;
 using Ryujinx.HLE.HOS.Kernel.Threading;
 using Ryujinx.HLE.HOS.Services.Ldn.Types;
 using System.Net;
@@ -7,15 +7,15 @@ namespace Ryujinx.HLE.HOS.Services.Ldn
 {
     internal class NetworkInterface
     {
-        public ResultCode NifmState        { get; set; }
-        public KEvent     StateChangeEvent { get; private set; }
+        public ResultCode NifmState { get; set; }
+        public KEvent StateChangeEvent { get; private set; }
 
         private NetworkState _state;
 
         public NetworkInterface(Horizon system)
         {
             // TODO(Ac_K): Determine where the internal state is set.
-            NifmState        = ResultCode.Success;
+            NifmState = ResultCode.Success;
             StateChangeEvent = new KEvent(system.KernelContext);
 
             _state = NetworkState.None;

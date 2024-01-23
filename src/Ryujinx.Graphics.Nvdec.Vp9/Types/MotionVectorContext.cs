@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.Graphics.Nvdec.Vp9.Types
+namespace Ryujinx.Graphics.Nvdec.Vp9.Types
 {
     internal enum MotionVectorContext
     {
@@ -9,6 +9,6 @@
         BothNew = 4,
         IntraPlusNonIntra = 5,
         BothIntra = 6,
-        InvalidCase = 9
+        InvalidCase = 9,
     }
 }

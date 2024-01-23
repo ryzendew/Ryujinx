@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Mii.Types
+namespace Ryujinx.HLE.HOS.Services.Mii.Types
 {
     enum HairType : byte
     {
@@ -135,7 +135,7 @@
         TwoLongSidedPonyTails,
         LongFrontTwoBackPonyTails,
 
-        Min = 0,
-        Max = 131
+        Min = NormalLong,
+        Max = LongFrontTwoBackPonyTails,
     }
 }

@@ -1,10 +1,10 @@
-﻿namespace Ryujinx.Graphics.GAL.Multithreading.Resources.Programs
+namespace Ryujinx.Graphics.GAL.Multithreading.Resources.Programs
 {
     class SourceProgramRequest : IProgramRequest
     {
         public ThreadedProgram Threaded { get; set; }
 
-        private ShaderSource[] _shaders;
+        private readonly ShaderSource[] _shaders;
         private ShaderInfo _info;
 
         public SourceProgramRequest(ThreadedProgram program, ShaderSource[] shaders, ShaderInfo info)

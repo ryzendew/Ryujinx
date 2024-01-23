@@ -1,11 +1,11 @@
-﻿using Ryujinx.Graphics.GAL.Multithreading.Model;
+using Ryujinx.Graphics.GAL.Multithreading.Model;
 using Ryujinx.Graphics.GAL.Multithreading.Resources.Programs;
 
 namespace Ryujinx.Graphics.GAL.Multithreading.Commands.Renderer
 {
     struct CreateProgramCommand : IGALCommand, IGALCommand<CreateProgramCommand>
     {
-        public CommandType CommandType => CommandType.CreateProgram;
+        public readonly CommandType CommandType => CommandType.CreateProgram;
         private TableRef<IProgramRequest> _request;
 
         public void Set(TableRef<IProgramRequest> request)

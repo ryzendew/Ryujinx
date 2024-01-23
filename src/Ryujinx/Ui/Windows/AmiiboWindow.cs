@@ -1,4 +1,5 @@
-﻿using Gtk;
+using Gdk;
+using Gtk;
 using Ryujinx.Common;
 using Ryujinx.Common.Configuration;
 using Ryujinx.Common.Logging;
@@ -13,22 +14,22 @@ using System.Linq;
 using System.Net.Http;
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
-using AmiiboApi = Ryujinx.Ui.Common.Models.Amiibo.AmiiboApi;
-using AmiiboJsonSerializerContext = Ryujinx.Ui.Common.Models.Amiibo.AmiiboJsonSerializerContext;
+using Window = Gtk.Window;
 
 namespace Ryujinx.Ui.Windows
 {
     public partial class AmiiboWindow : Window
     {
-        private const string DEFAULT_JSON = "{ \"amiibo\": [] }";
+        private const string DefaultJson = "{ \"amiibo\": [] }";
 
         public string AmiiboId { get; private set; }
 
-        public int    DeviceId                 { get; set; }
-        public string TitleId                  { get; set; }
-        public string LastScannedAmiiboId      { get; set; }
-        public bool   LastScannedAmiiboShowAll { get; set; }
+        public int DeviceId { get; set; }
+        public string TitleId { get; set; }
+        public string LastScannedAmiiboId { get; set; }
+        public bool LastScannedAmiiboShowAll { get; set; }
 
         public ResponseType Response { get; private set; }
 
@@ -41,70 +42,116 @@ namespace Ryujinx.Ui.Windows
         }
 
         private readonly HttpClient _httpClient;
-        private readonly string     _amiiboJsonPath;
+        private readonly string _amiiboJsonPath;
 
         private readonly byte[] _amiiboLogoBytes;
 
         private List<AmiiboApi> _amiiboList;
 
-        private static readonly AmiiboJsonSerializerContext SerializerContext = new(JsonHelper.GetDefaultSerializerOptions());
+        private static readonly AmiiboJsonSerializerContext _serializerContext = new(JsonHelper.GetDefaultSerializerOptions());
 
         public AmiiboWindow() : base($"Ryujinx {Program.Version} - Amiibo")
         {
-            Icon = new Gdk.Pixbuf(Assembly.GetAssembly(typeof(ConfigurationState)), "Ryujinx.Ui.Common.Resources.Logo_Ryujinx.png");
+            Icon = new Pixbuf(Assembly.GetAssembly(typeof(ConfigurationState)), "Ryujinx.Ui.Common.Resources.Logo_Ryujinx.png");
 
             InitializeComponent();
 
-            _httpClient = new HttpClient()
+            _httpClient = new HttpClient
             {
-                Timeout = TimeSpan.FromSeconds(30)
+                Timeout = TimeSpan.FromSeconds(30),
             };
 
             Directory.CreateDirectory(System.IO.Path.Join(AppDataManager.BaseDirPath, "system", "amiibo"));
 
             _amiiboJsonPath = System.IO.Path.Join(AppDataManager.BaseDirPath, "system", "amiibo", "Amiibo.json");
-            _amiiboList     = new List<AmiiboApi>();
+            _amiiboList = new List<AmiiboApi>();
 
-            _amiiboLogoBytes    = EmbeddedResources.Read("Ryujinx.Ui.Common/Resources/Logo_Amiibo.png");
-            _amiiboImage.Pixbuf = new Gdk.Pixbuf(_amiiboLogoBytes);
+            _amiiboLogoBytes = EmbeddedResources.Read("Ryujinx.Ui.Common/Resources/Logo_Amiibo.png");
+            _amiiboImage.Pixbuf = new Pixbuf(_amiiboLogoBytes);
 
-            _scanButton.Sensitive         = false;
+            _scanButton.Sensitive = false;
             _randomUuidCheckBox.Sensitive = false;
 
             _ = LoadContentAsync();
         }
 
-        private async Task LoadContentAsync()
+        private static bool TryGetAmiiboJson(string json, out AmiiboJson amiiboJson)
         {
-            string amiiboJsonString = DEFAULT_JSON;
-
-            if (File.Exists(_amiiboJsonPath))
+            if (string.IsNullOrEmpty(json))
             {
-                amiiboJsonString = await File.ReadAllTextAsync(_amiiboJsonPath);
+                amiiboJson = JsonHelper.Deserialize(DefaultJson, _serializerContext.AmiiboJson);
 
-                if (await NeedsUpdate(JsonHelper.Deserialize(amiiboJsonString, SerializerContext.AmiiboJson).LastUpdated))
-                {
-                    amiiboJsonString = await DownloadAmiiboJson();
-                }
+                return false;
             }
-            else
+
+            try
+            {
+                amiiboJson = JsonHelper.Deserialize(json, _serializerContext.AmiiboJson);
+
+                return true;
+            }
+            catch (JsonException exception)
+            {
+                Logger.Error?.Print(LogClass.Application, $"Unable to deserialize amiibo data: {exception}");
+                amiiboJson = JsonHelper.Deserialize(DefaultJson, _serializerContext.AmiiboJson);
+
+                return false;
+            }
+        }
+
+        private async Task<AmiiboJson> GetMostRecentAmiiboListOrDefaultJson()
+        {
+            bool localIsValid = false;
+            bool remoteIsValid = false;
+            AmiiboJson amiiboJson = new();
+
+            try
             {
                 try
                 {
-                    amiiboJsonString = await DownloadAmiiboJson();
+                    if (File.Exists(_amiiboJsonPath))
+                    {
+                        localIsValid = TryGetAmiiboJson(await File.ReadAllTextAsync(_amiiboJsonPath), out amiiboJson);
+                    }
                 }
-                catch (Exception ex)
+                catch (Exception exception)
                 {
-                    Logger.Error?.Print(LogClass.Application, $"Failed to download amiibo data: {ex}");
+                    Logger.Warning?.Print(LogClass.Application, $"Unable to read data from '{_amiiboJsonPath}': {exception}");
+                }
 
+                if (!localIsValid || await NeedsUpdate(amiiboJson.LastUpdated))
+                {
+                    remoteIsValid = TryGetAmiiboJson(await DownloadAmiiboJson(), out amiiboJson);
+                }
+            }
+            catch (Exception exception)
+            {
+                if (!(localIsValid || remoteIsValid))
+                {
+                    Logger.Error?.Print(LogClass.Application, $"Couldn't get valid amiibo data: {exception}");
+
+                    // Neither local or remote files are valid JSON, close window.
                     ShowInfoDialog();
-
                     Close();
+                }
+                else if (!remoteIsValid)
+                {
+                    Logger.Warning?.Print(LogClass.Application, $"Couldn't update amiibo data: {exception}");
+
+                    // Only the local file is valid, the local one should be used
+                    // but the user should be warned.
+                    ShowInfoDialog();
                 }
             }
 
-            _amiiboList = JsonHelper.Deserialize(amiiboJsonString, SerializerContext.AmiiboJson).Amiibo;
-            _amiiboList = _amiiboList.OrderBy(amiibo => amiibo.AmiiboSeries).ToList();
+            return amiiboJson;
+        }
+
+        private async Task LoadContentAsync()
+        {
+            AmiiboJson amiiboJson = await GetMostRecentAmiiboListOrDefaultJson();
+
+            _amiiboList = amiiboJson.Amiibo.OrderBy(amiibo => amiibo.AmiiboSeries).ToList();
 
             if (LastScannedAmiiboShowAll)
             {
@@ -118,7 +165,7 @@ namespace Ryujinx.Ui.Windows
 
         private void ParseAmiiboData()
         {
-            List<string> comboxItemList = new List<string>();
+            List<string> comboxItemList = new();
 
             for (int i = 0; i < _amiiboList.Count; i++)
             {
@@ -149,7 +196,7 @@ namespace Ryujinx.Ui.Windows
             }
 
             _amiiboSeriesComboBox.Changed += SeriesComboBox_Changed;
-            _amiiboCharsComboBox.Changed  += CharacterComboBox_Changed;
+            _amiiboCharsComboBox.Changed += CharacterComboBox_Changed;
 
             if (LastScannedAmiiboId != "")
             {
@@ -163,7 +210,7 @@ namespace Ryujinx.Ui.Windows
 
         private void SelectLastScannedAmiibo()
         {
-            bool isSet = _amiiboSeriesComboBox.SetActiveId(_amiiboList.FirstOrDefault(amiibo => amiibo.Head + amiibo.Tail == LastScannedAmiiboId).AmiiboSeries);
+            bool isSet = _amiiboSeriesComboBox.SetActiveId(_amiiboList.Find(amiibo => amiibo.Head + amiibo.Tail == LastScannedAmiiboId).AmiiboSeries);
             isSet = _amiiboCharsComboBox.SetActiveId(LastScannedAmiiboId);
 
             if (isSet == false)
@@ -182,44 +229,48 @@ namespace Ryujinx.Ui.Windows
                 {
                     return response.Content.Headers.LastModified != oldLastModified;
                 }
-
-                return false;
             }
-            catch (Exception ex)
+            catch (HttpRequestException exception)
             {
-                Logger.Error?.Print(LogClass.Application, $"Failed to check for amiibo updates: {ex}");
-
-                ShowInfoDialog();
-
-                return false;
+                Logger.Error?.Print(LogClass.Application, $"Unable to check for amiibo data updates: {exception}");
             }
+
+            return false;
         }
 
         private async Task<string> DownloadAmiiboJson()
         {
-            HttpResponseMessage response = await _httpClient.GetAsync("https://amiibo.ryujinx.org/");
-
-            if (response.IsSuccessStatusCode)
+            try
             {
-                string amiiboJsonString = await response.Content.ReadAsStringAsync();
+                HttpResponseMessage response = await _httpClient.GetAsync("https://amiibo.ryujinx.org/");
 
-                using (FileStream dlcJsonStream = File.Create(_amiiboJsonPath, 4096, FileOptions.WriteThrough))
+                if (response.IsSuccessStatusCode)
                 {
-                    dlcJsonStream.Write(Encoding.UTF8.GetBytes(amiiboJsonString));
+                    string amiiboJsonString = await response.Content.ReadAsStringAsync();
+
+                    try
+                    {
+                        using FileStream dlcJsonStream = File.Create(_amiiboJsonPath, 4096, FileOptions.WriteThrough);
+                        dlcJsonStream.Write(Encoding.UTF8.GetBytes(amiiboJsonString));
+                    }
+                    catch (Exception exception)
+                    {
+                        Logger.Warning?.Print(LogClass.Application, $"Couldn't write amiibo data to file '{_amiiboJsonPath}: {exception}'");
+                    }
+
+                    return amiiboJsonString;
                 }
 
-                return amiiboJsonString;
-            }
-            else
-            {
                 Logger.Error?.Print(LogClass.Application, $"Failed to download amiibo data. Response status code: {response.StatusCode}");
-
-                GtkDialog.CreateInfoDialog($"Amiibo API", "An error occured while fetching information from the API.");
-
-                Close();
+            }
+            catch (HttpRequestException exception)
+            {
+                Logger.Error?.Print(LogClass.Application, $"Failed to request amiibo data: {exception}");
             }
 
-            return DEFAULT_JSON;
+            GtkDialog.CreateInfoDialog("Amiibo API", "An error occured while fetching information from the API.");
+
+            return null;
         }
 
         private async Task UpdateAmiiboPreview(string imageUrl)
@@ -228,16 +279,16 @@ namespace Ryujinx.Ui.Windows
 
             if (response.IsSuccessStatusCode)
             {
-                byte[]     amiiboPreviewBytes = await response.Content.ReadAsByteArrayAsync();
-                Gdk.Pixbuf amiiboPreview      = new Gdk.Pixbuf(amiiboPreviewBytes);
+                byte[] amiiboPreviewBytes = await response.Content.ReadAsByteArrayAsync();
+                Pixbuf amiiboPreview = new(amiiboPreviewBytes);
 
-                float ratio = Math.Min((float)_amiiboImage.AllocatedWidth  / amiiboPreview.Width,
+                float ratio = Math.Min((float)_amiiboImage.AllocatedWidth / amiiboPreview.Width,
                                        (float)_amiiboImage.AllocatedHeight / amiiboPreview.Height);
 
                 int resizeHeight = (int)(amiiboPreview.Height * ratio);
-                int resizeWidth  = (int)(amiiboPreview.Width  * ratio);
+                int resizeWidth = (int)(amiiboPreview.Width * ratio);
 
-                _amiiboImage.Pixbuf = amiiboPreview.ScaleSimple(resizeWidth, resizeHeight, Gdk.InterpType.Bilinear);
+                _amiiboImage.Pixbuf = amiiboPreview.ScaleSimple(resizeWidth, resizeHeight, InterpType.Bilinear);
             }
             else
             {
@@ -245,9 +296,9 @@ namespace Ryujinx.Ui.Windows
             }
         }
 
-        private void ShowInfoDialog()
+        private static void ShowInfoDialog()
         {
-            GtkDialog.CreateInfoDialog($"Amiibo API", "Unable to connect to Amiibo API server. The service may be down or you may need to verify your internet connection is online.");
+            GtkDialog.CreateInfoDialog("Amiibo API", "Unable to connect to Amiibo API server. The service may be down or you may need to verify your internet connection is online.");
         }
 
         //
@@ -261,7 +312,7 @@ namespace Ryujinx.Ui.Windows
 
             List<AmiiboApi> amiiboSortedList = _amiiboList.Where(amiibo => amiibo.AmiiboSeries == _amiiboSeriesComboBox.ActiveId).OrderBy(amiibo => amiibo.Name).ToList();
 
-            List<string> comboxItemList = new List<string>();
+            List<string> comboxItemList = new();
 
             for (int i = 0; i < amiiboSortedList.Count; i++)
             {
@@ -295,7 +346,7 @@ namespace Ryujinx.Ui.Windows
 
             _amiiboCharsComboBox.Active = 0;
 
-            _scanButton.Sensitive         = true;
+            _scanButton.Sensitive = true;
             _randomUuidCheckBox.Sensitive = true;
         }
 
@@ -303,9 +354,9 @@ namespace Ryujinx.Ui.Windows
         {
             AmiiboId = _amiiboCharsComboBox.ActiveId;
 
-            _amiiboImage.Pixbuf = new Gdk.Pixbuf(_amiiboLogoBytes);
+            _amiiboImage.Pixbuf = new Pixbuf(_amiiboLogoBytes);
 
-            string imageUrl = _amiiboList.FirstOrDefault(amiibo => amiibo.Head + amiibo.Tail == _amiiboCharsComboBox.ActiveId).Image;
+            string imageUrl = _amiiboList.Find(amiibo => amiibo.Head + amiibo.Tail == _amiiboCharsComboBox.ActiveId).Image;
 
             var usageStringBuilder = new StringBuilder();
 
@@ -343,18 +394,18 @@ namespace Ryujinx.Ui.Windows
 
         private void ShowAllCheckBox_Clicked(object sender, EventArgs e)
         {
-            _amiiboImage.Pixbuf = new Gdk.Pixbuf(_amiiboLogoBytes);
+            _amiiboImage.Pixbuf = new Pixbuf(_amiiboLogoBytes);
 
             _amiiboSeriesComboBox.Changed -= SeriesComboBox_Changed;
-            _amiiboCharsComboBox.Changed  -= CharacterComboBox_Changed;
+            _amiiboCharsComboBox.Changed -= CharacterComboBox_Changed;
 
             _amiiboSeriesComboBox.RemoveAll();
             _amiiboCharsComboBox.RemoveAll();
 
-            _scanButton.Sensitive         = false;
+            _scanButton.Sensitive = false;
             _randomUuidCheckBox.Sensitive = false;
 
-            new Task(() => ParseAmiiboData()).Start();
+            new Task(ParseAmiiboData).Start();
         }
 
         private void ScanButton_Pressed(object sender, EventArgs args)
@@ -368,8 +419,8 @@ namespace Ryujinx.Ui.Windows
 
         private void CancelButton_Pressed(object sender, EventArgs args)
         {
-            AmiiboId                 = "";
-            LastScannedAmiiboId      = "";
+            AmiiboId = "";
+            LastScannedAmiiboId = "";
             LastScannedAmiiboShowAll = false;
 
             Response = ResponseType.Cancel;

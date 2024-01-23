@@ -93,7 +93,7 @@ namespace Ryujinx.Graphics.OpenGL
                     oldView.Dispose();
                 }
             }
-            
+
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, drawFramebuffer);
             GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, readFramebuffer);
 
@@ -111,12 +111,11 @@ namespace Ryujinx.Graphics.OpenGL
             GL.Clear(ClearBufferMask.ColorBufferBit);
 
             int srcX0, srcX1, srcY0, srcY1;
-            float scale = viewConverted.ScaleFactor;
 
             if (crop.Left == 0 && crop.Right == 0)
             {
                 srcX0 = 0;
-                srcX1 = (int)(viewConverted.Width / scale);
+                srcX1 = viewConverted.Width;
             }
             else
             {
@@ -127,20 +126,12 @@ namespace Ryujinx.Graphics.OpenGL
             if (crop.Top == 0 && crop.Bottom == 0)
             {
                 srcY0 = 0;
-                srcY1 = (int)(viewConverted.Height / scale);
+                srcY1 = viewConverted.Height;
             }
             else
             {
                 srcY0 = crop.Top;
                 srcY1 = crop.Bottom;
-            }
-
-            if (scale != 1f)
-            {
-                srcX0 = (int)(srcX0 * scale);
-                srcY0 = (int)(srcY0 * scale);
-                srcX1 = (int)Math.Ceiling(srcX1 * scale);
-                srcY1 = (int)Math.Ceiling(srcY1 * scale);
             }
 
             float ratioX = crop.IsStretched ? 1.0f : MathF.Min(1.0f, _height * crop.AspectRatioX / (_width * crop.AspectRatioY));
@@ -316,6 +307,8 @@ namespace Ryujinx.Graphics.OpenGL
             _updateScalingFilter = true;
         }
 
+        public void SetColorSpacePassthrough(bool colorSpacePassthroughEnabled) { }
+
         private void UpdateEffect()
         {
             if (_updateEffect)
@@ -375,7 +368,7 @@ namespace Ryujinx.Graphics.OpenGL
                         if (_scalingFilter is not FsrScalingFilter)
                         {
                             _scalingFilter?.Dispose();
-                            _scalingFilter = new FsrScalingFilter(_renderer, _antiAliasing);
+                            _scalingFilter = new FsrScalingFilter(_renderer);
                         }
                         _isLinear = false;
                         _scalingFilter.Level = _scalingFilterLevel;
@@ -408,7 +401,7 @@ namespace Ryujinx.Graphics.OpenGL
                 SwizzleComponent.Alpha);
 
             _isBgra = forceBgra;
-            _upscaledTexture = _renderer.CreateTexture(info, 1) as TextureView;
+            _upscaledTexture = _renderer.CreateTexture(info) as TextureView;
         }
 
         public void SetScalingFilterLevel(float level)

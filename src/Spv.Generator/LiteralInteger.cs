@@ -1,9 +1,9 @@
-﻿using System;
+using System;
 using System.IO;
 
 namespace Spv.Generator
 {
-    public class LiteralInteger : Operand, IEquatable<LiteralInteger>
+    public class LiteralInteger : IOperand, IEquatable<LiteralInteger>
     {
         [ThreadStatic]
         private static GeneratorPool<LiteralInteger> _pool;
@@ -95,7 +95,7 @@ namespace Spv.Generator
             return DeterministicHashCode.Combine(Type, _data);
         }
 
-        public bool Equals(Operand obj)
+        public bool Equals(IOperand obj)
         {
             return obj is LiteralInteger literalInteger && Equals(literalInteger);
         }

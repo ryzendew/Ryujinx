@@ -1,8 +1,8 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Time.Clock
+namespace Ryujinx.HLE.HOS.Services.Time.Clock
 {
     class NetworkSystemClockContextWriter : SystemClockContextUpdateCallback
     {
-        private TimeSharedMemory _sharedMemory;
+        private readonly TimeSharedMemory _sharedMemory;
 
         public NetworkSystemClockContextWriter(TimeSharedMemory sharedMemory)
         {
@@ -11,7 +11,7 @@
 
         protected override ResultCode Update()
         {
-            _sharedMemory.UpdateNetworkSystemClockContext(_context);
+            _sharedMemory.UpdateNetworkSystemClockContext(Context);
 
             return ResultCode.Success;
         }

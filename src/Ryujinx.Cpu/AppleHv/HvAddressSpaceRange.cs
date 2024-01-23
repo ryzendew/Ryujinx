@@ -2,10 +2,12 @@ using Ryujinx.Cpu.AppleHv.Arm;
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Threading;
 
 namespace Ryujinx.Cpu.AppleHv
 {
+    [SupportedOSPlatform("macos")]
     class HvAddressSpaceRange : IDisposable
     {
         private const ulong AllocationGranule = 1UL << 14;
@@ -34,7 +36,7 @@ namespace Ryujinx.Cpu.AppleHv
                 ulong size = (ulong)count * sizeof(ulong);
                 Allocation = blockAllocator.Allocate(size, PageSize);
 
-                AsSpan().Fill(0UL);
+                AsSpan().Clear();
 
                 if (hasNext)
                 {
@@ -42,7 +44,7 @@ namespace Ryujinx.Cpu.AppleHv
                 }
             }
 
-            public unsafe Span<ulong> AsSpan()
+            public Span<ulong> AsSpan()
             {
                 return MemoryMarshal.Cast<byte, ulong>(Allocation.Memory.GetSpan(Allocation.Offset, (int)Allocation.Size));
             }
@@ -52,12 +54,10 @@ namespace Ryujinx.Cpu.AppleHv
 
         private int _tlbInvalidationPending;
 
-        private readonly HvIpaAllocator _ipaAllocator;
         private readonly HvMemoryBlockAllocator _blockAllocator;
 
         public HvAddressSpaceRange(HvIpaAllocator ipaAllocator)
         {
-            _ipaAllocator = ipaAllocator;
             _blockAllocator = new HvMemoryBlockAllocator(ipaAllocator, (int)AllocationGranule);
         }
 
@@ -129,7 +129,7 @@ namespace Ryujinx.Cpu.AppleHv
             ulong endVa = (va + size + PageMask) & ~((ulong)PageMask);
             va &= ~((ulong)PageMask);
 
-            (ulong blockSize, int blockShift) = GetBlockSizeAndShift(depth);
+            (ulong blockSize, _) = GetBlockSizeAndShift(depth);
 
             while (va < endVa)
             {
@@ -138,7 +138,7 @@ namespace Ryujinx.Cpu.AppleHv
 
                 int l = (int)(va >> (PageBits + (2 - depth) * LevelBits)) & LevelMask;
 
-                PtLevel nextTable = level.Next != null ? level.Next[l] : null;
+                PtLevel nextTable = level.Next?[l];
 
                 if (nextTable != null)
                 {
@@ -190,7 +190,7 @@ namespace Ryujinx.Cpu.AppleHv
             ulong endVa = (va + size + PageSize - 1) & ~((ulong)PageSize - 1);
             va &= ~((ulong)PageSize - 1);
 
-            (ulong blockSize, int blockShift) = GetBlockSizeAndShift(depth);
+            (ulong blockSize, _) = GetBlockSizeAndShift(depth);
 
             while (va < endVa)
             {
@@ -204,7 +204,7 @@ namespace Ryujinx.Cpu.AppleHv
                 // First check if the region is mapped.
                 if ((pte & 3) != 0)
                 {
-                    PtLevel nextTable = level.Next != null ? level.Next[l] : null;
+                    PtLevel nextTable = level.Next?[l];
 
                     if (nextTable != null)
                     {
@@ -240,10 +240,10 @@ namespace Ryujinx.Cpu.AppleHv
             pte &= ~3UL;
             pte |= (depth == 2 ? 3UL : 1UL);
 
-            PtLevel level = new PtLevel(_blockAllocator, LevelCount, depth < 2);
+            PtLevel level = new(_blockAllocator, LevelCount, depth < 2);
             Span<ulong> currentLevel = level.AsSpan();
 
-            (ulong blockSize, int blockShift) = GetBlockSizeAndShift(depth);
+            (_, int blockShift) = GetBlockSizeAndShift(depth);
 
             // Fill in the blocks.
             for (int i = 0; i < LevelCount; i++)
@@ -334,7 +334,7 @@ namespace Ryujinx.Cpu.AppleHv
 
             if ((currentTable[index] & 1) == 0)
             {
-                PtLevel nextLevel = new PtLevel(_blockAllocator, LevelCount, hasNext);
+                PtLevel nextLevel = new(_blockAllocator, LevelCount, hasNext);
 
                 currentTable[index] = (nextLevel.Address & ~(ulong)PageMask) | 3UL;
                 level.Next[index] = nextLevel;
@@ -347,7 +347,7 @@ namespace Ryujinx.Cpu.AppleHv
             }
         }
 
-        private void WriteBlock(PtLevel level, int index, int depth, ulong pa, ulong attr)
+        private static void WriteBlock(PtLevel level, int index, int depth, ulong pa, ulong attr)
         {
             Span<ulong> currentTable = level.AsSpan();
 

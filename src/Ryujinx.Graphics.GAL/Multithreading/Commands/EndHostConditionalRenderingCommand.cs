@@ -1,8 +1,8 @@
-﻿namespace Ryujinx.Graphics.GAL.Multithreading.Commands
+namespace Ryujinx.Graphics.GAL.Multithreading.Commands
 {
     struct EndHostConditionalRenderingCommand : IGALCommand, IGALCommand<EndHostConditionalRenderingCommand>
     {
-        public CommandType CommandType => CommandType.EndHostConditionalRendering;
+        public readonly CommandType CommandType => CommandType.EndHostConditionalRendering;
 
         public static void Run(ref EndHostConditionalRenderingCommand command, ThreadedRenderer threaded, IRenderer renderer)
         {

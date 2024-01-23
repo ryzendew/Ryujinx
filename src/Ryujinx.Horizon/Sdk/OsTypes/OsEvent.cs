@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading;
 
@@ -15,7 +15,7 @@ namespace Ryujinx.Horizon.Sdk.OsTypes
                 InitiallySignaled = signaled,
                 ClearMode = clearMode,
                 State = InitializationState.Initialized,
-                Lock = new object()
+                Lock = new object(),
             };
         }
 

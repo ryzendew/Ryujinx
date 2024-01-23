@@ -18,7 +18,7 @@ namespace Ryujinx.Common.Configuration
         {
             UserProfile,
             Portable,
-            Custom
+            Custom,
         }
 
         public static LaunchMode Mode { get; private set; }
@@ -34,7 +34,7 @@ namespace Ryujinx.Common.Configuration
         private const string DefaultModsDir = "mods";
 
         public static string CustomModsPath { get; set; }
-        public static string CustomSdModsPath {get; set; }
+        public static string CustomSdModsPath { get; set; }
         public static string CustomNandPath { get; set; } // TODO: Actually implement this into VFS
         public static string CustomSdCardPath { get; set; } // TODO: Actually implement this into VFS
 
@@ -48,7 +48,7 @@ namespace Ryujinx.Common.Configuration
             string appDataPath;
             if (OperatingSystem.IsMacOS())
             {
-                appDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), "Library", "Application Support");
+                appDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Library", "Application Support");
             }
             else
             {
@@ -62,6 +62,17 @@ namespace Ryujinx.Common.Configuration
 
             string userProfilePath = Path.Combine(appDataPath, DefaultBaseDir);
             string portablePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, DefaultPortableDir);
+
+            // On macOS, check for a portable directory next to the app bundle as well.
+            if (OperatingSystem.IsMacOS() && !Directory.Exists(portablePath))
+            {
+                string bundlePath = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", ".."));
+                // Make sure we're actually running within an app bundle.
+                if (bundlePath.EndsWith(".app"))
+                {
+                    portablePath = Path.GetFullPath(Path.Combine(bundlePath, "..", DefaultPortableDir));
+                }
+            }
 
             if (Directory.Exists(portablePath))
             {
@@ -96,7 +107,7 @@ namespace Ryujinx.Common.Configuration
             if (OperatingSystem.IsMacOS() && Mode == LaunchMode.UserProfile)
             {
                 string oldConfigPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), DefaultBaseDir);
-                if (Path.Exists(oldConfigPath) && !Path.Exists(BaseDirPath))
+                if (Path.Exists(oldConfigPath) && !IsPathSymlink(oldConfigPath) && !Path.Exists(BaseDirPath))
                 {
                     CopyDirectory(oldConfigPath, BaseDirPath);
                     Directory.Delete(oldConfigPath, true);
@@ -113,6 +124,14 @@ namespace Ryujinx.Common.Configuration
             Directory.CreateDirectory(GamesDirPath = Path.Combine(BaseDirPath, GamesDir));
             Directory.CreateDirectory(ProfilesDirPath = Path.Combine(BaseDirPath, ProfilesDir));
             Directory.CreateDirectory(KeysDirPath = Path.Combine(BaseDirPath, KeysDir));
+        }
+
+        // Check if existing old baseDirPath is a symlink, to prevent possible errors.
+        // Should be removed, when the existance of the old directory isn't checked anymore.
+        private static bool IsPathSymlink(string path)
+        {
+            FileAttributes attributes = File.GetAttributes(path);
+            return (attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint;
         }
 
         private static void CopyDirectory(string sourceDir, string destinationDir)
@@ -143,7 +162,7 @@ namespace Ryujinx.Common.Configuration
             }
         }
 
-        public static string GetModsPath()   => CustomModsPath ?? Directory.CreateDirectory(Path.Combine(BaseDirPath, DefaultModsDir)).FullName;
+        public static string GetModsPath() => CustomModsPath ?? Directory.CreateDirectory(Path.Combine(BaseDirPath, DefaultModsDir)).FullName;
         public static string GetSdModsPath() => CustomSdModsPath ?? Directory.CreateDirectory(Path.Combine(BaseDirPath, DefaultSdcardDir, "atmosphere")).FullName;
     }
 }

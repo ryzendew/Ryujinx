@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Mii.Types
+namespace Ryujinx.HLE.HOS.Services.Mii.Types
 {
     enum FacelineType : byte
     {
@@ -15,7 +15,7 @@
         FlatRounded,
         AngularSmall,
 
-        Min = 0,
-        Max = 11
+        Min = Sharp,
+        Max = AngularSmall,
     }
 }

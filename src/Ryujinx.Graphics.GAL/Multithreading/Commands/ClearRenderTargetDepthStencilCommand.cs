@@ -1,8 +1,8 @@
-﻿namespace Ryujinx.Graphics.GAL.Multithreading.Commands
+namespace Ryujinx.Graphics.GAL.Multithreading.Commands
 {
     struct ClearRenderTargetDepthStencilCommand : IGALCommand, IGALCommand<ClearRenderTargetDepthStencilCommand>
     {
-        public CommandType CommandType => CommandType.ClearRenderTargetDepthStencil;
+        public readonly CommandType CommandType => CommandType.ClearRenderTargetDepthStencil;
         private int _layer;
         private int _layerCount;
         private float _depthValue;

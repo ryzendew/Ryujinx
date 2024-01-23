@@ -1,12 +1,10 @@
-﻿using Ryujinx.Common;
 using Ryujinx.Graphics.Shader.IntermediateRepresentation;
 using Ryujinx.Graphics.Shader.StructuredIr;
 using Ryujinx.Graphics.Shader.Translation;
 using Spv.Generator;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Numerics;
+using System.Diagnostics;
 using static Spv.Specification;
 using SpvInstruction = Spv.Generator.Instruction;
 
@@ -14,8 +12,6 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
 {
     static class Declarations
     {
-        private static readonly string[] StagePrefixes = new string[] { "cp", "vp", "tcp", "tep", "gp", "fp" };
-
         public static void DeclareParameters(CodeGenContext context, StructuredFunction function)
         {
             DeclareParameters(context, function.InArguments, 0);
@@ -43,284 +39,187 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
                 context.AddLocalVariable(spvLocal);
                 context.DeclareLocal(local, spvLocal);
             }
-
-            var ivector2Type = context.TypeVector(context.TypeS32(), 2);
-            var coordTempPointerType = context.TypePointer(StorageClass.Function, ivector2Type);
-            var coordTemp = context.Variable(coordTempPointerType, StorageClass.Function);
-
-            context.AddLocalVariable(coordTemp);
-            context.CoordTemp = coordTemp;
-        }
-
-        public static void DeclareLocalForArgs(CodeGenContext context, List<StructuredFunction> functions)
-        {
-            for (int funcIndex = 0; funcIndex < functions.Count; funcIndex++)
-            {
-                StructuredFunction function = functions[funcIndex];
-                SpvInstruction[] locals = new SpvInstruction[function.InArguments.Length];
-
-                for (int i = 0; i < function.InArguments.Length; i++)
-                {
-                    var type = function.GetArgumentType(i);
-                    var localPointerType = context.TypePointer(StorageClass.Function, context.GetType(type));
-                    var spvLocal = context.Variable(localPointerType, StorageClass.Function);
-
-                    context.AddLocalVariable(spvLocal);
-
-                    locals[i] = spvLocal;
-                }
-
-                context.DeclareLocalForArgs(funcIndex, locals);
-            }
         }
 
         public static void DeclareAll(CodeGenContext context, StructuredProgramInfo info)
         {
-            if (context.Config.Stage == ShaderStage.Compute)
-            {
-                int localMemorySize = BitUtils.DivRoundUp(context.Config.GpuAccessor.QueryComputeLocalMemorySize(), 4);
-
-                if (localMemorySize != 0)
-                {
-                    DeclareLocalMemory(context, localMemorySize);
-                }
-
-                int sharedMemorySize = BitUtils.DivRoundUp(context.Config.GpuAccessor.QueryComputeSharedMemorySize(), 4);
-
-                if (sharedMemorySize != 0)
-                {
-                    DeclareSharedMemory(context, sharedMemorySize);
-                }
-            }
-            else if (context.Config.LocalMemorySize != 0)
-            {
-                int localMemorySize = BitUtils.DivRoundUp(context.Config.LocalMemorySize, 4);
-                DeclareLocalMemory(context, localMemorySize);
-            }
-
-            DeclareSupportBuffer(context);
-            DeclareUniformBuffers(context, context.Config.GetConstantBufferDescriptors());
-            DeclareStorageBuffers(context, context.Config.GetStorageBufferDescriptors());
-            DeclareSamplers(context, context.Config.GetTextureDescriptors());
-            DeclareImages(context, context.Config.GetImageDescriptors());
+            DeclareConstantBuffers(context, context.Properties.ConstantBuffers.Values);
+            DeclareStorageBuffers(context, context.Properties.StorageBuffers.Values);
+            DeclareMemories(context, context.Properties.LocalMemories, context.LocalMemories, StorageClass.Private);
+            DeclareMemories(context, context.Properties.SharedMemories, context.SharedMemories, StorageClass.Workgroup);
+            DeclareSamplers(context, context.Properties.Textures.Values);
+            DeclareImages(context, context.Properties.Images.Values);
             DeclareInputsAndOutputs(context, info);
         }
 
-        private static void DeclareLocalMemory(CodeGenContext context, int size)
+        private static void DeclareMemories(
+            CodeGenContext context,
+            IReadOnlyDictionary<int, MemoryDefinition> memories,
+            Dictionary<int, SpvInstruction> dict,
+            StorageClass storage)
         {
-            context.LocalMemory = DeclareMemory(context, StorageClass.Private, size);
-        }
-
-        private static void DeclareSharedMemory(CodeGenContext context, int size)
-        {
-            context.SharedMemory = DeclareMemory(context, StorageClass.Workgroup, size);
-        }
-
-        private static SpvInstruction DeclareMemory(CodeGenContext context, StorageClass storage, int size)
-        {
-            var arrayType = context.TypeArray(context.TypeU32(), context.Constant(context.TypeU32(), size));
-            var pointerType = context.TypePointer(storage, arrayType);
-            var variable = context.Variable(pointerType, storage);
-
-            context.AddGlobalVariable(variable);
-
-            return variable;
-        }
-
-        private static void DeclareSupportBuffer(CodeGenContext context)
-        {
-            if (!context.Config.Stage.SupportsRenderScale() && !(context.Config.LastInVertexPipeline && context.Config.GpuAccessor.QueryViewportTransformDisable()))
+            foreach ((int id, MemoryDefinition memory) in memories)
             {
-                return;
+                var pointerType = context.TypePointer(storage, context.GetType(memory.Type, memory.ArrayLength));
+                var variable = context.Variable(pointerType, storage);
+
+                context.AddGlobalVariable(variable);
+
+                dict.Add(id, variable);
             }
-
-            var isBgraArrayType = context.TypeArray(context.TypeU32(), context.Constant(context.TypeU32(), SupportBuffer.FragmentIsBgraCount));
-            var viewportInverseVectorType = context.TypeVector(context.TypeFP32(), 4);
-            var renderScaleArrayType = context.TypeArray(context.TypeFP32(), context.Constant(context.TypeU32(), SupportBuffer.RenderScaleMaxCount));
-
-            context.Decorate(isBgraArrayType, Decoration.ArrayStride, (LiteralInteger)SupportBuffer.FieldSize);
-            context.Decorate(renderScaleArrayType, Decoration.ArrayStride, (LiteralInteger)SupportBuffer.FieldSize);
-
-            var supportBufferStructType = context.TypeStruct(false, context.TypeU32(), isBgraArrayType, viewportInverseVectorType, context.TypeS32(), renderScaleArrayType);
-
-            context.MemberDecorate(supportBufferStructType, 0, Decoration.Offset, (LiteralInteger)SupportBuffer.FragmentAlphaTestOffset);
-            context.MemberDecorate(supportBufferStructType, 1, Decoration.Offset, (LiteralInteger)SupportBuffer.FragmentIsBgraOffset);
-            context.MemberDecorate(supportBufferStructType, 2, Decoration.Offset, (LiteralInteger)SupportBuffer.ViewportInverseOffset);
-            context.MemberDecorate(supportBufferStructType, 3, Decoration.Offset, (LiteralInteger)SupportBuffer.FragmentRenderScaleCountOffset);
-            context.MemberDecorate(supportBufferStructType, 4, Decoration.Offset, (LiteralInteger)SupportBuffer.GraphicsRenderScaleOffset);
-            context.Decorate(supportBufferStructType, Decoration.Block);
-
-            var supportBufferPointerType = context.TypePointer(StorageClass.Uniform, supportBufferStructType);
-            var supportBufferVariable = context.Variable(supportBufferPointerType, StorageClass.Uniform);
-
-            context.Decorate(supportBufferVariable, Decoration.DescriptorSet, (LiteralInteger)0);
-            context.Decorate(supportBufferVariable, Decoration.Binding, (LiteralInteger)0);
-
-            context.AddGlobalVariable(supportBufferVariable);
-
-            context.SupportBuffer = supportBufferVariable;
         }
 
-        private static void DeclareUniformBuffers(CodeGenContext context, BufferDescriptor[] descriptors)
+        private static void DeclareConstantBuffers(CodeGenContext context, IEnumerable<BufferDefinition> buffers)
         {
-            if (descriptors.Length == 0)
+            DeclareBuffers(context, buffers, isBuffer: false);
+        }
+
+        private static void DeclareStorageBuffers(CodeGenContext context, IEnumerable<BufferDefinition> buffers)
+        {
+            DeclareBuffers(context, buffers, isBuffer: true);
+        }
+
+        private static void DeclareBuffers(CodeGenContext context, IEnumerable<BufferDefinition> buffers, bool isBuffer)
+        {
+            HashSet<SpvInstruction> decoratedTypes = new();
+
+            foreach (BufferDefinition buffer in buffers)
             {
-                return;
-            }
+                int setIndex = context.TargetApi == TargetApi.Vulkan ? buffer.Set : 0;
+                int alignment = buffer.Layout == BufferLayout.Std140 ? 16 : 4;
+                int alignmentMask = alignment - 1;
+                int offset = 0;
 
-            uint ubSize = Constants.ConstantBufferSize / 16;
+                SpvInstruction[] structFieldTypes = new SpvInstruction[buffer.Type.Fields.Length];
+                int[] structFieldOffsets = new int[buffer.Type.Fields.Length];
 
-            var ubArrayType = context.TypeArray(context.TypeVector(context.TypeFP32(), 4), context.Constant(context.TypeU32(), ubSize), true);
-            context.Decorate(ubArrayType, Decoration.ArrayStride, (LiteralInteger)16);
-            var ubStructType = context.TypeStruct(true, ubArrayType);
-            context.Decorate(ubStructType, Decoration.Block);
-            context.MemberDecorate(ubStructType, 0, Decoration.Offset, (LiteralInteger)0);
-
-            if (context.Config.UsedFeatures.HasFlag(FeatureFlags.CbIndexing))
-            {
-                int count = descriptors.Max(x => x.Slot) + 1;
-
-                var ubStructArrayType = context.TypeArray(ubStructType, context.Constant(context.TypeU32(), count));
-                var ubPointerType = context.TypePointer(StorageClass.Uniform, ubStructArrayType);
-                var ubVariable = context.Variable(ubPointerType, StorageClass.Uniform);
-
-                context.Name(ubVariable, $"{GetStagePrefix(context.Config.Stage)}_u");
-                context.Decorate(ubVariable, Decoration.DescriptorSet, (LiteralInteger)0);
-                context.Decorate(ubVariable, Decoration.Binding, (LiteralInteger)context.Config.FirstConstantBufferBinding);
-                context.AddGlobalVariable(ubVariable);
-
-                context.UniformBuffersArray = ubVariable;
-            }
-            else
-            {
-                var ubPointerType = context.TypePointer(StorageClass.Uniform, ubStructType);
-
-                foreach (var descriptor in descriptors)
+                for (int fieldIndex = 0; fieldIndex < buffer.Type.Fields.Length; fieldIndex++)
                 {
-                    var ubVariable = context.Variable(ubPointerType, StorageClass.Uniform);
+                    StructureField field = buffer.Type.Fields[fieldIndex];
+                    int fieldSize = (field.Type.GetSizeInBytes() + alignmentMask) & ~alignmentMask;
 
-                    context.Name(ubVariable, $"{GetStagePrefix(context.Config.Stage)}_c{descriptor.Slot}");
-                    context.Decorate(ubVariable, Decoration.DescriptorSet, (LiteralInteger)0);
-                    context.Decorate(ubVariable, Decoration.Binding, (LiteralInteger)descriptor.Binding);
-                    context.AddGlobalVariable(ubVariable);
-                    context.UniformBuffers.Add(descriptor.Slot, ubVariable);
+                    structFieldTypes[fieldIndex] = context.GetType(field.Type, field.ArrayLength);
+                    structFieldOffsets[fieldIndex] = offset;
+
+                    if (field.Type.HasFlag(AggregateType.Array))
+                    {
+                        // We can't decorate the type more than once.
+                        if (decoratedTypes.Add(structFieldTypes[fieldIndex]))
+                        {
+                            context.Decorate(structFieldTypes[fieldIndex], Decoration.ArrayStride, (LiteralInteger)fieldSize);
+                        }
+
+                        // Zero lengths are assumed to be a "runtime array" (which does not have a explicit length
+                        // specified on the shader, and instead assumes the bound buffer length).
+                        // It is only valid as the last struct element.
+
+                        Debug.Assert(field.ArrayLength > 0 || fieldIndex == buffer.Type.Fields.Length - 1);
+
+                        offset += fieldSize * field.ArrayLength;
+                    }
+                    else
+                    {
+                        offset += fieldSize;
+                    }
+                }
+
+                var structType = context.TypeStruct(false, structFieldTypes);
+
+                if (decoratedTypes.Add(structType))
+                {
+                    context.Decorate(structType, isBuffer ? Decoration.BufferBlock : Decoration.Block);
+
+                    for (int fieldIndex = 0; fieldIndex < structFieldOffsets.Length; fieldIndex++)
+                    {
+                        context.MemberDecorate(structType, fieldIndex, Decoration.Offset, (LiteralInteger)structFieldOffsets[fieldIndex]);
+                    }
+                }
+
+                var pointerType = context.TypePointer(StorageClass.Uniform, structType);
+                var variable = context.Variable(pointerType, StorageClass.Uniform);
+
+                context.Name(variable, buffer.Name);
+                context.Decorate(variable, Decoration.DescriptorSet, (LiteralInteger)setIndex);
+                context.Decorate(variable, Decoration.Binding, (LiteralInteger)buffer.Binding);
+                context.AddGlobalVariable(variable);
+
+                if (isBuffer)
+                {
+                    context.StorageBuffers.Add(buffer.Binding, variable);
+                }
+                else
+                {
+                    context.ConstantBuffers.Add(buffer.Binding, variable);
                 }
             }
         }
 
-        private static void DeclareStorageBuffers(CodeGenContext context, BufferDescriptor[] descriptors)
+        private static void DeclareSamplers(CodeGenContext context, IEnumerable<TextureDefinition> samplers)
         {
-            if (descriptors.Length == 0)
+            foreach (var sampler in samplers)
             {
-                return;
-            }
+                int setIndex = context.TargetApi == TargetApi.Vulkan ? sampler.Set : 0;
 
-            int setIndex = context.Config.Options.TargetApi == TargetApi.Vulkan ? 1 : 0;
-            int count = descriptors.Max(x => x.Slot) + 1;
-
-            var sbArrayType = context.TypeRuntimeArray(context.TypeU32());
-            context.Decorate(sbArrayType, Decoration.ArrayStride, (LiteralInteger)4);
-            var sbStructType = context.TypeStruct(true, sbArrayType);
-            context.Decorate(sbStructType, Decoration.BufferBlock);
-            context.MemberDecorate(sbStructType, 0, Decoration.Offset, (LiteralInteger)0);
-            var sbStructArrayType = context.TypeArray(sbStructType, context.Constant(context.TypeU32(), count));
-            var sbPointerType = context.TypePointer(StorageClass.Uniform, sbStructArrayType);
-            var sbVariable = context.Variable(sbPointerType, StorageClass.Uniform);
-
-            context.Name(sbVariable, $"{GetStagePrefix(context.Config.Stage)}_s");
-            context.Decorate(sbVariable, Decoration.DescriptorSet, (LiteralInteger)setIndex);
-            context.Decorate(sbVariable, Decoration.Binding, (LiteralInteger)context.Config.FirstStorageBufferBinding);
-            context.AddGlobalVariable(sbVariable);
-
-            context.StorageBuffersArray = sbVariable;
-        }
-
-        private static void DeclareSamplers(CodeGenContext context, TextureDescriptor[] descriptors)
-        {
-            foreach (var descriptor in descriptors)
-            {
-                var meta = new TextureMeta(descriptor.CbufSlot, descriptor.HandleIndex, descriptor.Format);
-
-                if (context.Samplers.ContainsKey(meta))
-                {
-                    continue;
-                }
-
-                int setIndex = context.Config.Options.TargetApi == TargetApi.Vulkan ? 2 : 0;
-
-                var dim = (descriptor.Type & SamplerType.Mask) switch
+                var dim = (sampler.Type & SamplerType.Mask) switch
                 {
                     SamplerType.Texture1D => Dim.Dim1D,
                     SamplerType.Texture2D => Dim.Dim2D,
                     SamplerType.Texture3D => Dim.Dim3D,
                     SamplerType.TextureCube => Dim.Cube,
                     SamplerType.TextureBuffer => Dim.Buffer,
-                    _ => throw new InvalidOperationException($"Invalid sampler type \"{descriptor.Type & SamplerType.Mask}\".")
+                    _ => throw new InvalidOperationException($"Invalid sampler type \"{sampler.Type & SamplerType.Mask}\"."),
                 };
 
                 var imageType = context.TypeImage(
                     context.TypeFP32(),
                     dim,
-                    descriptor.Type.HasFlag(SamplerType.Shadow),
-                    descriptor.Type.HasFlag(SamplerType.Array),
-                    descriptor.Type.HasFlag(SamplerType.Multisample),
+                    sampler.Type.HasFlag(SamplerType.Shadow),
+                    sampler.Type.HasFlag(SamplerType.Array),
+                    sampler.Type.HasFlag(SamplerType.Multisample),
                     1,
                     ImageFormat.Unknown);
-
-                var nameSuffix = meta.CbufSlot < 0 ? $"_tcb_{meta.Handle:X}" : $"_cb{meta.CbufSlot}_{meta.Handle:X}";
 
                 var sampledImageType = context.TypeSampledImage(imageType);
                 var sampledImagePointerType = context.TypePointer(StorageClass.UniformConstant, sampledImageType);
                 var sampledImageVariable = context.Variable(sampledImagePointerType, StorageClass.UniformConstant);
 
-                context.Samplers.Add(meta, (imageType, sampledImageType, sampledImageVariable));
-                context.SamplersTypes.Add(meta, descriptor.Type);
+                context.Samplers.Add(sampler.Binding, (imageType, sampledImageType, sampledImageVariable));
+                context.SamplersTypes.Add(sampler.Binding, sampler.Type);
 
-                context.Name(sampledImageVariable, $"{GetStagePrefix(context.Config.Stage)}_tex{nameSuffix}");
+                context.Name(sampledImageVariable, sampler.Name);
                 context.Decorate(sampledImageVariable, Decoration.DescriptorSet, (LiteralInteger)setIndex);
-                context.Decorate(sampledImageVariable, Decoration.Binding, (LiteralInteger)descriptor.Binding);
+                context.Decorate(sampledImageVariable, Decoration.Binding, (LiteralInteger)sampler.Binding);
                 context.AddGlobalVariable(sampledImageVariable);
             }
         }
 
-        private static void DeclareImages(CodeGenContext context, TextureDescriptor[] descriptors)
+        private static void DeclareImages(CodeGenContext context, IEnumerable<TextureDefinition> images)
         {
-            foreach (var descriptor in descriptors)
+            foreach (var image in images)
             {
-                var meta = new TextureMeta(descriptor.CbufSlot, descriptor.HandleIndex, descriptor.Format);
+                int setIndex = context.TargetApi == TargetApi.Vulkan ? image.Set : 0;
 
-                if (context.Images.ContainsKey(meta))
-                {
-                    continue;
-                }
-
-                int setIndex = context.Config.Options.TargetApi == TargetApi.Vulkan ? 3 : 0;
-
-                var dim = GetDim(descriptor.Type);
+                var dim = GetDim(image.Type);
 
                 var imageType = context.TypeImage(
-                    context.GetType(meta.Format.GetComponentType()),
+                    context.GetType(image.Format.GetComponentType()),
                     dim,
-                    descriptor.Type.HasFlag(SamplerType.Shadow),
-                    descriptor.Type.HasFlag(SamplerType.Array),
-                    descriptor.Type.HasFlag(SamplerType.Multisample),
+                    image.Type.HasFlag(SamplerType.Shadow),
+                    image.Type.HasFlag(SamplerType.Array),
+                    image.Type.HasFlag(SamplerType.Multisample),
                     AccessQualifier.ReadWrite,
-                    GetImageFormat(meta.Format));
-
-                var nameSuffix = meta.CbufSlot < 0 ?
-                    $"_tcb_{meta.Handle:X}_{meta.Format.ToGlslFormat()}" :
-                    $"_cb{meta.CbufSlot}_{meta.Handle:X}_{meta.Format.ToGlslFormat()}";
+                    GetImageFormat(image.Format));
 
                 var imagePointerType = context.TypePointer(StorageClass.UniformConstant, imageType);
                 var imageVariable = context.Variable(imagePointerType, StorageClass.UniformConstant);
 
-                context.Images.Add(meta, (imageType, imageVariable));
+                context.Images.Add(image.Binding, (imageType, imageVariable));
 
-                context.Name(imageVariable, $"{GetStagePrefix(context.Config.Stage)}_img{nameSuffix}");
+                context.Name(imageVariable, image.Name);
                 context.Decorate(imageVariable, Decoration.DescriptorSet, (LiteralInteger)setIndex);
-                context.Decorate(imageVariable, Decoration.Binding, (LiteralInteger)descriptor.Binding);
+                context.Decorate(imageVariable, Decoration.Binding, (LiteralInteger)image.Binding);
 
-                if (descriptor.Flags.HasFlag(TextureUsageFlags.ImageCoherent))
+                if (image.Flags.HasFlag(TextureUsageFlags.ImageCoherent))
                 {
                     context.Decorate(imageVariable, Decoration.Coherent);
                 }
@@ -338,7 +237,7 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
                 SamplerType.Texture3D => Dim.Dim3D,
                 SamplerType.TextureCube => Dim.Cube,
                 SamplerType.TextureBuffer => Dim.Buffer,
-                _ => throw new ArgumentException($"Invalid sampler type \"{type & SamplerType.Mask}\".")
+                _ => throw new ArgumentException($"Invalid sampler type \"{type & SamplerType.Mask}\"."),
             };
         }
 
@@ -386,22 +285,48 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
                 TextureFormat.R10G10B10A2Unorm => ImageFormat.Rgb10A2,
                 TextureFormat.R10G10B10A2Uint => ImageFormat.Rgb10a2ui,
                 TextureFormat.R11G11B10Float => ImageFormat.R11fG11fB10f,
-                _ => throw new ArgumentException($"Invalid texture format \"{format}\".")
+                _ => throw new ArgumentException($"Invalid texture format \"{format}\"."),
             };
         }
 
         private static void DeclareInputsAndOutputs(CodeGenContext context, StructuredProgramInfo info)
         {
+            int firstLocation = int.MaxValue;
+
+            if (context.Definitions.Stage == ShaderStage.Fragment && context.Definitions.DualSourceBlend)
+            {
+                foreach (var ioDefinition in info.IoDefinitions)
+                {
+                    if (ioDefinition.IoVariable == IoVariable.FragmentOutputColor && ioDefinition.Location < firstLocation)
+                    {
+                        firstLocation = ioDefinition.Location;
+                    }
+                }
+            }
+
             foreach (var ioDefinition in info.IoDefinitions)
             {
-                var ioVariable = ioDefinition.IoVariable;
+                PixelImap iq = PixelImap.Unused;
 
-                // Those are actually from constant buffer, rather than being actual inputs or outputs,
-                // so we must ignore them here as they are declared as part of the support buffer.
-                // TODO: Delete this after we represent this properly on the IR (as a constant buffer rather than "input").
-                if (ioVariable == IoVariable.FragmentOutputIsBgra ||
-                    ioVariable == IoVariable.SupportBlockRenderScale ||
-                    ioVariable == IoVariable.SupportBlockViewInverse)
+                if (context.Definitions.Stage == ShaderStage.Fragment)
+                {
+                    var ioVariable = ioDefinition.IoVariable;
+                    if (ioVariable == IoVariable.UserDefined)
+                    {
+                        iq = context.Definitions.ImapTypes[ioDefinition.Location].GetFirstUsedType();
+                    }
+                    else
+                    {
+                        (_, AggregateType varType) = IoMap.GetSpirvBuiltIn(ioVariable);
+                        AggregateType elemType = varType & AggregateType.ElementTypeMask;
+
+                        if (elemType is AggregateType.S32 or AggregateType.U32)
+                        {
+                            iq = PixelImap.Constant;
+                        }
+                    }
+                }
+                else if (IoMap.IsPerVertexBuiltIn(ioDefinition.IoVariable))
                 {
                     continue;
                 }
@@ -409,31 +334,104 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
                 bool isOutput = ioDefinition.StorageKind.IsOutput();
                 bool isPerPatch = ioDefinition.StorageKind.IsPerPatch();
 
-                PixelImap iq = PixelImap.Unused;
+                DeclareInputOrOutput(context, ioDefinition, isOutput, isPerPatch, iq, firstLocation);
+            }
 
-                if (context.Config.Stage == ShaderStage.Fragment)
+            DeclarePerVertexBlock(context);
+        }
+
+        private static void DeclarePerVertexBlock(CodeGenContext context)
+        {
+            if (context.Definitions.Stage.IsVtg())
+            {
+                if (context.Definitions.Stage != ShaderStage.Vertex)
                 {
-                    if (ioVariable == IoVariable.UserDefined)
-                    {
-                        iq = context.Config.ImapTypes[ioDefinition.Location].GetFirstUsedType();
-                    }
-                    else
-                    {
-                        (_, AggregateType varType) = IoMap.GetSpirvBuiltIn(ioVariable);
-                        AggregateType elemType = varType & AggregateType.ElementTypeMask;
+                    var perVertexInputStructType = CreatePerVertexStructType(context);
+                    int arraySize = context.Definitions.Stage == ShaderStage.Geometry ? context.Definitions.InputTopology.ToInputVertices() : 32;
+                    var perVertexInputArrayType = context.TypeArray(perVertexInputStructType, context.Constant(context.TypeU32(), arraySize));
+                    var perVertexInputPointerType = context.TypePointer(StorageClass.Input, perVertexInputArrayType);
+                    var perVertexInputVariable = context.Variable(perVertexInputPointerType, StorageClass.Input);
 
-                        if (elemType == AggregateType.S32 || elemType == AggregateType.U32)
-                        {
-                            iq = PixelImap.Constant;
-                        }
+                    context.Name(perVertexInputVariable, "gl_in");
+
+                    context.AddGlobalVariable(perVertexInputVariable);
+                    context.Inputs.Add(new IoDefinition(StorageKind.Input, IoVariable.Position), perVertexInputVariable);
+                }
+
+                var perVertexOutputStructType = CreatePerVertexStructType(context);
+
+                void DecorateTfo(IoVariable ioVariable, int fieldIndex)
+                {
+                    if (context.Definitions.TryGetTransformFeedbackOutput(ioVariable, 0, 0, out var transformFeedbackOutput))
+                    {
+                        context.MemberDecorate(perVertexOutputStructType, fieldIndex, Decoration.XfbBuffer, (LiteralInteger)transformFeedbackOutput.Buffer);
+                        context.MemberDecorate(perVertexOutputStructType, fieldIndex, Decoration.XfbStride, (LiteralInteger)transformFeedbackOutput.Stride);
+                        context.MemberDecorate(perVertexOutputStructType, fieldIndex, Decoration.Offset, (LiteralInteger)transformFeedbackOutput.Offset);
                     }
                 }
 
-                DeclareInputOrOutput(context, ioDefinition, isOutput, isPerPatch, iq);
+                DecorateTfo(IoVariable.Position, 0);
+                DecorateTfo(IoVariable.PointSize, 1);
+                DecorateTfo(IoVariable.ClipDistance, 2);
+
+                SpvInstruction perVertexOutputArrayType;
+
+                if (context.Definitions.Stage == ShaderStage.TessellationControl)
+                {
+                    int arraySize = context.Definitions.ThreadsPerInputPrimitive;
+                    perVertexOutputArrayType = context.TypeArray(perVertexOutputStructType, context.Constant(context.TypeU32(), arraySize));
+                }
+                else
+                {
+                    perVertexOutputArrayType = perVertexOutputStructType;
+                }
+
+                var perVertexOutputPointerType = context.TypePointer(StorageClass.Output, perVertexOutputArrayType);
+                var perVertexOutputVariable = context.Variable(perVertexOutputPointerType, StorageClass.Output);
+
+                context.AddGlobalVariable(perVertexOutputVariable);
+                context.Outputs.Add(new IoDefinition(StorageKind.Output, IoVariable.Position), perVertexOutputVariable);
             }
         }
 
-        private static void DeclareInputOrOutput(CodeGenContext context, IoDefinition ioDefinition, bool isOutput, bool isPerPatch, PixelImap iq = PixelImap.Unused)
+        private static SpvInstruction CreatePerVertexStructType(CodeGenContext context)
+        {
+            var vec4FloatType = context.TypeVector(context.TypeFP32(), 4);
+            var floatType = context.TypeFP32();
+            var array8FloatType = context.TypeArray(context.TypeFP32(), context.Constant(context.TypeU32(), 8));
+            var array1FloatType = context.TypeArray(context.TypeFP32(), context.Constant(context.TypeU32(), 1));
+
+            var perVertexStructType = context.TypeStruct(true, vec4FloatType, floatType, array8FloatType, array1FloatType);
+
+            context.Name(perVertexStructType, "gl_PerVertex");
+
+            context.MemberName(perVertexStructType, 0, "gl_Position");
+            context.MemberName(perVertexStructType, 1, "gl_PointSize");
+            context.MemberName(perVertexStructType, 2, "gl_ClipDistance");
+            context.MemberName(perVertexStructType, 3, "gl_CullDistance");
+
+            context.Decorate(perVertexStructType, Decoration.Block);
+
+            if (context.HostCapabilities.ReducedPrecision)
+            {
+                context.MemberDecorate(perVertexStructType, 0, Decoration.Invariant);
+            }
+
+            context.MemberDecorate(perVertexStructType, 0, Decoration.BuiltIn, (LiteralInteger)BuiltIn.Position);
+            context.MemberDecorate(perVertexStructType, 1, Decoration.BuiltIn, (LiteralInteger)BuiltIn.PointSize);
+            context.MemberDecorate(perVertexStructType, 2, Decoration.BuiltIn, (LiteralInteger)BuiltIn.ClipDistance);
+            context.MemberDecorate(perVertexStructType, 3, Decoration.BuiltIn, (LiteralInteger)BuiltIn.CullDistance);
+
+            return perVertexStructType;
+        }
+
+        private static void DeclareInputOrOutput(
+            CodeGenContext context,
+            IoDefinition ioDefinition,
+            bool isOutput,
+            bool isPerPatch,
+            PixelImap iq = PixelImap.Unused,
+            int firstLocation = 0)
         {
             IoVariable ioVariable = ioDefinition.IoVariable;
             var storageClass = isOutput ? StorageClass.Output : StorageClass.Input;
@@ -444,12 +442,12 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
 
             if (ioVariable == IoVariable.UserDefined)
             {
-                varType = context.Config.GetUserDefinedType(ioDefinition.Location, isOutput);
+                varType = context.Definitions.GetUserDefinedType(ioDefinition.Location, isOutput);
                 isBuiltIn = false;
             }
             else if (ioVariable == IoVariable.FragmentOutputColor)
             {
-                varType = context.Config.GetFragmentOutputColorType(ioDefinition.Location);
+                varType = context.Definitions.GetFragmentOutputColorType(ioDefinition.Location);
                 isBuiltIn = false;
             }
             else
@@ -463,41 +461,41 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
                 }
             }
 
-            bool hasComponent = context.Config.HasPerLocationInputOrOutputComponent(ioVariable, ioDefinition.Location, ioDefinition.Component, isOutput);
+            bool hasComponent = context.Definitions.HasPerLocationInputOrOutputComponent(ioVariable, ioDefinition.Location, ioDefinition.Component, isOutput);
 
             if (hasComponent)
             {
                 varType &= AggregateType.ElementTypeMask;
             }
-            else if (ioVariable == IoVariable.UserDefined && context.Config.HasTransformFeedbackOutputs(isOutput))
+            else if (ioVariable == IoVariable.UserDefined && context.Definitions.HasTransformFeedbackOutputs(isOutput))
             {
                 varType &= AggregateType.ElementTypeMask;
-                varType |= context.Config.GetTransformFeedbackOutputComponents(ioDefinition.Location, ioDefinition.Component) switch
+                varType |= context.Definitions.GetTransformFeedbackOutputComponents(ioDefinition.Location, ioDefinition.Component) switch
                 {
                     2 => AggregateType.Vector2,
                     3 => AggregateType.Vector3,
                     4 => AggregateType.Vector4,
-                    _ => AggregateType.Invalid
+                    _ => AggregateType.Invalid,
                 };
             }
 
             var spvType = context.GetType(varType, IoMap.GetSpirvBuiltInArrayLength(ioVariable));
             bool builtInPassthrough = false;
 
-            if (!isPerPatch && IoMap.IsPerVertex(ioVariable, context.Config.Stage, isOutput))
+            if (!isPerPatch && IoMap.IsPerVertex(ioVariable, context.Definitions.Stage, isOutput))
             {
-                int arraySize = context.Config.Stage == ShaderStage.Geometry ? context.InputVertices : 32;
-                spvType = context.TypeArray(spvType, context.Constant(context.TypeU32(), (LiteralInteger)arraySize));
+                int arraySize = context.Definitions.Stage == ShaderStage.Geometry ? context.Definitions.InputTopology.ToInputVertices() : 32;
+                spvType = context.TypeArray(spvType, context.Constant(context.TypeU32(), arraySize));
 
-                if (context.Config.GpPassthrough && context.Config.GpuAccessor.QueryHostSupportsGeometryShaderPassthrough())
+                if (context.Definitions.GpPassthrough && context.HostCapabilities.SupportsGeometryShaderPassthrough)
                 {
                     builtInPassthrough = true;
                 }
             }
 
-            if (context.Config.Stage == ShaderStage.TessellationControl && isOutput && !isPerPatch)
+            if (context.Definitions.Stage == ShaderStage.TessellationControl && isOutput && !isPerPatch)
             {
-                spvType = context.TypeArray(spvType, context.Constant(context.TypeU32(), context.Config.ThreadsPerInputPrimitive));
+                spvType = context.TypeArray(spvType, context.Constant(context.TypeU32(), context.Definitions.ThreadsPerInputPrimitive));
             }
 
             var spvPointerType = context.TypePointer(storageClass, spvType);
@@ -515,7 +513,7 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
                     context.Decorate(spvVar, Decoration.Patch);
                 }
 
-                if (context.Config.GpuAccessor.QueryHostReducedPrecision() && ioVariable == IoVariable.Position)
+                if (context.HostCapabilities.ReducedPrecision && ioVariable == IoVariable.Position)
                 {
                     context.Decorate(spvVar, Decoration.Invariant);
                 }
@@ -528,7 +526,7 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
 
                 if (ioVariable == IoVariable.UserDefined)
                 {
-                    int location = context.Config.GetPerPatchAttributeLocation(ioDefinition.Location);
+                    int location = context.AttributeUsage.GetPerPatchAttributeLocation(ioDefinition.Location);
 
                     context.Decorate(spvVar, Decoration.Location, (LiteralInteger)location);
                 }
@@ -544,8 +542,8 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
 
                 if (!isOutput &&
                     !isPerPatch &&
-                    (context.Config.PassthroughAttributes & (1 << ioDefinition.Location)) != 0 &&
-                    context.Config.GpuAccessor.QueryHostSupportsGeometryShaderPassthrough())
+                    (context.AttributeUsage.PassthroughAttributes & (1 << ioDefinition.Location)) != 0 &&
+                    context.HostCapabilities.SupportsGeometryShaderPassthrough)
                 {
                     context.Decorate(spvVar, Decoration.PassthroughNV);
                 }
@@ -554,13 +552,11 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
             {
                 int location = ioDefinition.Location;
 
-                if (context.Config.Stage == ShaderStage.Fragment && context.Config.GpuAccessor.QueryDualSourceBlendEnable())
+                if (context.Definitions.Stage == ShaderStage.Fragment && context.Definitions.DualSourceBlend)
                 {
-                    int firstLocation = BitOperations.TrailingZeroCount(context.Config.UsedOutputAttributes);
                     int index = location - firstLocation;
-                    int mask = 3 << firstLocation;
 
-                    if ((uint)index < 2 && (context.Config.UsedOutputAttributes & mask) == mask)
+                    if ((uint)index < 2)
                     {
                         context.Decorate(spvVar, Decoration.Location, (LiteralInteger)firstLocation);
                         context.Decorate(spvVar, Decoration.Index, (LiteralInteger)index);
@@ -588,7 +584,7 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
                         break;
                 }
             }
-            else if (context.Config.TryGetTransformFeedbackOutput(
+            else if (context.Definitions.TryGetTransformFeedbackOutput(
                 ioVariable,
                 ioDefinition.Location,
                 ioDefinition.Component,
@@ -605,11 +601,6 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
                 ? (isOutput ? context.OutputsPerPatch : context.InputsPerPatch)
                 : (isOutput ? context.Outputs : context.Inputs);
             dict.Add(ioDefinition, spvVar);
-        }
-
-        private static string GetStagePrefix(ShaderStage stage)
-        {
-            return StagePrefixes[(int)stage];
         }
     }
 }

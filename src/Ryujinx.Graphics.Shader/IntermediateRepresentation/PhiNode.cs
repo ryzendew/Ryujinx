@@ -15,21 +15,21 @@ namespace Ryujinx.Graphics.Shader.IntermediateRepresentation
 
         public int DestsCount => _dest != null ? 1 : 0;
 
-        private HashSet<BasicBlock> _blocks;
+        private readonly HashSet<BasicBlock> _blocks;
 
         private class PhiSource
         {
-            public BasicBlock Block   { get; }
-            public Operand    Operand { get; set; }
+            public BasicBlock Block { get; }
+            public Operand Operand { get; set; }
 
             public PhiSource(BasicBlock block, Operand operand)
             {
-                Block   = block;
+                Block = block;
                 Operand = operand;
             }
         }
 
-        private List<PhiSource> _sources;
+        private readonly List<PhiSource> _sources;
 
         public int SourcesCount => _sources.Count;
 
@@ -69,10 +69,7 @@ namespace Ryujinx.Graphics.Shader.IntermediateRepresentation
 
         public Operand GetDest(int index)
         {
-            if (index != 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(index));
-            }
+            ArgumentOutOfRangeException.ThrowIfNotEqual(index, 0);
 
             return _dest;
         }

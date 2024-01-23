@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 
 namespace Ryujinx.Common.Configuration
 {
@@ -7,8 +7,8 @@ namespace Ryujinx.Common.Configuration
         [JsonPropertyName("path")]
         public string FullPath { get; set; }
         [JsonPropertyName("title_id")]
-        public ulong  TitleId  { get; set; }
+        public ulong TitleId { get; set; }
         [JsonPropertyName("is_enabled")]
-        public bool   Enabled  { get; set; }
+        public bool Enabled { get; set; }
     }
 }

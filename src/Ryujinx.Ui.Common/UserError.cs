@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.Ui.Common
+namespace Ryujinx.Ui.Common
 {
     /// <summary>
     /// Represent a common error that could be reported to the user by the emulator.
@@ -34,6 +34,6 @@
         /// <summary>
         /// An unknown error.
         /// </summary>
-        Unknown = 0xDEAD
+        Unknown = 0xDEAD,
     }
 }

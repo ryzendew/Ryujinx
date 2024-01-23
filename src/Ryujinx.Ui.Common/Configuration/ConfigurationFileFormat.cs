@@ -1,5 +1,6 @@
 using Ryujinx.Common.Configuration;
 using Ryujinx.Common.Configuration.Hid;
+using Ryujinx.Common.Configuration.Multiplayer;
 using Ryujinx.Common.Logging;
 using Ryujinx.Common.Utilities;
 using Ryujinx.Ui.Common.Configuration.System;
@@ -14,7 +15,7 @@ namespace Ryujinx.Ui.Common.Configuration
         /// <summary>
         /// The current version of the file format
         /// </summary>
-        public const int CurrentVersion = 47;
+        public const int CurrentVersion = 48;
 
         /// <summary>
         /// Version of the configuration file format
@@ -187,6 +188,11 @@ namespace Ryujinx.Ui.Common.Configuration
         public bool EnableMacroHLE { get; set; }
 
         /// <summary>
+        /// Enables or disables color space passthrough, if available.
+        /// </summary>
+        public bool EnableColorSpacePassthrough { get; set; }
+
+        /// <summary>
         /// Enables or disables profiled translation cache persistency
         /// </summary>
         public bool EnablePtc { get; set; }
@@ -354,6 +360,11 @@ namespace Ryujinx.Ui.Common.Configuration
         /// Preferred GPU
         /// </summary>
         public string PreferredGpu { get; set; }
+
+        /// <summary>
+        /// Multiplayer Mode
+        /// </summary>
+        public MultiplayerMode MultiplayerMode { get; set; }
 
         /// <summary>
         /// GUID for the network interface used by LAN (or 0 for default)

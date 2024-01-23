@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 
 namespace Ryujinx.HLE.HOS.Services.Nv.NvDrvServices.NvHostCtrl.Types
 {
@@ -6,6 +6,6 @@ namespace Ryujinx.HLE.HOS.Services.Nv.NvDrvServices.NvHostCtrl.Types
     struct SyncptWaitExArguments
     {
         public SyncptWaitArguments Input;
-        public uint                Value;
+        public uint Value;
     }
 }

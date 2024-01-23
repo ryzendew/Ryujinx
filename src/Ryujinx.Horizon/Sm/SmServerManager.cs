@@ -1,4 +1,4 @@
-﻿using Ryujinx.Horizon.Common;
+using Ryujinx.Horizon.Common;
 using Ryujinx.Horizon.Sdk.Sf.Hipc;
 using Ryujinx.Horizon.Sdk.Sm;
 using Ryujinx.Horizon.Sm.Impl;
@@ -21,9 +21,9 @@ namespace Ryujinx.Horizon.Sm
         {
             return (SmPortIndex)portIndex switch
             {
-                SmPortIndex.User    => AcceptImpl(server, new UserService(_serviceManager)),
+                SmPortIndex.User => AcceptImpl(server, new UserService(_serviceManager)),
                 SmPortIndex.Manager => AcceptImpl(server, new ManagerService()),
-                _                   => throw new ArgumentOutOfRangeException(nameof(portIndex)),
+                _ => throw new ArgumentOutOfRangeException(nameof(portIndex)),
             };
         }
     }

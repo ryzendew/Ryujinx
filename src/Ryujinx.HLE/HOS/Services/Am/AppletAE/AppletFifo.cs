@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -7,7 +7,7 @@ namespace Ryujinx.HLE.HOS.Services.Am.AppletAE
 {
     internal class AppletFifo<T> : IAppletFifo<T>
     {
-        private ConcurrentQueue<T> _dataQueue;
+        private readonly ConcurrentQueue<T> _dataQueue;
 
         public event EventHandler DataAvailable;
 

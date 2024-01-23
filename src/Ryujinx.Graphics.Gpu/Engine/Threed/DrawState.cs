@@ -1,4 +1,5 @@
-﻿using Ryujinx.Graphics.GAL;
+using Ryujinx.Graphics.GAL;
+using Ryujinx.Graphics.Gpu.Shader;
 
 namespace Ryujinx.Graphics.Gpu.Engine.Threed
 {
@@ -38,6 +39,11 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
         public bool DrawIndirect;
 
         /// <summary>
+        /// Indicates that the draw is using the draw parameters on the 3D engine state, rather than inline parameters submitted with the draw command.
+        /// </summary>
+        public bool DrawUsesEngineState;
+
+        /// <summary>
         /// Indicates if any of the currently used vertex shaders reads the instance ID.
         /// </summary>
         public bool VsUsesInstanceId;
@@ -48,11 +54,6 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
         public bool IsAnyVbInstanced;
 
         /// <summary>
-        /// Indicates that the draw is writing the base vertex, base instance and draw index to Constant Buffer 0.
-        /// </summary>
-        public bool HasConstantBufferDrawParameters;
-
-        /// <summary>
         /// Primitive topology for the next draw.
         /// </summary>
         public PrimitiveTopology Topology;
@@ -60,6 +61,21 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
         /// <summary>
         /// Index buffer data streamer for inline index buffer updates, such as those used in legacy OpenGL.
         /// </summary>
-        public IbStreamer IbStreamer = new IbStreamer();
+        public IbStreamer IbStreamer = new();
+
+        /// <summary>
+        /// If the vertex shader is emulated on compute, this should be set to the compute program, otherwise it should be null.
+        /// </summary>
+        public ShaderAsCompute VertexAsCompute;
+
+        /// <summary>
+        /// If a geometry shader exists and is emulated on compute, this should be set to the compute program, otherwise it should be null.
+        /// </summary>
+        public ShaderAsCompute GeometryAsCompute;
+
+        /// <summary>
+        /// If the vertex shader is emulated on compute, this should be set to the passthrough vertex program, otherwise it should be null.
+        /// </summary>
+        public IProgram VertexPassthrough;
     }
 }

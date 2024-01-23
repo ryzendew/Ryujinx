@@ -1,11 +1,11 @@
-﻿using Ryujinx.HLE.HOS.Services.Sockets.Bsd.Types;
+using Ryujinx.HLE.HOS.Services.Sockets.Bsd.Types;
 using System;
 using System.Net;
 using System.Net.Sockets;
 
 namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd
 {
-    interface ISocket : IDisposable, IFileDescriptor
+    interface ISocket : IFileDescriptor
     {
         IPEndPoint RemoteEndPoint { get; }
         IPEndPoint LocalEndPoint { get; }

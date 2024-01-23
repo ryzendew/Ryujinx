@@ -119,7 +119,7 @@ namespace Ryujinx.Graphics.Gpu.Image
         private bool _modifiedStale = true;
 
         private ITexture _arrayViewTexture;
-        private Target   _arrayViewTarget;
+        private Target _arrayViewTarget;
 
         private ITexture _flushHostTexture;
         private ITexture _setHostTexture;
@@ -149,6 +149,7 @@ namespace Ryujinx.Graphics.Gpu.Image
         /// </summary>
         public bool HadPoolOwner { get; private set; }
 
+        /// <summary>
         /// Physical memory ranges where the texture data is located.
         /// </summary>
         public MultiRange Range { get; private set; }
@@ -278,7 +279,7 @@ namespace Ryujinx.Graphics.Gpu.Image
                 Debug.Assert(!isView);
 
                 TextureCreateInfo createInfo = TextureCache.GetCreateInfo(Info, _context.Capabilities, ScaleFactor);
-                HostTexture = _context.Renderer.CreateTexture(createInfo, ScaleFactor);
+                HostTexture = _context.Renderer.CreateTexture(createInfo);
 
                 SynchronizeMemory(); // Load the data.
                 if (ScaleMode == TextureScaleMode.Scaled)
@@ -302,7 +303,7 @@ namespace Ryujinx.Graphics.Gpu.Image
                     }
 
                     TextureCreateInfo createInfo = TextureCache.GetCreateInfo(Info, _context.Capabilities, ScaleFactor);
-                    HostTexture = _context.Renderer.CreateTexture(createInfo, ScaleFactor);
+                    HostTexture = _context.Renderer.CreateTexture(createInfo);
                 }
             }
         }
@@ -334,7 +335,7 @@ namespace Ryujinx.Graphics.Gpu.Image
         /// <returns>The child texture</returns>
         public Texture CreateView(TextureInfo info, SizeInfo sizeInfo, MultiRange range, int firstLayer, int firstLevel)
         {
-            Texture texture = new Texture(
+            Texture texture = new(
                 _context,
                 _physicalMemory,
                 info,
@@ -490,7 +491,7 @@ namespace Ryujinx.Graphics.Gpu.Image
             if (storage == null)
             {
                 TextureCreateInfo createInfo = TextureCache.GetCreateInfo(Info, _context.Capabilities, scale);
-                storage = _context.Renderer.CreateTexture(createInfo, scale);
+                storage = _context.Renderer.CreateTexture(createInfo);
             }
 
             if (copy)
@@ -523,7 +524,7 @@ namespace Ryujinx.Graphics.Gpu.Image
 
             if (ScaleFactor != scale)
             {
-                Logger.Debug?.Print(LogClass.Gpu, $"Rescaling {Info.Width}x{Info.Height} {Info.FormatInfo.Format.ToString()} to ({ScaleFactor} to {scale}). ");
+                Logger.Debug?.Print(LogClass.Gpu, $"Rescaling {Info.Width}x{Info.Height} {Info.FormatInfo.Format} to ({ScaleFactor} to {scale}). ");
 
                 ScaleFactor = scale;
 
@@ -537,7 +538,7 @@ namespace Ryujinx.Graphics.Gpu.Image
 
                 foreach (var view in _views)
                 {
-                    Logger.Debug?.Print(LogClass.Gpu, $"  Recreating view {Info.Width}x{Info.Height} {Info.FormatInfo.Format.ToString()}.");
+                    Logger.Debug?.Print(LogClass.Gpu, $"  Recreating view {Info.Width}x{Info.Height} {Info.FormatInfo.Format}.");
                     view.ScaleFactor = scale;
 
                     TextureCreateInfo viewCreateInfo = TextureCache.GetCreateInfo(view.Info, _context.Capabilities, scale);
@@ -568,6 +569,18 @@ namespace Ryujinx.Graphics.Gpu.Image
         public bool CheckModified(bool consume)
         {
             return Group.CheckDirty(this, consume);
+        }
+
+        /// <summary>
+        /// Discards all data for this texture.
+        /// This clears all dirty flags, modified flags, and pending copies from other textures.
+        /// It should be used if the texture data will be fully overwritten by the next use.
+        /// </summary>
+        public void DiscardData()
+        {
+            Group.DiscardData(this);
+
+            _dirty = false;
         }
 
         /// <summary>
@@ -1170,6 +1183,7 @@ namespace Ryujinx.Graphics.Gpu.Image
         /// <param name="caps">Host GPU capabilities</param>
         /// <param name="firstLayer">Texture view initial layer on this texture</param>
         /// <param name="firstLevel">Texture view first mipmap level on this texture</param>
+        /// <param name="flags">Texture search flags</param>
         /// <returns>The level of compatiblilty a view with the given parameters created from this texture has</returns>
         public TextureViewCompatibility IsViewCompatible(
             TextureInfo info,
@@ -1178,11 +1192,12 @@ namespace Ryujinx.Graphics.Gpu.Image
             int layerSize,
             Capabilities caps,
             out int firstLayer,
-            out int firstLevel)
+            out int firstLevel,
+            TextureSearchFlags flags = TextureSearchFlags.None)
         {
             TextureViewCompatibility result = TextureViewCompatibility.Full;
 
-            result = TextureCompatibility.PropagateViewCompatibility(result, TextureCompatibility.ViewFormatCompatible(Info, info, caps));
+            result = TextureCompatibility.PropagateViewCompatibility(result, TextureCompatibility.ViewFormatCompatible(Info, info, caps, flags));
             if (result != TextureViewCompatibility.Incompatible)
             {
                 result = TextureCompatibility.PropagateViewCompatibility(result, TextureCompatibility.ViewTargetCompatible(Info, info, ref caps));
@@ -1252,7 +1267,7 @@ namespace Ryujinx.Graphics.Gpu.Image
             {
                 FormatInfo formatInfo = TextureCompatibility.ToHostCompatibleFormat(Info, _context.Capabilities);
 
-                TextureCreateInfo createInfo = new TextureCreateInfo(
+                TextureCreateInfo createInfo = new(
                     Info.Width,
                     Info.Height,
                     target == Target.CubemapArray ? 6 : 1,
@@ -1272,7 +1287,7 @@ namespace Ryujinx.Graphics.Gpu.Image
                 ITexture viewTexture = HostTexture.CreateView(createInfo, 0, 0);
 
                 _arrayViewTexture = viewTexture;
-                _arrayViewTarget  = target;
+                _arrayViewTarget = target;
 
                 return viewTexture;
             }
@@ -1315,29 +1330,21 @@ namespace Ryujinx.Graphics.Gpu.Image
             {
                 case Target.Texture1D:
                 case Target.Texture1DArray:
-                    return target == Target.Texture1D ||
-                           target == Target.Texture1DArray;
-
+                    return target == Target.Texture1D || target == Target.Texture1DArray;
                 case Target.Texture2D:
                 case Target.Texture2DArray:
-                    return target == Target.Texture2D ||
-                           target == Target.Texture2DArray;
-
+                    return target == Target.Texture2D || target == Target.Texture2DArray;
                 case Target.Cubemap:
                 case Target.CubemapArray:
-                    return target == Target.Cubemap ||
-                           target == Target.CubemapArray;
-
+                    return target == Target.Cubemap || target == Target.CubemapArray;
                 case Target.Texture2DMultisample:
                 case Target.Texture2DMultisampleArray:
-                    return target == Target.Texture2DMultisample ||
-                           target == Target.Texture2DMultisampleArray;
-
+                    return target == Target.Texture2DMultisample || target == Target.Texture2DMultisampleArray;
                 case Target.Texture3D:
                     return target == Target.Texture3D;
+                default:
+                    return false;
             }
-
-            return false;
         }
 
         /// <summary>
@@ -1396,7 +1403,7 @@ namespace Ryujinx.Graphics.Gpu.Image
             Height = info.Height;
             CanForceAnisotropy = CanTextureForceAnisotropy();
 
-            _depth  = info.GetDepth();
+            _depth = info.GetDepth();
             _layers = info.GetLayers();
         }
 
@@ -1694,7 +1701,6 @@ namespace Ryujinx.Graphics.Gpu.Image
             if (Group.Storage == this)
             {
                 Group.Unmapped();
-
                 Group.ClearModified(unmapRange);
             }
         }

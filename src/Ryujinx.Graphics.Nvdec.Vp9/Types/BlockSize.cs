@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.Graphics.Nvdec.Vp9.Types
+namespace Ryujinx.Graphics.Nvdec.Vp9.Types
 {
     internal enum BlockSize
     {
@@ -16,6 +16,6 @@
         Block64x32 = 11,
         Block64x64 = 12,
         BlockSizes = 13,
-        BlockInvalid = BlockSizes
+        BlockInvalid = BlockSizes,
     }
 }

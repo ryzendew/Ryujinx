@@ -1,4 +1,4 @@
-﻿using Ryujinx.Cpu;
+using Ryujinx.Cpu;
 
 namespace Ryujinx.HLE.HOS.Services.Time.Clock
 {
@@ -13,7 +13,7 @@ namespace Ryujinx.HLE.HOS.Services.Time.Clock
 
         public bool IsStandardNetworkSystemClockAccuracySufficient(ITickSource tickSource)
         {
-            SteadyClockCore      steadyClockCore  = GetSteadyClockCore();
+            SteadyClockCore steadyClockCore = GetSteadyClockCore();
             SteadyClockTimePoint currentTimePoint = steadyClockCore.GetCurrentTimePoint(tickSource);
 
             bool isStandardNetworkClockSufficientAccuracy = false;

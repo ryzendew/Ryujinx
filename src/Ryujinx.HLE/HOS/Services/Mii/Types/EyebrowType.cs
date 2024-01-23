@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Mii.Types
+namespace Ryujinx.HLE.HOS.Services.Mii.Types
 {
     enum EyebrowType : byte
     {
@@ -27,7 +27,7 @@
         Dotted,
         None,
 
-        Min = 0,
-        Max = 23
+        Min = FlatAngledLarge,
+        Max = None,
     }
 }

@@ -1,9 +1,10 @@
-﻿using Ryujinx.Common;
+using Ryujinx.Common;
 using Ryujinx.Graphics.GAL;
 using Silk.NET.Vulkan;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using Format = Ryujinx.Graphics.GAL.Format;
 using VkBuffer = Silk.NET.Vulkan.Buffer;
 using VkFormat = Silk.NET.Vulkan.Format;
 
@@ -42,7 +43,7 @@ namespace Ryujinx.Graphics.Vulkan
         private readonly Auto<MemoryAllocation> _allocationAuto;
         private Auto<MemoryAllocation> _foreignAllocationAuto;
 
-        private Dictionary<GAL.Format, TextureStorage> _aliasedStorages;
+        private Dictionary<Format, TextureStorage> _aliasedStorages;
 
         private AccessFlags _lastModificationAccess;
         private PipelineStageFlags _lastModificationStage;
@@ -50,22 +51,19 @@ namespace Ryujinx.Graphics.Vulkan
         private PipelineStageFlags _lastReadStage;
 
         private int _viewsCount;
-        private ulong _size;
+        private readonly ulong _size;
 
         public VkFormat VkFormat { get; }
-        public float ScaleFactor { get; }
 
         public unsafe TextureStorage(
             VulkanRenderer gd,
             Device device,
             TextureCreateInfo info,
-            float scaleFactor,
             Auto<MemoryAllocation> foreignAllocation = null)
         {
             _gd = gd;
             _device = device;
             _info = info;
-            ScaleFactor = scaleFactor;
 
             var format = _gd.FormatCapabilities.ConvertToVkFormat(info.Format);
             var levels = (uint)info.Levels;
@@ -80,7 +78,7 @@ namespace Ryujinx.Graphics.Vulkan
 
             var sampleCountFlags = ConvertToSampleCountFlags(gd.Capabilities.SupportedSampleCounts, (uint)info.Samples);
 
-            var usage = GetImageUsageFromFormat(info.Format);
+            var usage = GetImageUsage(info.Format, info.Target, gd.Capabilities.SupportsShaderStorageImageMultisample);
 
             var flags = ImageCreateFlags.CreateMutableFormatBit;
 
@@ -98,7 +96,7 @@ namespace Ryujinx.Graphics.Vulkan
                 flags |= ImageCreateFlags.Create2DArrayCompatibleBit;
             }
 
-            var imageCreateInfo = new ImageCreateInfo()
+            var imageCreateInfo = new ImageCreateInfo
             {
                 SType = StructureType.ImageCreateInfo,
                 ImageType = type,
@@ -111,7 +109,7 @@ namespace Ryujinx.Graphics.Vulkan
                 Usage = usage,
                 SharingMode = SharingMode.Exclusive,
                 InitialLayout = ImageLayout.Undefined,
-                Flags = flags
+                Flags = flags,
             };
 
             gd.Api.CreateImage(device, imageCreateInfo, null, out _image).ThrowOnError();
@@ -150,31 +148,31 @@ namespace Ryujinx.Graphics.Vulkan
             }
         }
 
-        public TextureStorage CreateAliasedColorForDepthStorageUnsafe(GAL.Format format)
+        public TextureStorage CreateAliasedColorForDepthStorageUnsafe(Format format)
         {
             var colorFormat = format switch
             {
-                GAL.Format.S8Uint => GAL.Format.R8Unorm,
-                GAL.Format.D16Unorm => GAL.Format.R16Unorm,
-                GAL.Format.S8UintD24Unorm => GAL.Format.R8G8B8A8Unorm,
-                GAL.Format.D32Float => GAL.Format.R32Float,
-                GAL.Format.D24UnormS8Uint => GAL.Format.R8G8B8A8Unorm,
-                GAL.Format.D32FloatS8Uint => GAL.Format.R32G32Float,
-                _ => throw new ArgumentException($"\"{format}\" is not a supported depth or stencil format.")
+                Format.S8Uint => Format.R8Unorm,
+                Format.D16Unorm => Format.R16Unorm,
+                Format.S8UintD24Unorm => Format.R8G8B8A8Unorm,
+                Format.D32Float => Format.R32Float,
+                Format.D24UnormS8Uint => Format.R8G8B8A8Unorm,
+                Format.D32FloatS8Uint => Format.R32G32Float,
+                _ => throw new ArgumentException($"\"{format}\" is not a supported depth or stencil format."),
             };
 
             return CreateAliasedStorageUnsafe(colorFormat);
         }
 
-        public TextureStorage CreateAliasedStorageUnsafe(GAL.Format format)
+        public TextureStorage CreateAliasedStorageUnsafe(Format format)
         {
             if (_aliasedStorages == null || !_aliasedStorages.TryGetValue(format, out var storage))
             {
-                _aliasedStorages ??= new Dictionary<GAL.Format, TextureStorage>();
+                _aliasedStorages ??= new Dictionary<Format, TextureStorage>();
 
                 var info = NewCreateInfoWith(ref _info, format, _info.BytesPerPixel);
 
-                storage = new TextureStorage(_gd, _device, info, ScaleFactor, _allocationAuto);
+                storage = new TextureStorage(_gd, _device, info, _allocationAuto);
 
                 _aliasedStorages.Add(format, storage);
             }
@@ -182,14 +180,14 @@ namespace Ryujinx.Graphics.Vulkan
             return storage;
         }
 
-        public static TextureCreateInfo NewCreateInfoWith(ref TextureCreateInfo info, GAL.Format format, int bytesPerPixel)
+        public static TextureCreateInfo NewCreateInfoWith(ref TextureCreateInfo info, Format format, int bytesPerPixel)
         {
             return NewCreateInfoWith(ref info, format, bytesPerPixel, info.Width, info.Height);
         }
 
         public static TextureCreateInfo NewCreateInfoWith(
             ref TextureCreateInfo info,
-            GAL.Format format,
+            Format format,
             int bytesPerPixel,
             int width,
             int height)
@@ -262,7 +260,7 @@ namespace Ryujinx.Graphics.Vulkan
 
             var subresourceRange = new ImageSubresourceRange(aspectFlags, 0, (uint)_info.Levels, 0, (uint)_info.GetLayers());
 
-            var barrier = new ImageMemoryBarrier()
+            var barrier = new ImageMemoryBarrier
             {
                 SType = StructureType.ImageMemoryBarrier,
                 SrcAccessMask = 0,
@@ -272,7 +270,7 @@ namespace Ryujinx.Graphics.Vulkan
                 SrcQueueFamilyIndex = Vk.QueueFamilyIgnored,
                 DstQueueFamilyIndex = Vk.QueueFamilyIgnored,
                 Image = _imageAuto.Get(cbs).Value,
-                SubresourceRange = subresourceRange
+                SubresourceRange = subresourceRange,
             };
 
             _gd.Api.CmdPipelineBarrier(
@@ -293,7 +291,7 @@ namespace Ryujinx.Graphics.Vulkan
             }
         }
 
-        public static ImageUsageFlags GetImageUsageFromFormat(GAL.Format format)
+        public static ImageUsageFlags GetImageUsage(Format format, Target target, bool supportsMsStorage)
         {
             var usage = DefaultUsageFlags;
 
@@ -306,7 +304,7 @@ namespace Ryujinx.Graphics.Vulkan
                 usage |= ImageUsageFlags.ColorAttachmentBit;
             }
 
-            if (format.IsImageCompatible())
+            if (format.IsImageCompatible() && (supportsMsStorage || !target.IsMultisample()))
             {
                 usage |= ImageUsageFlags.StorageBit;
             }
@@ -442,25 +440,50 @@ namespace Ryujinx.Graphics.Vulkan
             _lastModificationStage = stage;
         }
 
-        public void InsertReadToWriteBarrier(CommandBufferScoped cbs, AccessFlags dstAccessFlags, PipelineStageFlags dstStageFlags)
+        public void InsertReadToWriteBarrier(CommandBufferScoped cbs, AccessFlags dstAccessFlags, PipelineStageFlags dstStageFlags, bool insideRenderPass)
         {
-            if (_lastReadAccess != AccessFlags.None)
-            {
-                ImageAspectFlags aspectFlags = Info.Format.ConvertAspectFlags();
+            var lastReadStage = _lastReadStage;
 
-                TextureView.InsertImageBarrier(
-                    _gd.Api,
-                    cbs.CommandBuffer,
-                    _imageAuto.Get(cbs).Value,
-                    _lastReadAccess,
-                    dstAccessFlags,
-                    _lastReadStage,
-                    dstStageFlags,
-                    aspectFlags,
-                    0,
-                    0,
-                    _info.GetLayers(),
-                    _info.Levels);
+            if (insideRenderPass)
+            {
+                // We can't have barrier from compute inside a render pass,
+                // as it is invalid to specify compute in the subpass dependency stage mask.
+
+                lastReadStage &= ~PipelineStageFlags.ComputeShaderBit;
+            }
+
+            if (lastReadStage != PipelineStageFlags.None)
+            {
+                // This would result in a validation error, but is
+                // required on MoltenVK as the generic barrier results in
+                // severe texture flickering in some scenarios.
+                if (_gd.IsMoltenVk)
+                {
+                    ImageAspectFlags aspectFlags = Info.Format.ConvertAspectFlags();
+                    TextureView.InsertImageBarrier(
+                        _gd.Api,
+                        cbs.CommandBuffer,
+                        _imageAuto.Get(cbs).Value,
+                        _lastReadAccess,
+                        dstAccessFlags,
+                        _lastReadStage,
+                        dstStageFlags,
+                        aspectFlags,
+                        0,
+                        0,
+                        _info.GetLayers(),
+                        _info.Levels);
+                }
+                else
+                {
+                    TextureView.InsertMemoryBarrier(
+                        _gd.Api,
+                        cbs.CommandBuffer,
+                        _lastReadAccess,
+                        dstAccessFlags,
+                        lastReadStage,
+                        dstStageFlags);
+                }
 
                 _lastReadAccess = AccessFlags.None;
                 _lastReadStage = PipelineStageFlags.None;
@@ -474,21 +497,36 @@ namespace Ryujinx.Graphics.Vulkan
 
             if (_lastModificationAccess != AccessFlags.None)
             {
-                ImageAspectFlags aspectFlags = Info.Format.ConvertAspectFlags();
-
-                TextureView.InsertImageBarrier(
-                    _gd.Api,
-                    cbs.CommandBuffer,
-                    _imageAuto.Get(cbs).Value,
-                    _lastModificationAccess,
-                    dstAccessFlags,
-                    _lastModificationStage,
-                    dstStageFlags,
-                    aspectFlags,
-                    0,
-                    0,
-                    _info.GetLayers(),
-                    _info.Levels);
+                // This would result in a validation error, but is
+                // required on MoltenVK as the generic barrier results in
+                // severe texture flickering in some scenarios.
+                if (_gd.IsMoltenVk)
+                {
+                    ImageAspectFlags aspectFlags = Info.Format.ConvertAspectFlags();
+                    TextureView.InsertImageBarrier(
+                        _gd.Api,
+                        cbs.CommandBuffer,
+                        _imageAuto.Get(cbs).Value,
+                        _lastModificationAccess,
+                        dstAccessFlags,
+                        _lastModificationStage,
+                        dstStageFlags,
+                        aspectFlags,
+                        0,
+                        0,
+                        _info.GetLayers(),
+                        _info.Levels);
+                }
+                else
+                {
+                    TextureView.InsertMemoryBarrier(
+                        _gd.Api,
+                        cbs.CommandBuffer,
+                        _lastModificationAccess,
+                        dstAccessFlags,
+                        _lastModificationStage,
+                        dstStageFlags);
+                }
 
                 _lastModificationAccess = AccessFlags.None;
             }

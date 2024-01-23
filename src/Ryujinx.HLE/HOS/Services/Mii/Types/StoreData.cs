@@ -1,4 +1,4 @@
-﻿using Ryujinx.Common.Utilities;
+using Ryujinx.Common.Utilities;
 using System;
 using System.Runtime.InteropServices;
 
@@ -9,16 +9,16 @@ namespace Ryujinx.HLE.HOS.Services.Mii.Types
     {
         public const int Size = 0x44;
 
-        public  CoreData CoreData;
+        public CoreData CoreData;
         private CreateId _createId;
-        public  ushort   DataCrc;
-        public  ushort   DeviceCrc;
+        public ushort DataCrc;
+        public ushort DeviceCrc;
 
         public byte Type => CoreData.Type;
 
-        public CreateId CreateId => _createId;
+        public readonly CreateId CreateId => _createId;
 
-        public ResultCode InvalidData => ResultCode.InvalidStoreData;
+        public readonly ResultCode InvalidData => ResultCode.InvalidStoreData;
 
         private void UpdateDataCrc()
         {
@@ -62,7 +62,7 @@ namespace Ryujinx.HLE.HOS.Services.Mii.Types
 
         private ushort CalculateDataCrc()
         {
-            return Helper.CalculateCrc16(AsSpanWithoutDeviceCrc(), 0, true);
+            return Helper.CalculateCrc16(AsSpanWithoutCrcs(), 0, true);
         }
 
         private ushort CalculateDeviceCrc()
@@ -71,7 +71,7 @@ namespace Ryujinx.HLE.HOS.Services.Mii.Types
 
             ushort deviceIdCrc16 = Helper.CalculateCrc16(SpanHelpers.AsByteSpan(ref deviceId), 0, false);
 
-            return Helper.CalculateCrc16(AsSpan(), deviceIdCrc16, true);
+            return Helper.CalculateCrc16(AsSpanWithoutDeviceCrc(), deviceIdCrc16, true);
         }
 
         private ReadOnlySpan<byte> AsSpan()
@@ -81,22 +81,28 @@ namespace Ryujinx.HLE.HOS.Services.Mii.Types
 
         private ReadOnlySpan<byte> AsSpanWithoutDeviceCrc()
         {
-            return AsSpan().Slice(0, Size - 2);
+            return AsSpan()[..(Size - 2)];
+        }
+
+        private ReadOnlySpan<byte> AsSpanWithoutCrcs()
+        {
+            return AsSpan()[..(Size - 4)];
         }
 
         public static StoreData BuildDefault(UtilityImpl utilImpl, uint index)
         {
-            StoreData result = new StoreData
+            StoreData result = new()
             {
-                _createId = utilImpl.MakeCreateId()
+                _createId = utilImpl.MakeCreateId(),
             };
 
-            CoreData coreData = new CoreData();
+            CoreData coreData = new();
 
             DefaultMii template = DefaultMii.GetDefaultMii(index);
 
             coreData.SetDefault();
 
+#pragma warning disable IDE0055 // Disable formatting
             coreData.Nickname        = template.Nickname;
             coreData.FontRegion      = (FontRegion)template.FontRegion;
             coreData.FavoriteColor   = (byte)template.FavoriteColor;
@@ -147,6 +153,7 @@ namespace Ryujinx.HLE.HOS.Services.Mii.Types
             coreData.MoleScale       = (byte)template.MoleScale;
             coreData.MoleX           = (byte)template.MoleX;
             coreData.MoleY           = (byte)template.MoleY;
+#pragma warning restore IDE0055
 
             result.CoreData = coreData;
 
@@ -162,10 +169,10 @@ namespace Ryujinx.HLE.HOS.Services.Mii.Types
 
         public static StoreData BuildFromCoreData(UtilityImpl utilImpl, CoreData coreData)
         {
-            StoreData result = new StoreData
+            StoreData result = new()
             {
-                CoreData  = coreData,
-                _createId = utilImpl.MakeCreateId()
+                CoreData = coreData,
+                _createId = utilImpl.MakeCreateId(),
             };
 
             result.UpdateCrc();
@@ -178,7 +185,7 @@ namespace Ryujinx.HLE.HOS.Services.Mii.Types
             this = storeData;
         }
 
-        public void SetSource(Source source)
+        public readonly void SetSource(Source source)
         {
             // Only implemented for Element variants.
         }
@@ -193,12 +200,12 @@ namespace Ryujinx.HLE.HOS.Services.Mii.Types
             return !x.Equals(y);
         }
 
-        public override bool Equals(object obj)
+        public readonly override bool Equals(object obj)
         {
             return obj is StoreData storeData && Equals(storeData);
         }
 
-        public bool Equals(StoreData cmpObj)
+        public readonly bool Equals(StoreData cmpObj)
         {
             if (!cmpObj.IsValid())
             {
@@ -215,9 +222,9 @@ namespace Ryujinx.HLE.HOS.Services.Mii.Types
             return result;
         }
 
-        public override int GetHashCode()
+        public readonly override int GetHashCode()
         {
-            HashCode hashCode = new HashCode();
+            HashCode hashCode = new();
 
             hashCode.Add(CreateId);
             hashCode.Add(CoreData);

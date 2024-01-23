@@ -1,4 +1,4 @@
-﻿namespace ARMeilleure.Decoders
+namespace ARMeilleure.Decoders
 {
     class OpCode32SimdSel : OpCode32SimdRegS
     {
@@ -13,11 +13,11 @@
         }
     }
 
-    enum OpCode32SimdSelMode : int
+    enum OpCode32SimdSelMode
     {
         Eq = 0,
         Vs,
         Ge,
-        Gt
+        Gt,
     }
 }

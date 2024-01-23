@@ -1,8 +1,8 @@
-﻿namespace Ryujinx.Graphics.Nvdec.Types.Vp9
+namespace Ryujinx.Graphics.Nvdec.Types.Vp9
 {
     struct FrameStats
     {
-#pragma warning disable CS0649
+#pragma warning disable CS0649 // Field is never assigned to
         public uint Unknown0;
         public uint Unknown4;
         public uint Pass2CycleCount;

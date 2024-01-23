@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace Ryujinx.Memory
 {
@@ -46,6 +46,6 @@ namespace Ryujinx.Memory
         /// <summary>
         /// Indicates an invalid protection.
         /// </summary>
-        Invalid = 255
+        Invalid = 255,
     }
 }

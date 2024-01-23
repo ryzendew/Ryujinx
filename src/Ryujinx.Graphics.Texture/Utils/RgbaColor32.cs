@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
@@ -11,25 +12,25 @@ namespace Ryujinx.Graphics.Texture.Utils
 
         public int R
         {
-            get => _color.GetElement(0);
+            readonly get => _color.GetElement(0);
             set => _color = _color.WithElement(0, value);
         }
 
         public int G
         {
-            get => _color.GetElement(1);
+            readonly get => _color.GetElement(1);
             set => _color = _color.WithElement(1, value);
         }
 
         public int B
         {
-            get => _color.GetElement(2);
+            readonly get => _color.GetElement(2);
             set => _color = _color.WithElement(2, value);
         }
 
         public int A
         {
-            get => _color.GetElement(3);
+            readonly get => _color.GetElement(3);
             set => _color = _color.WithElement(3, value);
         }
 
@@ -102,11 +103,11 @@ namespace Ryujinx.Graphics.Texture.Utils
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static RgbaColor32 operator <<(RgbaColor32 x, int shift)
+        public static RgbaColor32 operator <<(RgbaColor32 x, [ConstantExpected] byte shift)
         {
             if (Sse2.IsSupported)
             {
-                return new RgbaColor32(Sse2.ShiftLeftLogical(x._color, (byte)shift));
+                return new RgbaColor32(Sse2.ShiftLeftLogical(x._color, shift));
             }
             else
             {
@@ -115,11 +116,11 @@ namespace Ryujinx.Graphics.Texture.Utils
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static RgbaColor32 operator >>(RgbaColor32 x, int shift)
+        public static RgbaColor32 operator >>(RgbaColor32 x, [ConstantExpected] byte shift)
         {
             if (Sse2.IsSupported)
             {
-                return new RgbaColor32(Sse2.ShiftRightLogical(x._color, (byte)shift));
+                return new RgbaColor32(Sse2.ShiftRightLogical(x._color, shift));
             }
             else
             {
@@ -180,7 +181,7 @@ namespace Ryujinx.Graphics.Texture.Utils
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public RgbaColor8 GetColor8()
+        public readonly RgbaColor8 GetColor8()
         {
             if (Sse41.IsSupported)
             {
@@ -211,17 +212,17 @@ namespace Ryujinx.Graphics.Texture.Utils
             return (byte)Math.Clamp(value, 0, 255);
         }
 
-        public override int GetHashCode()
+        public readonly override int GetHashCode()
         {
             return HashCode.Combine(R, G, B, A);
         }
 
-        public override bool Equals(object obj)
+        public readonly override bool Equals(object obj)
         {
             return obj is RgbaColor32 other && Equals(other);
         }
 
-        public bool Equals(RgbaColor32 other)
+        public readonly bool Equals(RgbaColor32 other)
         {
             return _color.Equals(other._color);
         }

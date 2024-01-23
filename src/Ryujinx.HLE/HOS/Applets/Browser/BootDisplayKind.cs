@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.HLE.HOS.Applets.Browser
+namespace Ryujinx.HLE.HOS.Applets.Browser
 {
     enum BootDisplayKind
     {
@@ -6,6 +6,6 @@
         Offline,
         Black,
         Share,
-        Lobby
+        Lobby,
     }
 }

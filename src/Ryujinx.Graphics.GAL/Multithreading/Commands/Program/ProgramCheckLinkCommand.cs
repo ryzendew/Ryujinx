@@ -1,11 +1,11 @@
-﻿using Ryujinx.Graphics.GAL.Multithreading.Model;
+using Ryujinx.Graphics.GAL.Multithreading.Model;
 using Ryujinx.Graphics.GAL.Multithreading.Resources;
 
 namespace Ryujinx.Graphics.GAL.Multithreading.Commands.Program
 {
     struct ProgramCheckLinkCommand : IGALCommand, IGALCommand<ProgramCheckLinkCommand>
     {
-        public CommandType CommandType => CommandType.ProgramCheckLink;
+        public readonly CommandType CommandType => CommandType.ProgramCheckLink;
         private TableRef<ThreadedProgram> _program;
         private bool _blocking;
         private TableRef<ResultBox<ProgramLinkStatus>> _result;

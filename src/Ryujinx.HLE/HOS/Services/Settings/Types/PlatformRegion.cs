@@ -1,8 +1,8 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Settings.Types
+namespace Ryujinx.HLE.HOS.Services.Settings.Types
 {
     enum PlatformRegion
     {
         Global = 1,
-        China  = 2
+        China = 2,
     }
 }

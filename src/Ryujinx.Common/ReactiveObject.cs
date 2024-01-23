@@ -1,12 +1,12 @@
-﻿using System;
+using System;
 using System.Threading;
 
 namespace Ryujinx.Common
 {
     public class ReactiveObject<T>
     {
-        private ReaderWriterLock _readerWriterLock = new ReaderWriterLock();
-        private bool _isInitialized = false;
+        private readonly ReaderWriterLockSlim _readerWriterLock = new();
+        private bool _isInitialized;
         private T _value;
 
         public event EventHandler<ReactiveEventArgs<T>> Event;
@@ -15,24 +15,24 @@ namespace Ryujinx.Common
         {
             get
             {
-                _readerWriterLock.AcquireReaderLock(Timeout.Infinite);
+                _readerWriterLock.EnterReadLock();
                 T value = _value;
-                _readerWriterLock.ReleaseReaderLock();
+                _readerWriterLock.ExitReadLock();
 
                 return value;
             }
             set
             {
-                _readerWriterLock.AcquireWriterLock(Timeout.Infinite);
+                _readerWriterLock.EnterWriteLock();
 
                 T oldValue = _value;
 
                 bool oldIsInitialized = _isInitialized;
 
                 _isInitialized = true;
-                _value         = value;
+                _value = value;
 
-                _readerWriterLock.ReleaseWriterLock();
+                _readerWriterLock.ExitWriteLock();
 
                 if (!oldIsInitialized || oldValue == null || !oldValue.Equals(_value))
                 {

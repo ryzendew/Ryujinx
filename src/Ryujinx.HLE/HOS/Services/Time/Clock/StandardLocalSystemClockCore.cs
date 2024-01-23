@@ -1,7 +1,7 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Time.Clock
+namespace Ryujinx.HLE.HOS.Services.Time.Clock
 {
     class StandardLocalSystemClockCore : SystemClockCore
     {
-        public StandardLocalSystemClockCore(StandardSteadyClockCore steadyClockCore) : base(steadyClockCore) {}
+        public StandardLocalSystemClockCore(StandardSteadyClockCore steadyClockCore) : base(steadyClockCore) { }
     }
 }

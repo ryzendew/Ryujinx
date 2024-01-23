@@ -1,4 +1,4 @@
-﻿using Ryujinx.HLE.HOS.Ipc;
+using Ryujinx.HLE.HOS.Ipc;
 using Ryujinx.HLE.HOS.Kernel.Threading;
 using Ryujinx.HLE.HOS.Services.Bluetooth.BluetoothDriver;
 using Ryujinx.HLE.HOS.Services.Settings;
@@ -10,9 +10,9 @@ namespace Ryujinx.HLE.HOS.Services.Bluetooth
     [Service("btdrv")]
     class IBluetoothDriver : IpcService
     {
-#pragma warning disable CS0414
+#pragma warning disable CS0414, IDE0052 // Remove unread private member
         private string _unknownLowEnergy;
-#pragma warning restore CS0414
+#pragma warning restore CS0414, IDE0052
 
         public IBluetoothDriver(ServiceCtx context) { }
 

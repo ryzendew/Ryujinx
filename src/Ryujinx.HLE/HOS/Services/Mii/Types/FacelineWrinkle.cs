@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Mii.Types
+namespace Ryujinx.HLE.HOS.Services.Mii.Types
 {
     enum FacelineWrinkle : byte
     {
@@ -15,7 +15,7 @@
         CrowsFeet,
         FoldsCrowsFrown,
 
-        Min = 0,
-        Max = 11
+        Min = None,
+        Max = FoldsCrowsFrown,
     }
 }

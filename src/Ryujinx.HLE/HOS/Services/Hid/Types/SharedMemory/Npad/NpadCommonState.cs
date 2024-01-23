@@ -1,4 +1,4 @@
-﻿using Ryujinx.HLE.HOS.Services.Hid.Types.SharedMemory.Common;
+using Ryujinx.HLE.HOS.Services.Hid.Types.SharedMemory.Common;
 using System.Runtime.InteropServices;
 
 namespace Ryujinx.HLE.HOS.Services.Hid.Types.SharedMemory.Npad
@@ -11,6 +11,6 @@ namespace Ryujinx.HLE.HOS.Services.Hid.Types.SharedMemory.Npad
         public AnalogStickState AnalogStickL;
         public AnalogStickState AnalogStickR;
         public NpadAttribute Attributes;
-        private uint _reserved;
+        private readonly uint _reserved;
     }
 }

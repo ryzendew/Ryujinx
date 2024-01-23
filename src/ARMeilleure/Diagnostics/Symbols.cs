@@ -1,6 +1,7 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Text;
 
 namespace ARMeilleure.Diagnostics
 {
@@ -33,9 +34,7 @@ namespace ARMeilleure.Diagnostics
 
         public static string Get(ulong address)
         {
-            string result;
-
-            if (_symbols.TryGetValue(address, out result))
+            if (_symbols.TryGetValue(address, out string result))
             {
                 return result;
             }
@@ -49,13 +48,15 @@ namespace ARMeilleure.Diagnostics
                         ulong diff = address - symbol.Start;
                         ulong rem = diff % symbol.ElementSize;
 
-                        result = symbol.Name + "_" + diff / symbol.ElementSize;
+                        StringBuilder resultBuilder = new();
+                        resultBuilder.Append($"{symbol.Name}_{diff / symbol.ElementSize}");
 
                         if (rem != 0)
                         {
-                            result += "+" + rem;
+                            resultBuilder.Append($"+{rem}");
                         }
 
+                        result = resultBuilder.ToString();
                         _symbols.TryAdd(address, result);
 
                         return result;

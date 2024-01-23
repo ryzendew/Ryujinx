@@ -1,10 +1,10 @@
-﻿using Ryujinx.Graphics.GAL.Multithreading.Model;
+using Ryujinx.Graphics.GAL.Multithreading.Model;
 
 namespace Ryujinx.Graphics.GAL.Multithreading.Commands
 {
     struct SetScissorsCommand : IGALCommand, IGALCommand<SetScissorsCommand>
     {
-        public CommandType CommandType => CommandType.SetScissor;
+        public readonly CommandType CommandType => CommandType.SetScissor;
         private SpanRef<Rectangle<int>> _scissors;
 
         public void Set(SpanRef<Rectangle<int>> scissors)

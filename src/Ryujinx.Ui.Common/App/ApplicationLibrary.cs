@@ -18,20 +18,21 @@ using Ryujinx.Ui.Common.Configuration;
 using Ryujinx.Ui.Common.Configuration.System;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
 using Path = System.IO.Path;
+using TimeSpan = System.TimeSpan;
 
 namespace Ryujinx.Ui.App.Common
 {
     public class ApplicationLibrary
     {
-        public event EventHandler<ApplicationAddedEventArgs>        ApplicationAdded;
+        public event EventHandler<ApplicationAddedEventArgs> ApplicationAdded;
         public event EventHandler<ApplicationCountUpdatedEventArgs> ApplicationCountUpdated;
 
         private readonly byte[] _nspIcon;
@@ -41,11 +42,11 @@ namespace Ryujinx.Ui.App.Common
         private readonly byte[] _nsoIcon;
 
         private readonly VirtualFileSystem _virtualFileSystem;
-        private Language                   _desiredTitleLanguage;
-        private CancellationTokenSource    _cancellationToken;
+        private Language _desiredTitleLanguage;
+        private CancellationTokenSource _cancellationToken;
 
-        private static readonly ApplicationJsonSerializerContext SerializerContext = new(JsonHelper.GetDefaultSerializerOptions());
-        private static readonly TitleUpdateMetadataJsonSerializerContext TitleSerializerContext = new(JsonHelper.GetDefaultSerializerOptions());
+        private static readonly ApplicationJsonSerializerContext _serializerContext = new(JsonHelper.GetDefaultSerializerOptions());
+        private static readonly TitleUpdateMetadataJsonSerializerContext _titleSerializerContext = new(JsonHelper.GetDefaultSerializerOptions());
 
         public ApplicationLibrary(VirtualFileSystem virtualFileSystem)
         {
@@ -60,7 +61,7 @@ namespace Ryujinx.Ui.App.Common
 
         private static byte[] GetResourceBytes(string resourceName)
         {
-            Stream resourceStream    = Assembly.GetCallingAssembly().GetManifestResourceStream(resourceName);
+            Stream resourceStream = Assembly.GetCallingAssembly().GetManifestResourceStream(resourceName);
             byte[] resourceByteArray = new byte[resourceStream.Length];
 
             resourceStream.Read(resourceByteArray);
@@ -83,7 +84,7 @@ namespace Ryujinx.Ui.App.Common
 
         public void LoadApplications(List<string> appDirs, Language desiredTitleLanguage)
         {
-            int numApplicationsFound  = 0;
+            int numApplicationsFound = 0;
             int numApplicationsLoaded = 0;
 
             _desiredTitleLanguage = desiredTitleLanguage;
@@ -114,14 +115,14 @@ namespace Ryujinx.Ui.App.Common
                         IEnumerable<string> files = Directory.EnumerateFiles(appDir, "*", SearchOption.AllDirectories).Where(file =>
                         {
                             return
-                            (Path.GetExtension(file).ToLower() is ".nsp"  && ConfigurationState.Instance.Ui.ShownFileTypes.NSP.Value)  ||
+                            (Path.GetExtension(file).ToLower() is ".nsp" && ConfigurationState.Instance.Ui.ShownFileTypes.NSP.Value) ||
                             (Path.GetExtension(file).ToLower() is ".pfs0" && ConfigurationState.Instance.Ui.ShownFileTypes.PFS0.Value) ||
-                            (Path.GetExtension(file).ToLower() is ".xci"  && ConfigurationState.Instance.Ui.ShownFileTypes.XCI.Value)  ||
-                            (Path.GetExtension(file).ToLower() is ".nca"  && ConfigurationState.Instance.Ui.ShownFileTypes.NCA.Value)  ||
-                            (Path.GetExtension(file).ToLower() is ".nro"  && ConfigurationState.Instance.Ui.ShownFileTypes.NRO.Value)  ||
-                            (Path.GetExtension(file).ToLower() is ".nso"  && ConfigurationState.Instance.Ui.ShownFileTypes.NSO.Value);
+                            (Path.GetExtension(file).ToLower() is ".xci" && ConfigurationState.Instance.Ui.ShownFileTypes.XCI.Value) ||
+                            (Path.GetExtension(file).ToLower() is ".nca" && ConfigurationState.Instance.Ui.ShownFileTypes.NCA.Value) ||
+                            (Path.GetExtension(file).ToLower() is ".nro" && ConfigurationState.Instance.Ui.ShownFileTypes.NRO.Value) ||
+                            (Path.GetExtension(file).ToLower() is ".nso" && ConfigurationState.Instance.Ui.ShownFileTypes.NSO.Value);
                         });
-                        
+
                         foreach (string app in files)
                         {
                             if (_cancellationToken.Token.IsCancellationRequested)
@@ -135,6 +136,13 @@ namespace Ryujinx.Ui.App.Common
                             if (!fileInfo.Attributes.HasFlag(FileAttributes.Hidden) && extension is ".nsp" or ".pfs0" or ".xci" or ".nca" or ".nro" or ".nso")
                             {
                                 var fullPath = fileInfo.ResolveLinkTarget(true)?.FullName ?? fileInfo.FullName;
+
+                                if (!File.Exists(fullPath))
+                                {
+                                    Logger.Warning?.Print(LogClass.Application, $"Skipping invalid symlink: {fileInfo.FullName}");
+                                    continue;
+                                }
+
                                 applications.Add(fullPath);
                                 numApplicationsFound++;
                             }
@@ -154,7 +162,7 @@ namespace Ryujinx.Ui.App.Common
                         return;
                     }
 
-                    double fileSize = new FileInfo(applicationPath).Length * 0.000000000931;
+                    long fileSize = new FileInfo(applicationPath).Length;
                     string titleName = "Unknown";
                     string titleId = "0000000000000000";
                     string developer = "Unknown";
@@ -173,7 +181,7 @@ namespace Ryujinx.Ui.App.Common
                         {
                             try
                             {
-                                PartitionFileSystem pfs;
+                                IFileSystem pfs;
 
                                 bool isExeFs = false;
 
@@ -185,7 +193,9 @@ namespace Ryujinx.Ui.App.Common
                                 }
                                 else
                                 {
-                                    pfs = new PartitionFileSystem(file.AsStorage());
+                                    var pfsTemp = new PartitionFileSystem();
+                                    pfsTemp.Initialize(file.AsStorage()).ThrowIfFailure();
+                                    pfs = pfsTemp;
 
                                     // If the NSP doesn't have a main NCA, decrement the number of applications found and then continue to the next application.
                                     bool hasMainNca = false;
@@ -343,7 +353,14 @@ namespace Ryujinx.Ui.App.Common
                                     ulong nacpSize = reader.ReadUInt64();
 
                                     // Reads and stores game icon as byte array
-                                    applicationIcon = Read(assetOffset + iconOffset, (int)iconSize);
+                                    if (iconSize > 0)
+                                    {
+                                        applicationIcon = Read(assetOffset + iconOffset, (int)iconSize);
+                                    }
+                                    else
+                                    {
+                                        applicationIcon = _nroIcon;
+                                    }
 
                                     // Read the NACP data
                                     Read(assetOffset + (int)nacpOffset, (int)nacpSize).AsSpan().CopyTo(controlHolder.ByteSpan);
@@ -414,21 +431,28 @@ namespace Ryujinx.Ui.App.Common
                     ApplicationMetadata appMetadata = LoadAndSaveMetaData(titleId, appMetadata =>
                     {
                         appMetadata.Title = titleName;
+
+                        // Only do the migration if time_played has a value and timespan_played hasn't been updated yet.
+                        if (appMetadata.TimePlayedOld != default && appMetadata.TimePlayed == TimeSpan.Zero)
+                        {
+                            appMetadata.TimePlayed = TimeSpan.FromSeconds(appMetadata.TimePlayedOld);
+                            appMetadata.TimePlayedOld = default;
+                        }
+
+                        // Only do the migration if last_played has a value and last_played_utc doesn't exist yet.
+                        if (appMetadata.LastPlayedOld != default && !appMetadata.LastPlayed.HasValue)
+                        {
+                            // Migrate from string-based last_played to DateTime-based last_played_utc.
+                            if (DateTime.TryParse(appMetadata.LastPlayedOld, out DateTime lastPlayedOldParsed))
+                            {
+                                appMetadata.LastPlayed = lastPlayedOldParsed;
+
+                                // Migration successful: deleting last_played from the metadata file.
+                                appMetadata.LastPlayedOld = default;
+                            }
+
+                        }
                     });
-
-                    if (appMetadata.LastPlayed != "Never")
-                    {
-                        if (!DateTime.TryParse(appMetadata.LastPlayed, out _))
-                        {
-                            Logger.Warning?.Print(LogClass.Application, $"Last played datetime \"{appMetadata.LastPlayed}\" is invalid for current system culture, skipping (did current culture change?)");
-
-                            appMetadata.LastPlayed = "Never";
-                        }
-                        else
-                        {
-                            appMetadata.LastPlayed = appMetadata.LastPlayed[..^3];
-                        }
-                    }
 
                     ApplicationData data = new()
                     {
@@ -438,34 +462,32 @@ namespace Ryujinx.Ui.App.Common
                         TitleId = titleId,
                         Developer = developer,
                         Version = version,
-                        TimePlayed = ConvertSecondsToFormattedString(appMetadata.TimePlayed),
-                        TimePlayedNum = appMetadata.TimePlayed,
+                        TimePlayed = appMetadata.TimePlayed,
                         LastPlayed = appMetadata.LastPlayed,
-                        FileExtension = Path.GetExtension(applicationPath).ToUpper().Remove(0, 1),
-                        FileSize = (fileSize < 1) ? (fileSize * 1024).ToString("0.##") + " MiB" : fileSize.ToString("0.##") + " GiB",
-                        FileSizeBytes = fileSize,
+                        FileExtension = Path.GetExtension(applicationPath).TrimStart('.').ToUpper(),
+                        FileSize = fileSize,
                         Path = applicationPath,
-                        ControlHolder = controlHolder
+                        ControlHolder = controlHolder,
                     };
 
                     numApplicationsLoaded++;
 
-                    OnApplicationAdded(new ApplicationAddedEventArgs()
+                    OnApplicationAdded(new ApplicationAddedEventArgs
                     {
-                        AppData = data
+                        AppData = data,
                     });
 
-                    OnApplicationCountUpdated(new ApplicationCountUpdatedEventArgs()
+                    OnApplicationCountUpdated(new ApplicationCountUpdatedEventArgs
                     {
                         NumAppsFound = numApplicationsFound,
-                        NumAppsLoaded = numApplicationsLoaded
+                        NumAppsLoaded = numApplicationsLoaded,
                     });
                 }
 
-                OnApplicationCountUpdated(new ApplicationCountUpdatedEventArgs()
+                OnApplicationCountUpdated(new ApplicationCountUpdatedEventArgs
                 {
                     NumAppsFound = numApplicationsFound,
-                    NumAppsLoaded = numApplicationsLoaded
+                    NumAppsLoaded = numApplicationsLoaded,
                 });
             }
             finally
@@ -485,19 +507,19 @@ namespace Ryujinx.Ui.App.Common
             ApplicationCountUpdated?.Invoke(null, e);
         }
 
-        private void GetControlFsAndTitleId(PartitionFileSystem pfs, out IFileSystem controlFs, out string titleId)
+        private void GetControlFsAndTitleId(IFileSystem pfs, out IFileSystem controlFs, out string titleId)
         {
             (_, _, Nca controlNca) = GetGameData(_virtualFileSystem, pfs, 0);
 
             // Return the ControlFS
             controlFs = controlNca?.OpenFileSystem(NcaSectionType.Data, IntegrityCheckLevel.None);
-            titleId   = controlNca?.Header.TitleId.ToString("x16");
+            titleId = controlNca?.Header.TitleId.ToString("x16");
         }
 
-        public ApplicationMetadata LoadAndSaveMetaData(string titleId, Action<ApplicationMetadata> modifyFunction = null)
+        public static ApplicationMetadata LoadAndSaveMetaData(string titleId, Action<ApplicationMetadata> modifyFunction = null)
         {
             string metadataFolder = Path.Combine(AppDataManager.GamesDirPath, titleId, "gui");
-            string metadataFile   = Path.Combine(metadataFolder, "metadata.json");
+            string metadataFile = Path.Combine(metadataFolder, "metadata.json");
 
             ApplicationMetadata appMetadata;
 
@@ -507,12 +529,12 @@ namespace Ryujinx.Ui.App.Common
 
                 appMetadata = new ApplicationMetadata();
 
-                JsonHelper.SerializeToFile(metadataFile, appMetadata, SerializerContext.ApplicationMetadata);
+                JsonHelper.SerializeToFile(metadataFile, appMetadata, _serializerContext.ApplicationMetadata);
             }
 
             try
             {
-                appMetadata = JsonHelper.DeserializeFromFile(metadataFile, SerializerContext.ApplicationMetadata);
+                appMetadata = JsonHelper.DeserializeFromFile(metadataFile, _serializerContext.ApplicationMetadata);
             }
             catch (JsonException)
             {
@@ -525,13 +547,13 @@ namespace Ryujinx.Ui.App.Common
             {
                 modifyFunction(appMetadata);
 
-                JsonHelper.SerializeToFile(metadataFile, appMetadata, SerializerContext.ApplicationMetadata);
+                JsonHelper.SerializeToFile(metadataFile, appMetadata, _serializerContext.ApplicationMetadata);
             }
 
             return appMetadata;
         }
 
-        public byte[] GetApplicationIcon(string applicationPath)
+        public byte[] GetApplicationIcon(string applicationPath, Language desiredTitleLanguage)
         {
             byte[] applicationIcon = null;
 
@@ -548,7 +570,7 @@ namespace Ryujinx.Ui.App.Common
                     {
                         try
                         {
-                            PartitionFileSystem pfs;
+                            IFileSystem pfs;
 
                             bool isExeFs = false;
 
@@ -560,7 +582,9 @@ namespace Ryujinx.Ui.App.Common
                             }
                             else
                             {
-                                pfs = new PartitionFileSystem(file.AsStorage());
+                                var pfsTemp = new PartitionFileSystem();
+                                pfsTemp.Initialize(file.AsStorage()).ThrowIfFailure();
+                                pfs = pfsTemp;
 
                                 foreach (DirectoryEntryEx fileEntry in pfs.EnumerateEntries("/", "*"))
                                 {
@@ -585,7 +609,7 @@ namespace Ryujinx.Ui.App.Common
                                 {
                                     using var icon = new UniqueRef<IFile>();
 
-                                    controlFs.OpenFile(ref icon.Ref, $"/icon_{_desiredTitleLanguage}.dat".ToU8Span(), OpenMode.Read).ThrowIfFailure();
+                                    controlFs.OpenFile(ref icon.Ref, $"/icon_{desiredTitleLanguage}.dat".ToU8Span(), OpenMode.Read).ThrowIfFailure();
 
                                     using MemoryStream stream = new();
 
@@ -659,7 +683,14 @@ namespace Ryujinx.Ui.App.Common
                                 long iconSize = BitConverter.ToInt64(iconSectionInfo, 8);
 
                                 // Reads and stores game icon as byte array
-                                applicationIcon = Read(assetOffset + iconOffset, (int)iconSize);
+                                if (iconSize > 0)
+                                {
+                                    applicationIcon = Read(assetOffset + iconOffset, (int)iconSize);
+                                }
+                                else
+                                {
+                                    applicationIcon = _nroIcon;
+                                }
                             }
                             else
                             {
@@ -682,37 +713,12 @@ namespace Ryujinx.Ui.App.Common
                     }
                 }
             }
-            catch(Exception)
+            catch (Exception)
             {
                 Logger.Warning?.Print(LogClass.Application, $"Could not retrieve a valid icon for the app. Default icon will be used. Errored File: {applicationPath}");
             }
 
             return applicationIcon ?? _ncaIcon;
-        }
-
-        private static string ConvertSecondsToFormattedString(double seconds)
-        {
-            System.TimeSpan time = System.TimeSpan.FromSeconds(seconds);
-
-            string timeString;
-            if (time.Days != 0)
-            {
-                timeString = $"{time.Days}d {time.Hours:D2}h {time.Minutes:D2}m";
-            }
-            else if (time.Hours != 0)
-            {
-                timeString = $"{time.Hours:D2}h {time.Minutes:D2}m";
-            }
-            else if (time.Minutes != 0)
-            {
-                timeString = $"{time.Minutes:D2}m";
-            }
-            else
-            {
-                timeString = "Never";
-            }
-
-            return timeString;
         }
 
         private void GetGameInformation(ref ApplicationControlProperty controlData, out string titleName, out string titleId, out string publisher, out string version)
@@ -805,7 +811,7 @@ namespace Ryujinx.Ui.App.Common
             return false;
         }
 
-        public static (Nca main, Nca patch, Nca control) GetGameData(VirtualFileSystem fileSystem, PartitionFileSystem pfs, int programIndex)
+        public static (Nca main, Nca patch, Nca control) GetGameData(VirtualFileSystem fileSystem, IFileSystem pfs, int programIndex)
         {
             Nca mainNca = null;
             Nca patchNca = null;
@@ -819,7 +825,7 @@ namespace Ryujinx.Ui.App.Common
 
                 pfs.OpenFile(ref ncaFile.Ref, fileEntry.FullPath.ToU8Span(), OpenMode.Read).ThrowIfFailure();
 
-                Nca nca = new Nca(fileSystem.KeySet, ncaFile.Release().AsStorage());
+                Nca nca = new(fileSystem.KeySet, ncaFile.Release().AsStorage());
 
                 int ncaProgramIndex = (int)(nca.Header.TitleId & 0xF);
 
@@ -863,7 +869,7 @@ namespace Ryujinx.Ui.App.Common
 
                 pfs.OpenFile(ref ncaFile.Ref, fileEntry.FullPath.ToU8Span(), OpenMode.Read).ThrowIfFailure();
 
-                Nca nca = new Nca(fileSystem.KeySet, ncaFile.Release().AsStorage());
+                Nca nca = new(fileSystem.KeySet, ncaFile.Release().AsStorage());
 
                 int ncaProgramIndex = (int)(nca.Header.TitleId & 0xF);
 
@@ -904,12 +910,13 @@ namespace Ryujinx.Ui.App.Common
 
                 if (File.Exists(titleUpdateMetadataPath))
                 {
-                    updatePath = JsonHelper.DeserializeFromFile(titleUpdateMetadataPath, TitleSerializerContext.TitleUpdateMetadata).Selected;
+                    updatePath = JsonHelper.DeserializeFromFile(titleUpdateMetadataPath, _titleSerializerContext.TitleUpdateMetadata).Selected;
 
                     if (File.Exists(updatePath))
                     {
-                        FileStream file = new FileStream(updatePath, FileMode.Open, FileAccess.Read);
-                        PartitionFileSystem nsp = new PartitionFileSystem(file.AsStorage());
+                        FileStream file = new(updatePath, FileMode.Open, FileAccess.Read);
+                        PartitionFileSystem nsp = new();
+                        nsp.Initialize(file.AsStorage()).ThrowIfFailure();
 
                         return GetGameUpdateDataFromPartition(fileSystem, nsp, titleIdBase.ToString("x16"), programIndex);
                     }
@@ -920,4 +927,3 @@ namespace Ryujinx.Ui.App.Common
         }
     }
 }
-

@@ -1,11 +1,11 @@
-﻿using Ryujinx.Graphics.GAL.Multithreading.Commands.Sampler;
+using Ryujinx.Graphics.GAL.Multithreading.Commands.Sampler;
 using Ryujinx.Graphics.GAL.Multithreading.Model;
 
 namespace Ryujinx.Graphics.GAL.Multithreading.Resources
 {
     class ThreadedSampler : ISampler
     {
-        private ThreadedRenderer _renderer;
+        private readonly ThreadedRenderer _renderer;
         public ISampler Base;
 
         public ThreadedSampler(ThreadedRenderer renderer)

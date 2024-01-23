@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.Common.GraphicsDriver.NVAPI
+namespace Ryujinx.Common.GraphicsDriver.NVAPI
 {
     enum Nvapi : uint
     {
@@ -6,6 +6,6 @@
 
         OglThreadControlDefault = 0,
         OglThreadControlEnable = 1,
-        OglThreadControlDisable = 2
+        OglThreadControlDisable = 2,
     }
 }

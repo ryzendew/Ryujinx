@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Sockets.Sfdnsres
+namespace Ryujinx.HLE.HOS.Services.Sockets.Sfdnsres
 {
     enum GaiError
     {
@@ -17,6 +17,6 @@
         BadHints,
         Protocol,
         Overflow,
-        Max
+        Max,
     }
 }

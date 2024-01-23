@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.Horizon.Sdk.OsTypes
+namespace Ryujinx.Horizon.Sdk.OsTypes
 {
     struct SystemEventType
     {
@@ -6,12 +6,12 @@
         {
             NotInitialized,
             InitializedAsEvent,
-            InitializedAsInterProcess
+            InitializedAsInterProcess,
         }
 
         public InterProcessEventType InterProcessEvent;
         public InitializationState State;
 
-        public bool NotInitialized => State == InitializationState.NotInitialized;
+        public readonly bool NotInitialized => State == InitializationState.NotInitialized;
     }
 }

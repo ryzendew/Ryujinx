@@ -1,4 +1,4 @@
-﻿using Ryujinx.Common.Memory;
+using Ryujinx.Common.Memory;
 using Ryujinx.HLE.HOS.Services.Hid.Types.SharedMemory.Common;
 using System.Runtime.InteropServices;
 
@@ -14,6 +14,6 @@ namespace Ryujinx.HLE.HOS.Services.Hid.Types.SharedMemory.Npad
         public HidVector Angle;
         public Array9<float> Direction;
         public SixAxisSensorAttribute Attributes;
-        private uint _reserved;
+        private readonly uint _reserved;
     }
 }

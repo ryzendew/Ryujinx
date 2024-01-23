@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.Graphics.Gpu.Engine
+namespace Ryujinx.Graphics.Gpu.Engine
 {
     /// <summary>
     /// Conditional rendering enable.
@@ -7,6 +7,6 @@
     {
         False,
         True,
-        Host
+        Host,
     }
 }

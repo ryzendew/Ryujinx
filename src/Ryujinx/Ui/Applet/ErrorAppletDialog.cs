@@ -1,4 +1,4 @@
-﻿using Gtk;
+using Gtk;
 using Ryujinx.Ui.Common.Configuration;
 using System.Reflection;
 
@@ -24,7 +24,7 @@ namespace Ryujinx.Ui.Applet
             {
                 AddButton("OK", 0);
             }
-            
+
             ShowAll();
         }
     }

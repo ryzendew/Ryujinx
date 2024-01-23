@@ -1,8 +1,8 @@
-﻿namespace Ryujinx.Graphics.GAL.Multithreading.Commands
+namespace Ryujinx.Graphics.GAL.Multithreading.Commands
 {
     struct SetDepthModeCommand : IGALCommand, IGALCommand<SetDepthModeCommand>
     {
-        public CommandType CommandType => CommandType.SetDepthMode;
+        public readonly CommandType CommandType => CommandType.SetDepthMode;
         private DepthMode _mode;
 
         public void Set(DepthMode mode)

@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.Ava.Common
+namespace Ryujinx.Ava.Common
 {
     public enum KeyboardHotkeyState
     {
@@ -11,6 +11,6 @@
         ResScaleUp,
         ResScaleDown,
         VolumeUp,
-        VolumeDown
+        VolumeDown,
     }
 }

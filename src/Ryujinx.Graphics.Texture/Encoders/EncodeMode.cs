@@ -1,10 +1,10 @@
-﻿namespace Ryujinx.Graphics.Texture.Encoders
+namespace Ryujinx.Graphics.Texture.Encoders
 {
     enum EncodeMode
     {
         Fast,
         Exhaustive,
         ModeMask = 0xff,
-        Multithreaded = 1 << 8
+        Multithreaded = 1 << 8,
     }
 }

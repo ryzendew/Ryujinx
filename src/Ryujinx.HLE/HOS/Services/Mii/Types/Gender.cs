@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Mii.Types
+namespace Ryujinx.HLE.HOS.Services.Mii.Types
 {
     enum Gender : byte
     {
@@ -6,7 +6,7 @@
         Female,
         All,
 
-        Min = 0,
-        Max = 1
+        Min = Male,
+        Max = Female,
     }
 }

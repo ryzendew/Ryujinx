@@ -1,14 +1,14 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Text;
 
 namespace Spv.Generator
 {
-    public class LiteralString : Operand, IEquatable<LiteralString>
+    public class LiteralString : IOperand, IEquatable<LiteralString>
     {
         public OperandType Type => OperandType.String;
 
-        private string _value;
+        private readonly string _value;
 
         public LiteralString(string value)
         {
@@ -44,7 +44,7 @@ namespace Spv.Generator
             return DeterministicHashCode.Combine(Type, DeterministicHashCode.GetHashCode(_value));
         }
 
-        public bool Equals(Operand obj)
+        public bool Equals(IOperand obj)
         {
             return obj is LiteralString literalString && Equals(literalString);
         }

@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.HLE.HOS.Applets.SoftwareKeyboard
+namespace Ryujinx.HLE.HOS.Applets.SoftwareKeyboard
 {
     /// <summary>
     /// Possible responses from the software keyboard when running in inline mode.
@@ -88,6 +88,6 @@
         /// <summary>
         /// Same as MovedCursorUtf8, but with additional fields.
         /// </summary>
-        MovedCursorUtf8V2 = 0x10
+        MovedCursorUtf8V2 = 0x10,
     }
 }

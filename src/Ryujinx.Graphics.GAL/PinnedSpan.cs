@@ -1,14 +1,14 @@
-﻿using System;
+using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Ryujinx.Graphics.GAL
 {
-    public unsafe struct PinnedSpan<T> : IDisposable where T : unmanaged
+    public readonly unsafe struct PinnedSpan<T> : IDisposable where T : unmanaged
     {
-        private void* _ptr;
-        private int _size;
-        private Action _disposeAction;
+        private readonly void* _ptr;
+        private readonly int _size;
+        private readonly Action _disposeAction;
 
         /// <summary>
         /// Creates a new PinnedSpan from an existing ReadOnlySpan. The span *must* be pinned in memory.

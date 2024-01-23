@@ -1,4 +1,4 @@
-﻿using Gtk;
+using Gtk;
 using Ryujinx.Common.Logging;
 using Ryujinx.Ui.Common.Configuration;
 using System.IO;
@@ -16,7 +16,7 @@ namespace Ryujinx.Ui.Helper
 
             if (File.Exists(ConfigurationState.Instance.Ui.CustomThemePath) && (Path.GetExtension(ConfigurationState.Instance.Ui.CustomThemePath) == ".css"))
             {
-                CssProvider cssProvider = new CssProvider();
+                CssProvider cssProvider = new();
 
                 cssProvider.LoadFromPath(ConfigurationState.Instance.Ui.CustomThemePath);
 
@@ -26,7 +26,7 @@ namespace Ryujinx.Ui.Helper
             {
                 Logger.Warning?.Print(LogClass.Application, $"The \"custom_theme_path\" section in \"Config.json\" contains an invalid path: \"{ConfigurationState.Instance.Ui.CustomThemePath}\".");
 
-                ConfigurationState.Instance.Ui.CustomThemePath.Value   = "";
+                ConfigurationState.Instance.Ui.CustomThemePath.Value = "";
                 ConfigurationState.Instance.Ui.EnableCustomTheme.Value = false;
                 ConfigurationState.Instance.ToFileFormat().SaveConfig(Program.ConfigurationPath);
             }

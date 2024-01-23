@@ -1,8 +1,8 @@
-﻿namespace Ryujinx.Graphics.GAL.Multithreading.Commands.Renderer
+namespace Ryujinx.Graphics.GAL.Multithreading.Commands.Renderer
 {
     struct CreateHostBufferCommand : IGALCommand, IGALCommand<CreateHostBufferCommand>
     {
-        public CommandType CommandType => CommandType.CreateHostBuffer;
+        public readonly CommandType CommandType => CommandType.CreateHostBuffer;
         private BufferHandle _threadedHandle;
         private nint _pointer;
         private int _size;

@@ -1,4 +1,4 @@
-﻿using Ryujinx.Graphics.Gpu;
+using Ryujinx.Graphics.Gpu;
 using Ryujinx.HLE.HOS.Services.Nv.NvDrvServices.NvHostCtrl;
 using System;
 using System.Runtime.InteropServices;
@@ -13,7 +13,7 @@ namespace Ryujinx.HLE.HOS.Services.Nv.Types
         public uint Id;
         public uint Value;
 
-        public bool IsValid()
+        public readonly bool IsValid()
         {
             return Id != InvalidSyncPointId;
         }
@@ -28,7 +28,7 @@ namespace Ryujinx.HLE.HOS.Services.Nv.Types
             Value = gpuContext.Synchronization.IncrementSyncpoint(Id);
         }
 
-        public bool Wait(GpuContext gpuContext, TimeSpan timeout)
+        public readonly bool Wait(GpuContext gpuContext, TimeSpan timeout)
         {
             if (IsValid())
             {

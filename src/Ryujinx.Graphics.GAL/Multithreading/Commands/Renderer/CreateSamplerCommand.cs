@@ -1,11 +1,11 @@
-﻿using Ryujinx.Graphics.GAL.Multithreading.Model;
+using Ryujinx.Graphics.GAL.Multithreading.Model;
 using Ryujinx.Graphics.GAL.Multithreading.Resources;
 
 namespace Ryujinx.Graphics.GAL.Multithreading.Commands.Renderer
 {
     struct CreateSamplerCommand : IGALCommand, IGALCommand<CreateSamplerCommand>
     {
-        public CommandType CommandType => CommandType.CreateSampler;
+        public readonly CommandType CommandType => CommandType.CreateSampler;
         private TableRef<ThreadedSampler> _sampler;
         private SamplerCreateInfo _info;
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace Ryujinx.HLE.HOS.Services.Hid.Types
 {
@@ -25,6 +25,6 @@ namespace Ryujinx.HLE.HOS.Services.Hid.Types
         LarkNesLeft,
         LarkNesRight,
         Lucia,
-        Verification
+        Verification,
     }
 }

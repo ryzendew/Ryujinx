@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd.Types
+namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd.Types
 {
     enum BsdAddressFamily : uint
     {
@@ -6,6 +6,6 @@
         InterNetwork = 2,
         InterNetworkV6 = 28,
 
-        Unknown = uint.MaxValue
+        Unknown = uint.MaxValue,
     }
 }

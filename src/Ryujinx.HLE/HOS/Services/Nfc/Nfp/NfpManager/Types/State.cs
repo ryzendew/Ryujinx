@@ -1,8 +1,8 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Nfc.Nfp.NfpManager
+namespace Ryujinx.HLE.HOS.Services.Nfc.Nfp.NfpManager
 {
     enum State
     {
         NonInitialized = 0,
-        Initialized    = 1
+        Initialized = 1,
     }
 }

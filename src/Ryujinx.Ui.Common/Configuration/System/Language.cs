@@ -1,4 +1,4 @@
-﻿using Ryujinx.Common.Utilities;
+using Ryujinx.Common.Utilities;
 using System.Text.Json.Serialization;
 
 namespace Ryujinx.Ui.Common.Configuration.System
@@ -23,6 +23,6 @@ namespace Ryujinx.Ui.Common.Configuration.System
         LatinAmericanSpanish,
         SimplifiedChinese,
         TraditionalChinese,
-        BrazilianPortuguese
+        BrazilianPortuguese,
     }
 }

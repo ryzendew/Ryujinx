@@ -1,4 +1,4 @@
-﻿using Ryujinx.Common.Memory;
+using Ryujinx.Common.Memory;
 using System;
 
 namespace Ryujinx.Graphics.GAL
@@ -62,6 +62,8 @@ namespace Ryujinx.Graphics.GAL
         public PrimitiveTopology Topology;
         public bool PrimitiveRestartEnable;
         public uint PatchControlPoints;
+
+        public DepthMode DepthMode;
 
         public void SetVertexAttribs(ReadOnlySpan<VertexAttribDescriptor> vertexAttribs)
         {

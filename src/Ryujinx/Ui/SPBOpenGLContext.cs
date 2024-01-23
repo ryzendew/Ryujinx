@@ -1,4 +1,4 @@
-﻿using OpenTK.Graphics.OpenGL;
+using OpenTK.Graphics.OpenGL;
 using Ryujinx.Graphics.OpenGL;
 using SPB.Graphics;
 using SPB.Graphics.OpenGL;
@@ -9,8 +9,8 @@ namespace Ryujinx.Ui
 {
     class SPBOpenGLContext : IOpenGLContext
     {
-        private OpenGLContextBase _context;
-        private NativeWindowBase _window;
+        private readonly OpenGLContextBase _context;
+        private readonly NativeWindowBase _window;
 
         private SPBOpenGLContext(OpenGLContextBase context, NativeWindowBase window)
         {

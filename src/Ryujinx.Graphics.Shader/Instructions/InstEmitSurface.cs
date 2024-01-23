@@ -1,10 +1,10 @@
 using Ryujinx.Graphics.Shader.Decoders;
 using Ryujinx.Graphics.Shader.IntermediateRepresentation;
+using Ryujinx.Graphics.Shader.StructuredIr;
 using Ryujinx.Graphics.Shader.Translation;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-
 using static Ryujinx.Graphics.Shader.Instructions.InstEmitHelper;
 using static Ryujinx.Graphics.Shader.IntermediateRepresentation.OperandHelper;
 
@@ -195,7 +195,7 @@ namespace Ryujinx.Graphics.Shader.Instructions
 
             if (type == SamplerType.None)
             {
-                context.Config.GpuAccessor.Log("Invalid image atomic sampler type.");
+                context.TranslatorContext.GpuAccessor.Log("Invalid image atomic sampler type.");
                 return;
             }
 
@@ -219,9 +219,9 @@ namespace Ryujinx.Graphics.Shader.Instructions
                 return context.Copy(Register(srcB++, RegisterType.Gpr));
             }
 
-            Operand destOperand = dest != RegisterConsts.RegisterZeroIndex ? Register(dest, RegisterType.Gpr) : null;
+            Operand d = Register(dest, RegisterType.Gpr);
 
-            List<Operand> sourcesList = new List<Operand>();
+            List<Operand> sourcesList = new();
 
             if (isBindless)
             {
@@ -259,7 +259,7 @@ namespace Ryujinx.Graphics.Shader.Instructions
 
             // TODO: FP and 64-bit formats.
             TextureFormat format = size == SuatomSize.Sd32 || size == SuatomSize.Sd64
-                ? (isBindless ? TextureFormat.Unknown : context.Config.GetTextureFormatAtomic(imm))
+                ? (isBindless ? TextureFormat.Unknown : ShaderProperties.GetTextureFormatAtomic(context.TranslatorContext.GpuAccessor, imm))
                 : GetTextureFormat(size);
 
             if (compareAndSwap)
@@ -278,17 +278,17 @@ namespace Ryujinx.Graphics.Shader.Instructions
                 flags |= TextureFlags.Bindless;
             }
 
-            TextureOperation operation = context.CreateTextureOperation(
+            int binding = isBindless ? 0 : context.ResourceManager.GetTextureOrImageBinding(
                 Instruction.ImageAtomic,
                 type,
                 format,
                 flags,
-                imm,
-                0,
-                new[] { destOperand },
-                sources);
+                TextureOperation.DefaultCbufSlot,
+                imm);
 
-            context.Add(operation);
+            Operand res = context.ImageAtomic(type, format, flags, binding, sources);
+
+            context.Copy(d, res);
         }
 
         private static void EmitSuld(
@@ -305,13 +305,16 @@ namespace Ryujinx.Graphics.Shader.Instructions
             bool byteAddress,
             bool isBindless)
         {
-            context.Config.SetUsedFeature(FeatureFlags.IntegerSampling);
+            if (srcB == RegisterConsts.RegisterZeroIndex)
+            {
+                return;
+            }
 
             SamplerType type = ConvertSamplerType(dimensions);
 
             if (type == SamplerType.None)
             {
-                context.Config.GpuAccessor.Log("Invalid image store sampler type.");
+                context.TranslatorContext.GpuAccessor.Log("Invalid image store sampler type.");
                 return;
             }
 
@@ -325,7 +328,7 @@ namespace Ryujinx.Graphics.Shader.Instructions
                 return context.Copy(Register(srcA++, RegisterType.Gpr));
             }
 
-            List<Operand> sourcesList = new List<Operand>();
+            List<Operand> sourcesList = new();
 
             if (isBindless)
             {
@@ -384,21 +387,17 @@ namespace Ryujinx.Graphics.Shader.Instructions
                     Array.Resize(ref dests, outputIndex);
                 }
 
-                TextureOperation operation = context.CreateTextureOperation(
+                TextureFormat format = isBindless ? TextureFormat.Unknown : ShaderProperties.GetTextureFormat(context.TranslatorContext.GpuAccessor, handle);
+
+                int binding = isBindless ? 0 : context.ResourceManager.GetTextureOrImageBinding(
                     Instruction.ImageLoad,
                     type,
+                    format,
                     flags,
-                    handle,
-                    (int)componentMask,
-                    dests,
-                    sources);
+                    TextureOperation.DefaultCbufSlot,
+                    handle);
 
-                if (!isBindless)
-                {
-                    operation.Format = context.Config.GetTextureFormat(handle);
-                }
-
-                context.Add(operation);
+                context.ImageLoad(type, format, flags, binding, (int)componentMask, dests, sources);
             }
             else
             {
@@ -431,24 +430,32 @@ namespace Ryujinx.Graphics.Shader.Instructions
                     Array.Resize(ref dests, outputIndex);
                 }
 
-                TextureOperation operation = context.CreateTextureOperation(
+                TextureFormat format = GetTextureFormat(size);
+
+                int binding = isBindless ? 0 : context.ResourceManager.GetTextureOrImageBinding(
                     Instruction.ImageLoad,
                     type,
-                    GetTextureFormat(size),
+                    format,
                     flags,
-                    handle,
-                    compMask,
-                    dests,
-                    sources);
+                    TextureOperation.DefaultCbufSlot,
+                    handle);
 
-                context.Add(operation);
+                context.ImageLoad(type, format, flags, binding, compMask, dests, sources);
 
                 switch (size)
                 {
-                    case SuSize.U8: context.Copy(dests[0], ZeroExtendTo32(context, dests[0], 8)); break;
-                    case SuSize.U16: context.Copy(dests[0], ZeroExtendTo32(context, dests[0], 16)); break;
-                    case SuSize.S8: context.Copy(dests[0], SignExtendTo32(context, dests[0], 8)); break;
-                    case SuSize.S16: context.Copy(dests[0], SignExtendTo32(context, dests[0], 16)); break;
+                    case SuSize.U8:
+                        context.Copy(dests[0], ZeroExtendTo32(context, dests[0], 8));
+                        break;
+                    case SuSize.U16:
+                        context.Copy(dests[0], ZeroExtendTo32(context, dests[0], 16));
+                        break;
+                    case SuSize.S8:
+                        context.Copy(dests[0], SignExtendTo32(context, dests[0], 8));
+                        break;
+                    case SuSize.S16:
+                        context.Copy(dests[0], SignExtendTo32(context, dests[0], 16));
+                        break;
                 }
             }
         }
@@ -469,7 +476,7 @@ namespace Ryujinx.Graphics.Shader.Instructions
 
             if (type == SamplerType.None)
             {
-                context.Config.GpuAccessor.Log("Invalid image reduction sampler type.");
+                context.TranslatorContext.GpuAccessor.Log("Invalid image reduction sampler type.");
                 return;
             }
 
@@ -493,7 +500,7 @@ namespace Ryujinx.Graphics.Shader.Instructions
                 return context.Copy(Register(srcB++, RegisterType.Gpr));
             }
 
-            List<Operand> sourcesList = new List<Operand>();
+            List<Operand> sourcesList = new();
 
             if (isBindless)
             {
@@ -531,7 +538,7 @@ namespace Ryujinx.Graphics.Shader.Instructions
 
             // TODO: FP and 64-bit formats.
             TextureFormat format = size == SuatomSize.Sd32 || size == SuatomSize.Sd64
-                ? (isBindless ? TextureFormat.Unknown : context.Config.GetTextureFormatAtomic(imm))
+                ? (isBindless ? TextureFormat.Unknown : ShaderProperties.GetTextureFormatAtomic(context.TranslatorContext.GpuAccessor, imm))
                 : GetTextureFormat(size);
 
             sourcesList.Add(Rb());
@@ -545,17 +552,15 @@ namespace Ryujinx.Graphics.Shader.Instructions
                 flags |= TextureFlags.Bindless;
             }
 
-            TextureOperation operation = context.CreateTextureOperation(
+            int binding = isBindless ? 0 : context.ResourceManager.GetTextureOrImageBinding(
                 Instruction.ImageAtomic,
                 type,
                 format,
                 flags,
-                imm,
-                0,
-                null,
-                sources);
+                TextureOperation.DefaultCbufSlot,
+                imm);
 
-            context.Add(operation);
+            context.ImageAtomic(type, format, flags, binding, sources);
         }
 
         private static void EmitSust(
@@ -576,7 +581,7 @@ namespace Ryujinx.Graphics.Shader.Instructions
 
             if (type == SamplerType.None)
             {
-                context.Config.GpuAccessor.Log("Invalid image store sampler type.");
+                context.TranslatorContext.GpuAccessor.Log("Invalid image store sampler type.");
                 return;
             }
 
@@ -600,7 +605,7 @@ namespace Ryujinx.Graphics.Shader.Instructions
                 return context.Copy(Register(srcB++, RegisterType.Gpr));
             }
 
-            List<Operand> sourcesList = new List<Operand>();
+            List<Operand> sourcesList = new();
 
             if (isBindless)
             {
@@ -641,7 +646,7 @@ namespace Ryujinx.Graphics.Shader.Instructions
 
                 if (!isBindless)
                 {
-                    format = context.Config.GetTextureFormat(imm);
+                    format = ShaderProperties.GetTextureFormat(context.TranslatorContext.GpuAccessor, imm);
                 }
             }
             else
@@ -674,17 +679,15 @@ namespace Ryujinx.Graphics.Shader.Instructions
                 flags |= TextureFlags.Coherent;
             }
 
-            TextureOperation operation = context.CreateTextureOperation(
+            int binding = isBindless ? 0 : context.ResourceManager.GetTextureOrImageBinding(
                 Instruction.ImageStore,
                 type,
                 format,
                 flags,
-                handle,
-                0,
-                null,
-                sources);
+                TextureOperation.DefaultCbufSlot,
+                handle);
 
-            context.Add(operation);
+            context.ImageStore(type, format, flags, binding, sources);
         }
 
         private static int GetComponentSizeInBytesLog2(SuatomSize size)
@@ -699,7 +702,7 @@ namespace Ryujinx.Graphics.Shader.Instructions
                 SuatomSize.S64 => 3,
                 SuatomSize.Sd32 => 2,
                 SuatomSize.Sd64 => 3,
-                _ => 2
+                _ => 2,
             };
         }
 
@@ -715,7 +718,7 @@ namespace Ryujinx.Graphics.Shader.Instructions
                 SuatomSize.S64 => TextureFormat.R32G32Uint,
                 SuatomSize.Sd32 => TextureFormat.R32Uint,
                 SuatomSize.Sd64 => TextureFormat.R32G32Uint,
-                _ => TextureFormat.R32Uint
+                _ => TextureFormat.R32Uint,
             };
         }
 
@@ -732,7 +735,7 @@ namespace Ryujinx.Graphics.Shader.Instructions
                 SuatomOp.Or => TextureFlags.BitwiseOr,
                 SuatomOp.Xor => TextureFlags.BitwiseXor,
                 SuatomOp.Exch => TextureFlags.Swap,
-                _ => TextureFlags.Add
+                _ => TextureFlags.Add,
             };
         }
 
@@ -743,7 +746,7 @@ namespace Ryujinx.Graphics.Shader.Instructions
                 SuSize.B64 => 2,
                 SuSize.B128 => 4,
                 SuSize.UB128 => 4,
-                _ => 1
+                _ => 1,
             };
         }
 
@@ -759,7 +762,7 @@ namespace Ryujinx.Graphics.Shader.Instructions
                 SuSize.B64 => 3,
                 SuSize.B128 => 4,
                 SuSize.UB128 => 4,
-                _ => 2
+                _ => 2,
             };
         }
 
@@ -775,7 +778,7 @@ namespace Ryujinx.Graphics.Shader.Instructions
                 SuSize.B64 => TextureFormat.R32G32Uint,
                 SuSize.B128 => TextureFormat.R32G32B32A32Uint,
                 SuSize.UB128 => TextureFormat.R32G32B32A32Uint,
-                _ => TextureFormat.R32Uint
+                _ => TextureFormat.R32Uint,
             };
         }
 
@@ -789,7 +792,7 @@ namespace Ryujinx.Graphics.Shader.Instructions
                 SuDim._2d => SamplerType.Texture2D,
                 SuDim._2dArray => SamplerType.Texture2D | SamplerType.Array,
                 SuDim._3d => SamplerType.Texture3D,
-                _ => SamplerType.None
+                _ => SamplerType.None,
             };
         }
     }

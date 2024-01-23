@@ -1,4 +1,4 @@
-﻿using Ryujinx.Common.Logging;
+using Ryujinx.Common.Logging;
 using Ryujinx.HLE.HOS.Ipc;
 using Ryujinx.HLE.HOS.Kernel.Threading;
 using Ryujinx.Horizon.Common;
@@ -7,12 +7,12 @@ namespace Ryujinx.HLE.HOS.Services.Ptm.Psm
 {
     class IPsmSession : IpcService
     {
-        private KEvent _stateChangeEvent;
-        private int    _stateChangeEventHandle;
+        private readonly KEvent _stateChangeEvent;
+        private int _stateChangeEventHandle;
 
         public IPsmSession(Horizon system)
         {
-            _stateChangeEvent       = new KEvent(system.KernelContext);
+            _stateChangeEvent = new KEvent(system.KernelContext);
             _stateChangeEventHandle = -1;
         }
 

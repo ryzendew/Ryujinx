@@ -1,5 +1,7 @@
-﻿using ARMeilleure.Memory;
+using ARMeilleure.Memory;
 using ARMeilleure.Translation;
+using Ryujinx.Cpu.Signal;
+using Ryujinx.Memory;
 
 namespace Ryujinx.Cpu.Jit
 {
@@ -11,7 +13,13 @@ namespace Ryujinx.Cpu.Jit
         public JitCpuContext(ITickSource tickSource, IMemoryManager memory, bool for64Bit)
         {
             _tickSource = tickSource;
-            _translator = new Translator(new JitMemoryAllocator(), memory, for64Bit);
+            _translator = new Translator(new JitMemoryAllocator(forJit: true), memory, for64Bit);
+
+            if (memory.Type.IsHostMapped())
+            {
+                NativeSignalHandler.InitializeSignalHandler(MemoryBlock.GetPageSize());
+            }
+
             memory.UnmapEvent += UnmapHandler;
         }
 
@@ -48,6 +56,10 @@ namespace Ryujinx.Cpu.Jit
         public void PrepareCodeRange(ulong address, ulong size)
         {
             _translator.PrepareCodeRange(address, size);
+        }
+
+        public void Dispose()
+        {
         }
     }
 }

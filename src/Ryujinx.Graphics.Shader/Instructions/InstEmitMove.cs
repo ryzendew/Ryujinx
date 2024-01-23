@@ -76,7 +76,7 @@ namespace Ryujinx.Graphics.Shader.Instructions
             switch (op.SReg)
             {
                 case SReg.LaneId:
-                    src = context.Load(StorageKind.Input, IoVariable.SubgroupLaneId);
+                    src = EmitLoadSubgroupLaneId(context);
                     break;
 
                 case SReg.InvocationId:
@@ -88,24 +88,24 @@ namespace Ryujinx.Graphics.Shader.Instructions
                     break;
 
                 case SReg.ThreadKill:
-                    src = context.Config.Stage == ShaderStage.Fragment ? context.Load(StorageKind.Input, IoVariable.ThreadKill) : Const(0);
+                    src = context.TranslatorContext.Definitions.Stage == ShaderStage.Fragment ? context.Load(StorageKind.Input, IoVariable.ThreadKill) : Const(0);
                     break;
 
                 case SReg.InvocationInfo:
-                    if (context.Config.Stage != ShaderStage.Compute && context.Config.Stage != ShaderStage.Fragment)
+                    if (context.TranslatorContext.Definitions.Stage != ShaderStage.Compute && context.TranslatorContext.Definitions.Stage != ShaderStage.Fragment)
                     {
                         // Note: Lowest 8-bits seems to contain some primitive index,
                         // but it seems to be NVIDIA implementation specific as it's only used
                         // to calculate ISBE offsets, so we can just keep it as zero.
 
-                        if (context.Config.Stage == ShaderStage.TessellationControl ||
-                            context.Config.Stage == ShaderStage.TessellationEvaluation)
+                        if (context.TranslatorContext.Definitions.Stage == ShaderStage.TessellationControl ||
+                            context.TranslatorContext.Definitions.Stage == ShaderStage.TessellationEvaluation)
                         {
                             src = context.ShiftLeft(context.Load(StorageKind.Input, IoVariable.PatchVertices), Const(16));
                         }
                         else
                         {
-                            src = Const(context.Config.GpuAccessor.QueryPrimitiveTopology().ToInputVertices() << 16);
+                            src = Const(context.TranslatorContext.Definitions.InputTopology.ToInputVertices() << 16);
                         }
                     }
                     else
@@ -146,19 +146,19 @@ namespace Ryujinx.Graphics.Shader.Instructions
                     break;
 
                 case SReg.EqMask:
-                    src = context.Load(StorageKind.Input, IoVariable.SubgroupEqMask, null, Const(0));
+                    src = EmitLoadSubgroupMask(context, IoVariable.SubgroupEqMask);
                     break;
                 case SReg.LtMask:
-                    src = context.Load(StorageKind.Input, IoVariable.SubgroupLtMask, null, Const(0));
+                    src = EmitLoadSubgroupMask(context, IoVariable.SubgroupLtMask);
                     break;
                 case SReg.LeMask:
-                    src = context.Load(StorageKind.Input, IoVariable.SubgroupLeMask, null, Const(0));
+                    src = EmitLoadSubgroupMask(context, IoVariable.SubgroupLeMask);
                     break;
                 case SReg.GtMask:
-                    src = context.Load(StorageKind.Input, IoVariable.SubgroupGtMask, null, Const(0));
+                    src = EmitLoadSubgroupMask(context, IoVariable.SubgroupGtMask);
                     break;
                 case SReg.GeMask:
-                    src = context.Load(StorageKind.Input, IoVariable.SubgroupGeMask, null, Const(0));
+                    src = EmitLoadSubgroupMask(context, IoVariable.SubgroupGeMask);
                     break;
 
                 default:
@@ -167,6 +167,52 @@ namespace Ryujinx.Graphics.Shader.Instructions
             }
 
             context.Copy(GetDest(op.Dest), src);
+        }
+
+        private static Operand EmitLoadSubgroupLaneId(EmitterContext context)
+        {
+            if (context.TranslatorContext.GpuAccessor.QueryHostSubgroupSize() <= 32)
+            {
+                return context.Load(StorageKind.Input, IoVariable.SubgroupLaneId);
+            }
+
+            return context.BitwiseAnd(context.Load(StorageKind.Input, IoVariable.SubgroupLaneId), Const(0x1f));
+        }
+
+        private static Operand EmitLoadSubgroupMask(EmitterContext context, IoVariable ioVariable)
+        {
+            int subgroupSize = context.TranslatorContext.GpuAccessor.QueryHostSubgroupSize();
+
+            if (subgroupSize <= 32)
+            {
+                return context.Load(StorageKind.Input, ioVariable, null, Const(0));
+            }
+            else if (subgroupSize == 64)
+            {
+                Operand laneId = context.Load(StorageKind.Input, IoVariable.SubgroupLaneId);
+                Operand low = context.Load(StorageKind.Input, ioVariable, null, Const(0));
+                Operand high = context.Load(StorageKind.Input, ioVariable, null, Const(1));
+
+                return context.ConditionalSelect(context.BitwiseAnd(laneId, Const(32)), high, low);
+            }
+            else
+            {
+                Operand laneId = context.Load(StorageKind.Input, IoVariable.SubgroupLaneId);
+                Operand element = context.ShiftRightU32(laneId, Const(5));
+
+                Operand res = context.Load(StorageKind.Input, ioVariable, null, Const(0));
+                res = context.ConditionalSelect(
+                    context.ICompareEqual(element, Const(1)),
+                    context.Load(StorageKind.Input, ioVariable, null, Const(1)), res);
+                res = context.ConditionalSelect(
+                    context.ICompareEqual(element, Const(2)),
+                    context.Load(StorageKind.Input, ioVariable, null, Const(2)), res);
+                res = context.ConditionalSelect(
+                    context.ICompareEqual(element, Const(3)),
+                    context.Load(StorageKind.Input, ioVariable, null, Const(3)), res);
+
+                return res;
+            }
         }
 
         public static void SelR(EmitterContext context)
@@ -209,21 +255,15 @@ namespace Ryujinx.Graphics.Shader.Instructions
                 return context.ICompareNotEqual(context.BitwiseAnd(value, Const(1 << bit)), Const(0));
             }
 
-            if (ccpr)
-            {
-                // TODO: Support Register to condition code flags copy.
-                context.Config.GpuAccessor.Log("R2P.CC not implemented.");
-            }
-            else
-            {
-                int shift = (int)byteSel * 8;
+            int count = ccpr ? RegisterConsts.FlagsCount : RegisterConsts.PredsCount;
+            RegisterType type = ccpr ? RegisterType.Flag : RegisterType.Predicate;
+            int shift = (int)byteSel * 8;
 
-                for (int bit = 0; bit < RegisterConsts.PredsCount; bit++)
-                {
-                    Operand pred = Register(bit, RegisterType.Predicate);
-                    Operand res = context.ConditionalSelect(Test(mask, bit), Test(value, bit + shift), pred);
-                    context.Copy(pred, res);
-                }
+            for (int bit = 0; bit < count; bit++)
+            {
+                Operand flag = Register(bit, type);
+                Operand res = context.ConditionalSelect(Test(mask, bit), Test(value, bit + shift), flag);
+                context.Copy(flag, res);
             }
         }
 

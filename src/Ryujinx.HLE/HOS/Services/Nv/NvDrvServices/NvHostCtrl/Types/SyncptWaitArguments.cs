@@ -1,4 +1,4 @@
-﻿using Ryujinx.HLE.HOS.Services.Nv.Types;
+using Ryujinx.HLE.HOS.Services.Nv.Types;
 using System.Runtime.InteropServices;
 
 namespace Ryujinx.HLE.HOS.Services.Nv.NvDrvServices.NvHostCtrl.Types
@@ -7,6 +7,6 @@ namespace Ryujinx.HLE.HOS.Services.Nv.NvDrvServices.NvHostCtrl.Types
     struct SyncptWaitArguments
     {
         public NvFence Fence;
-        public int     Timeout;
+        public int Timeout;
     }
 }

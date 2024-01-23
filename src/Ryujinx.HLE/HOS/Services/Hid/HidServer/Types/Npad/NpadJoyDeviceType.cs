@@ -1,8 +1,8 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Hid
+namespace Ryujinx.HLE.HOS.Services.Hid
 {
     public enum NpadJoyDeviceType
     {
         Left,
-        Right
+        Right,
     }
 }

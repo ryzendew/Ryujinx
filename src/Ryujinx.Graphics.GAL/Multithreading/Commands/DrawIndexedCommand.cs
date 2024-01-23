@@ -1,8 +1,8 @@
-﻿namespace Ryujinx.Graphics.GAL.Multithreading.Commands
+namespace Ryujinx.Graphics.GAL.Multithreading.Commands
 {
     struct DrawCommand : IGALCommand, IGALCommand<DrawCommand>
     {
-        public CommandType CommandType => CommandType.Draw;
+        public readonly CommandType CommandType => CommandType.Draw;
         private int _vertexCount;
         private int _instanceCount;
         private int _firstVertex;

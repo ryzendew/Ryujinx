@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace Ryujinx.Input
 {
@@ -23,6 +23,6 @@ namespace Ryujinx.Input
         /// Motion
         /// <remarks>Also named sixaxis</remarks>
         /// </summary>
-        Motion
+        Motion,
     }
 }

@@ -1,4 +1,4 @@
-﻿using Silk.NET.Vulkan;
+using Silk.NET.Vulkan;
 using System;
 
 namespace Ryujinx.Graphics.Vulkan
@@ -11,7 +11,7 @@ namespace Ryujinx.Graphics.Vulkan
         NoTriangleFans = 1,
         NoPointMode = 1 << 1,
         No3DImageView = 1 << 2,
-        NoLodBias = 1 << 3
+        NoLodBias = 1 << 3,
     }
 
     readonly struct HardwareCapabilities
@@ -25,9 +25,10 @@ namespace Ryujinx.Graphics.Vulkan
         public readonly bool SupportsIndirectParameters;
         public readonly bool SupportsFragmentShaderInterlock;
         public readonly bool SupportsGeometryShaderPassthrough;
-        public readonly bool SupportsSubgroupSizeControl;
+        public readonly bool SupportsShaderFloat64;
         public readonly bool SupportsShaderInt8;
         public readonly bool SupportsShaderStencilExport;
+        public readonly bool SupportsShaderStorageImageMultisample;
         public readonly bool SupportsConditionalRendering;
         public readonly bool SupportsExtendedDynamicState;
         public readonly bool SupportsMultiView;
@@ -40,15 +41,16 @@ namespace Ryujinx.Graphics.Vulkan
         public readonly bool SupportsPreciseOcclusionQueries;
         public readonly bool SupportsPipelineStatisticsQuery;
         public readonly bool SupportsGeometryShader;
+        public readonly bool SupportsTessellationShader;
         public readonly bool SupportsViewportArray2;
         public readonly bool SupportsHostImportedMemory;
-        public readonly uint MinSubgroupSize;
-        public readonly uint MaxSubgroupSize;
-        public readonly ShaderStageFlags RequiredSubgroupSizeStages;
+        public readonly bool SupportsDepthClipControl;
+        public readonly uint SubgroupSize;
         public readonly SampleCountFlags SupportedSampleCounts;
         public readonly PortabilitySubsetFlags PortabilitySubset;
         public readonly uint VertexBufferAlignment;
         public readonly uint SubTexelPrecisionBits;
+        public readonly ulong MinResourceAlignment;
 
         public HardwareCapabilities(
             bool supportsIndexTypeUint8,
@@ -60,9 +62,10 @@ namespace Ryujinx.Graphics.Vulkan
             bool supportsIndirectParameters,
             bool supportsFragmentShaderInterlock,
             bool supportsGeometryShaderPassthrough,
-            bool supportsSubgroupSizeControl,
+            bool supportsShaderFloat64,
             bool supportsShaderInt8,
             bool supportsShaderStencilExport,
+            bool supportsShaderStorageImageMultisample,
             bool supportsConditionalRendering,
             bool supportsExtendedDynamicState,
             bool supportsMultiView,
@@ -75,15 +78,16 @@ namespace Ryujinx.Graphics.Vulkan
             bool supportsPreciseOcclusionQueries,
             bool supportsPipelineStatisticsQuery,
             bool supportsGeometryShader,
+            bool supportsTessellationShader,
             bool supportsViewportArray2,
             bool supportsHostImportedMemory,
-            uint minSubgroupSize,
-            uint maxSubgroupSize,
-            ShaderStageFlags requiredSubgroupSizeStages,
+            bool supportsDepthClipControl,
+            uint subgroupSize,
             SampleCountFlags supportedSampleCounts,
             PortabilitySubsetFlags portabilitySubset,
             uint vertexBufferAlignment,
-            uint subTexelPrecisionBits)
+            uint subTexelPrecisionBits,
+            ulong minResourceAlignment)
         {
             SupportsIndexTypeUint8 = supportsIndexTypeUint8;
             SupportsCustomBorderColor = supportsCustomBorderColor;
@@ -94,9 +98,10 @@ namespace Ryujinx.Graphics.Vulkan
             SupportsIndirectParameters = supportsIndirectParameters;
             SupportsFragmentShaderInterlock = supportsFragmentShaderInterlock;
             SupportsGeometryShaderPassthrough = supportsGeometryShaderPassthrough;
-            SupportsSubgroupSizeControl = supportsSubgroupSizeControl;
+            SupportsShaderFloat64 = supportsShaderFloat64;
             SupportsShaderInt8 = supportsShaderInt8;
             SupportsShaderStencilExport = supportsShaderStencilExport;
+            SupportsShaderStorageImageMultisample = supportsShaderStorageImageMultisample;
             SupportsConditionalRendering = supportsConditionalRendering;
             SupportsExtendedDynamicState = supportsExtendedDynamicState;
             SupportsMultiView = supportsMultiView;
@@ -109,15 +114,16 @@ namespace Ryujinx.Graphics.Vulkan
             SupportsPreciseOcclusionQueries = supportsPreciseOcclusionQueries;
             SupportsPipelineStatisticsQuery = supportsPipelineStatisticsQuery;
             SupportsGeometryShader = supportsGeometryShader;
+            SupportsTessellationShader = supportsTessellationShader;
             SupportsViewportArray2 = supportsViewportArray2;
             SupportsHostImportedMemory = supportsHostImportedMemory;
-            MinSubgroupSize = minSubgroupSize;
-            MaxSubgroupSize = maxSubgroupSize;
-            RequiredSubgroupSizeStages = requiredSubgroupSizeStages;
+            SupportsDepthClipControl = supportsDepthClipControl;
+            SubgroupSize = subgroupSize;
             SupportedSampleCounts = supportedSampleCounts;
             PortabilitySubset = portabilitySubset;
             VertexBufferAlignment = vertexBufferAlignment;
             SubTexelPrecisionBits = subTexelPrecisionBits;
+            MinResourceAlignment = minResourceAlignment;
         }
     }
 }

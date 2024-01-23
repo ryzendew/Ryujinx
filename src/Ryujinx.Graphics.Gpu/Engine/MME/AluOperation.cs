@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.Graphics.Gpu.Engine.MME
+namespace Ryujinx.Graphics.Gpu.Engine.MME
 {
     /// <summary>
     /// GPU Macro Arithmetic and Logic unit operation.
@@ -10,6 +10,6 @@
         BitfieldReplace = 2,
         BitfieldExtractLslImm = 3,
         BitfieldExtractLslReg = 4,
-        ReadImmediate = 5
+        ReadImmediate = 5,
     }
 }

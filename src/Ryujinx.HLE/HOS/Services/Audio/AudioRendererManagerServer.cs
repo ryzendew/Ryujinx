@@ -1,4 +1,4 @@
-﻿using Ryujinx.Audio.Renderer.Parameter;
+using Ryujinx.Audio.Renderer.Parameter;
 using Ryujinx.Audio.Renderer.Server;
 using Ryujinx.Common;
 using Ryujinx.Common.Logging;
@@ -12,7 +12,7 @@ namespace Ryujinx.HLE.HOS.Services.Audio
     {
         private const int InitialRevision = ('R' << 0) | ('E' << 8) | ('V' << 16) | ('1' << 24);
 
-        private IAudioRendererManager _impl;
+        private readonly IAudioRendererManager _impl;
 
         public AudioRendererManagerServer(ServiceCtx context) : this(context, new AudioRendererManager(context.Device.System.AudioRendererManager, context.Device.System.AudioDeviceSessionRegistry)) { }
 

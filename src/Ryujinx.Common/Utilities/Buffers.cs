@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -9,8 +9,8 @@ namespace Ryujinx.Common.Utilities
     [StructLayout(LayoutKind.Sequential, Size = 16)]
     public struct Buffer16
     {
-        [DebuggerBrowsable(DebuggerBrowsableState.Never)] private ulong _dummy0;
-        [DebuggerBrowsable(DebuggerBrowsableState.Never)] private ulong _dummy1;
+        [DebuggerBrowsable(DebuggerBrowsableState.Never)] private readonly ulong _dummy0;
+        [DebuggerBrowsable(DebuggerBrowsableState.Never)] private readonly ulong _dummy1;
 
         public byte this[int i]
         {

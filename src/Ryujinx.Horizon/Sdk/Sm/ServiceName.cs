@@ -1,16 +1,17 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Ryujinx.Horizon.Sdk.Sm
 {
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    struct ServiceName
+    public readonly struct ServiceName
     {
-        public static ServiceName Invalid { get; } = new ServiceName(0);
+        public static ServiceName Invalid { get; } = new(0);
 
         public bool IsValid => Packed != 0;
 
-        public int Length => sizeof(ulong);
+        public const int Length = sizeof(ulong);
 
         public ulong Packed { get; }
 
@@ -78,7 +79,7 @@ namespace Ryujinx.Horizon.Sdk.Sm
 
         public override string ToString()
         {
-            string name = string.Empty;
+            StringBuilder nameBuilder = new();
 
             for (int index = 0; index < sizeof(ulong); index++)
             {
@@ -89,10 +90,10 @@ namespace Ryujinx.Horizon.Sdk.Sm
                     break;
                 }
 
-                name += (char)character;
+                nameBuilder.Append((char)character);
             }
 
-            return name;
+            return nameBuilder.ToString();
         }
     }
 }

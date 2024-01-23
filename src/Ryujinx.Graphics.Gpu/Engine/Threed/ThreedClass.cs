@@ -1,19 +1,23 @@
-﻿using Ryujinx.Graphics.Device;
+using Ryujinx.Common.Memory;
+using Ryujinx.Graphics.Device;
 using Ryujinx.Graphics.GAL;
 using Ryujinx.Graphics.Gpu.Engine.GPFifo;
 using Ryujinx.Graphics.Gpu.Engine.InlineToMemory;
 using Ryujinx.Graphics.Gpu.Engine.Threed.Blender;
+using Ryujinx.Graphics.Gpu.Engine.Types;
 using Ryujinx.Graphics.Gpu.Synchronization;
+using Ryujinx.Memory.Range;
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics;
 
 namespace Ryujinx.Graphics.Gpu.Engine.Threed
 {
     /// <summary>
     /// Represents a 3D engine class.
     /// </summary>
-    class ThreedClass : IDeviceState
+    class ThreedClass : IDeviceState, IDisposable
     {
         private readonly GpuContext _context;
         private readonly GPFifoClass _fifoClass;
@@ -25,6 +29,8 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
         private readonly SemaphoreUpdater _semaphoreUpdater;
         private readonly ConstantBufferUpdater _cbUpdater;
         private readonly StateUpdater _stateUpdater;
+
+        private SetMmeShadowRamControlMode ShadowMode => _state.State.SetMmeShadowRamControlMode;
 
         /// <summary>
         /// Creates a new instance of the 3D engine class.
@@ -71,7 +77,7 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
                 { nameof(ThreedClassState.UniformBufferBindTessControl), new RwCallback(ConstantBufferBindTessControl, null) },
                 { nameof(ThreedClassState.UniformBufferBindTessEvaluation), new RwCallback(ConstantBufferBindTessEvaluation, null) },
                 { nameof(ThreedClassState.UniformBufferBindGeometry), new RwCallback(ConstantBufferBindGeometry, null) },
-                { nameof(ThreedClassState.UniformBufferBindFragment), new RwCallback(ConstantBufferBindFragment, null) }
+                { nameof(ThreedClassState.UniformBufferBindFragment), new RwCallback(ConstantBufferBindFragment, null) },
             });
 
             _i2mClass = new InlineToMemoryClass(context, channel, initializeState: false);
@@ -179,6 +185,15 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
         }
 
         /// <summary>
+        /// Marks the specified register range for a group index as dirty, forcing the associated state to update on the next draw.
+        /// </summary>
+        /// <param name="groupIndex">Index of the group to dirty</param>
+        public void ForceStateDirtyByIndex(int groupIndex)
+        {
+            _stateUpdater.ForceDirty(groupIndex);
+        }
+
+        /// <summary>
         /// Forces the shaders to be rebound on the next draw.
         /// </summary>
         public void ForceShaderUpdate()
@@ -207,7 +222,7 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
         /// </summary>
         public void PerformDeferredDraws()
         {
-            _drawManager.PerformDeferredDraws();
+            _drawManager.PerformDeferredDraws(this);
         }
 
         /// <summary>
@@ -217,6 +232,206 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
         public void ConstantBufferUpdate(ReadOnlySpan<int> data)
         {
             _cbUpdater.Update(data);
+        }
+
+        /// <summary>
+        /// Test if two 32 byte structs are equal. 
+        /// </summary>
+        /// <typeparam name="T">Type of the 32-byte struct</typeparam>
+        /// <param name="lhs">First struct</param>
+        /// <param name="rhs">Second struct</param>
+        /// <returns>True if equal, false otherwise</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool UnsafeEquals32Byte<T>(ref T lhs, ref T rhs) where T : unmanaged
+        {
+            if (Vector256.IsHardwareAccelerated)
+            {
+                return Vector256.EqualsAll(
+                    Unsafe.As<T, Vector256<uint>>(ref lhs),
+                    Unsafe.As<T, Vector256<uint>>(ref rhs)
+                );
+            }
+            else
+            {
+                ref var lhsVec = ref Unsafe.As<T, Vector128<uint>>(ref lhs);
+                ref var rhsVec = ref Unsafe.As<T, Vector128<uint>>(ref rhs);
+
+                return Vector128.EqualsAll(lhsVec, rhsVec) &&
+                    Vector128.EqualsAll(Unsafe.Add(ref lhsVec, 1), Unsafe.Add(ref rhsVec, 1));
+            }
+        }
+
+        /// <summary>
+        /// Updates blend enable. Respects current shadow mode.
+        /// </summary>
+        /// <param name="masks">Blend enable</param>
+        public void UpdateBlendEnable(ref Array8<Boolean32> enable)
+        {
+            var shadow = ShadowMode;
+            ref var state = ref _state.State.BlendEnable;
+
+            if (shadow.IsReplay())
+            {
+                enable = _state.ShadowState.BlendEnable;
+            }
+
+            if (!UnsafeEquals32Byte(ref enable, ref state))
+            {
+                state = enable;
+
+                _stateUpdater.ForceDirty(StateUpdater.BlendStateIndex);
+            }
+
+            if (shadow.IsTrack())
+            {
+                _state.ShadowState.BlendEnable = enable;
+            }
+        }
+
+        /// <summary>
+        /// Updates color masks. Respects current shadow mode.
+        /// </summary>
+        /// <param name="masks">Color masks</param>
+        public void UpdateColorMasks(ref Array8<RtColorMask> masks)
+        {
+            var shadow = ShadowMode;
+            ref var state = ref _state.State.RtColorMask;
+
+            if (shadow.IsReplay())
+            {
+                masks = _state.ShadowState.RtColorMask;
+            }
+
+            if (!UnsafeEquals32Byte(ref masks, ref state))
+            {
+                state = masks;
+
+                _stateUpdater.ForceDirty(StateUpdater.RtColorMaskIndex);
+            }
+
+            if (shadow.IsTrack())
+            {
+                _state.ShadowState.RtColorMask = masks;
+            }
+        }
+
+        /// <summary>
+        /// Updates index buffer state for an indexed draw. Respects current shadow mode.
+        /// </summary>
+        /// <param name="addrHigh">High part of the address</param>
+        /// <param name="addrLow">Low part of the address</param>
+        /// <param name="type">Type of the binding</param>
+        public void UpdateIndexBuffer(uint addrHigh, uint addrLow, IndexType type)
+        {
+            var shadow = ShadowMode;
+            ref var state = ref _state.State.IndexBufferState;
+
+            if (shadow.IsReplay())
+            {
+                ref var shadowState = ref _state.ShadowState.IndexBufferState;
+                addrHigh = shadowState.Address.High;
+                addrLow = shadowState.Address.Low;
+                type = shadowState.Type;
+            }
+
+            if (state.Address.High != addrHigh || state.Address.Low != addrLow || state.Type != type)
+            {
+                state.Address.High = addrHigh;
+                state.Address.Low = addrLow;
+                state.Type = type;
+
+                _stateUpdater.ForceDirty(StateUpdater.IndexBufferStateIndex);
+            }
+
+            if (shadow.IsTrack())
+            {
+                ref var shadowState = ref _state.ShadowState.IndexBufferState;
+                shadowState.Address.High = addrHigh;
+                shadowState.Address.Low = addrLow;
+                shadowState.Type = type;
+            }
+        }
+
+        /// <summary>
+        /// Updates uniform buffer state for update or bind. Respects current shadow mode.
+        /// </summary>
+        /// <param name="size">Size of the binding</param>
+        /// <param name="addrHigh">High part of the addrsss</param>
+        /// <param name="addrLow">Low part of the address</param>
+        public void UpdateUniformBufferState(int size, uint addrHigh, uint addrLow)
+        {
+            var shadow = ShadowMode;
+            ref var state = ref _state.State.UniformBufferState;
+
+            if (shadow.IsReplay())
+            {
+                ref var shadowState = ref _state.ShadowState.UniformBufferState;
+                size = shadowState.Size;
+                addrHigh = shadowState.Address.High;
+                addrLow = shadowState.Address.Low;
+            }
+
+            state.Size = size;
+            state.Address.High = addrHigh;
+            state.Address.Low = addrLow;
+
+            if (shadow.IsTrack())
+            {
+                ref var shadowState = ref _state.ShadowState.UniformBufferState;
+                shadowState.Size = size;
+                shadowState.Address.High = addrHigh;
+                shadowState.Address.Low = addrLow;
+            }
+        }
+
+        /// <summary>
+        /// Updates a shader offset. Respects current shadow mode.
+        /// </summary>
+        /// <param name="index">Index of the shader to update</param>
+        /// <param name="offset">Offset to update with</param>
+        public void SetShaderOffset(int index, uint offset)
+        {
+            var shadow = ShadowMode;
+            ref var shaderState = ref _state.State.ShaderState[index];
+
+            if (shadow.IsReplay())
+            {
+                offset = _state.ShadowState.ShaderState[index].Offset;
+            }
+
+            if (shaderState.Offset != offset)
+            {
+                shaderState.Offset = offset;
+
+                _stateUpdater.ForceDirty(StateUpdater.ShaderStateIndex);
+            }
+
+            if (shadow.IsTrack())
+            {
+                _state.ShadowState.ShaderState[index].Offset = offset;
+            }
+        }
+
+        /// <summary>
+        /// Updates uniform buffer state for update. Respects current shadow mode.
+        /// </summary>
+        /// <param name="ubState">Uniform buffer state</param>
+        public void UpdateUniformBufferState(UniformBufferState ubState)
+        {
+            var shadow = ShadowMode;
+            ref var state = ref _state.State.UniformBufferState;
+
+            if (shadow.IsReplay())
+            {
+                ubState = _state.ShadowState.UniformBufferState;
+            }
+
+            state = ubState;
+
+            if (shadow.IsTrack())
+            {
+                _state.ShadowState.UniformBufferState = ubState;
+            }
         }
 
         /// <summary>
@@ -402,7 +617,7 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
         /// <param name="argument">Method call argument</param>
         private void DrawBegin(int argument)
         {
-            _drawManager.DrawBegin(argument);
+            _drawManager.DrawBegin(this, argument);
         }
 
         /// <summary>
@@ -589,22 +804,22 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
         /// Performs a indirect draw, with parameters from a GPU buffer.
         /// </summary>
         /// <param name="topology">Primitive topology</param>
-        /// <param name="indirectBufferAddress">Address of the buffer with the draw parameters, such as count, first index, etc</param>
-        /// <param name="parameterBufferAddress">Address of the buffer with the draw count</param>
+        /// <param name="indirectBufferRange">Memory range of the buffer with the draw parameters, such as count, first index, etc</param>
+        /// <param name="parameterBufferRange">Memory range of the buffer with the draw count</param>
         /// <param name="maxDrawCount">Maximum number of draws that can be made</param>
-        /// <param name="stride">Distance in bytes between each entry on the data pointed to by <paramref name="indirectBufferAddress"/></param>
+        /// <param name="stride">Distance in bytes between each entry on the data pointed to by <paramref name="indirectBufferRange"/></param>
         /// <param name="indexCount">Maximum number of indices that the draw can consume</param>
         /// <param name="drawType">Type of the indirect draw, which can be indexed or non-indexed, with or without a draw count</param>
         public void DrawIndirect(
             PrimitiveTopology topology,
-            ulong indirectBufferAddress,
-            ulong parameterBufferAddress,
+            MultiRange indirectBufferRange,
+            MultiRange parameterBufferRange,
             int maxDrawCount,
             int stride,
             int indexCount,
             IndirectDrawType drawType)
         {
-            _drawManager.DrawIndirect(this, topology, indirectBufferAddress, parameterBufferAddress, maxDrawCount, stride, indexCount, drawType);
+            _drawManager.DrawIndirect(this, topology, indirectBufferRange, parameterBufferRange, maxDrawCount, stride, indexCount, drawType);
         }
 
         /// <summary>
@@ -616,6 +831,20 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
         public void Clear(int argument, int layerCount)
         {
             _drawManager.Clear(this, argument, layerCount);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _drawManager.Dispose();
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
         }
     }
 }

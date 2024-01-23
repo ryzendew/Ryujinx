@@ -1,10 +1,10 @@
-﻿using Ryujinx.Common.Memory;
+using Ryujinx.Common.Memory;
 
 namespace Ryujinx.Graphics.Nvdec
 {
     struct NvdecRegisters
     {
-#pragma warning disable CS0649
+#pragma warning disable CS0649 // Field is never assigned to
         public Array64<uint> Reserved0;
         public uint Nop;
         public Array63<uint> Reserved104;

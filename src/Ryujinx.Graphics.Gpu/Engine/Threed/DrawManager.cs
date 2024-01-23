@@ -1,6 +1,9 @@
-﻿using Ryujinx.Graphics.GAL;
+using Ryujinx.Graphics.GAL;
+using Ryujinx.Graphics.Gpu.Engine.Threed.ComputeDraw;
 using Ryujinx.Graphics.Gpu.Engine.Types;
+using Ryujinx.Graphics.Gpu.Image;
 using Ryujinx.Graphics.Gpu.Memory;
+using Ryujinx.Memory.Range;
 using System;
 
 namespace Ryujinx.Graphics.Gpu.Engine.Threed
@@ -8,7 +11,7 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
     /// <summary>
     /// Draw manager.
     /// </summary>
-    class DrawManager
+    class DrawManager : IDisposable
     {
         // Since we don't know the index buffer size for indirect draws,
         // we must assume a minimum and maximum size and use that for buffer data update purposes.
@@ -20,6 +23,7 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
         private readonly DeviceStateWithShadow<ThreedClassState> _state;
         private readonly DrawState _drawState;
         private readonly SpecializationStateUpdater _currentSpecState;
+        private readonly VtgAsCompute _vtgAsCompute;
         private bool _topologySet;
 
         private bool _instancedDrawPending;
@@ -53,6 +57,7 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
             _state = state;
             _drawState = drawState;
             _currentSpecState = spec;
+            _vtgAsCompute = new(context, channel, state);
         }
 
         /// <summary>
@@ -98,6 +103,8 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
         /// <param name="argument">Method call argument</param>
         public void DrawEnd(ThreedClass engine, int argument)
         {
+            _drawState.DrawUsesEngineState = true;
+
             DrawEnd(
                 engine,
                 _state.State.IndexBufferState.First,
@@ -127,7 +134,7 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
             {
                 if (renderEnable == ConditionalRenderEnabled.False)
                 {
-                    PerformDeferredDraws();
+                    PerformDeferredDraws(engine);
                 }
 
                 _drawState.DrawIndexed = false;
@@ -186,23 +193,21 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
             {
                 int firstVertex = (int)_state.State.FirstVertex;
 
-                BufferRange br = new BufferRange(_drawState.IbStreamer.GetInlineIndexBuffer(), 0, inlineIndexCount * 4);
+                BufferRange br = new(_drawState.IbStreamer.GetInlineIndexBuffer(), 0, inlineIndexCount * 4);
 
                 _channel.BufferManager.SetIndexBuffer(br, IndexType.UInt);
 
-                _context.Renderer.Pipeline.DrawIndexed(inlineIndexCount, 1, firstIndex, firstVertex, firstInstance);
+                DrawImpl(engine, inlineIndexCount, 1, firstIndex, firstVertex, firstInstance, indexed: true);
             }
             else if (_drawState.DrawIndexed)
             {
                 int firstVertex = (int)_state.State.FirstVertex;
 
-                _context.Renderer.Pipeline.DrawIndexed(indexCount, 1, firstIndex, firstVertex, firstInstance);
+                DrawImpl(engine, indexCount, 1, firstIndex, firstVertex, firstInstance, indexed: true);
             }
             else
             {
-                var drawState = _state.State.VertexBufferDrawState;
-
-                _context.Renderer.Pipeline.Draw(drawVertexCount, 1, drawFirstVertex, firstInstance);
+                DrawImpl(engine, drawVertexCount, 1, 0, drawFirstVertex, firstInstance, indexed: false);
             }
 
             _drawState.DrawIndexed = false;
@@ -217,24 +222,26 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
         /// Starts draw.
         /// This sets primitive type and instanced draw parameters.
         /// </summary>
+        /// <param name="engine">3D engine where this method is being called</param>
         /// <param name="argument">Method call argument</param>
-        public void DrawBegin(int argument)
+        public void DrawBegin(ThreedClass engine, int argument)
         {
             bool incrementInstance = (argument & (1 << 26)) != 0;
             bool resetInstance = (argument & (1 << 27)) == 0;
 
             PrimitiveType type = (PrimitiveType)(argument & 0xffff);
-            DrawBegin(incrementInstance, resetInstance, type);
+            DrawBegin(engine, incrementInstance, resetInstance, type);
         }
 
         /// <summary>
         /// Starts draw.
         /// This sets primitive type and instanced draw parameters.
         /// </summary>
+        /// <param name="engine">3D engine where this method is being called</param>
         /// <param name="incrementInstance">Indicates if the current instance should be incremented</param>
         /// <param name="resetInstance">Indicates if the current instance should be set to zero</param>
         /// <param name="primitiveType">Primitive type</param>
-        private void DrawBegin(bool incrementInstance, bool resetInstance, PrimitiveType primitiveType)
+        private void DrawBegin(ThreedClass engine, bool incrementInstance, bool resetInstance, PrimitiveType primitiveType)
         {
             if (incrementInstance)
             {
@@ -242,7 +249,7 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
             }
             else if (resetInstance)
             {
-                PerformDeferredDraws();
+                PerformDeferredDraws(engine);
 
                 _instanceIndex = 0;
             }
@@ -362,7 +369,7 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
         /// <param name="instanced">True to increment the current instance value, false otherwise</param>
         private void DrawIndexBufferBeginEndInstance(ThreedClass engine, int argument, bool instanced)
         {
-            DrawBegin(instanced, !instanced, (PrimitiveType)((argument >> 28) & 0xf));
+            DrawBegin(engine, instanced, !instanced, (PrimitiveType)((argument >> 28) & 0xf));
 
             int firstIndex = argument & 0xffff;
             int indexCount = (argument >> 16) & 0xfff;
@@ -370,6 +377,7 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
             bool oldDrawIndexed = _drawState.DrawIndexed;
 
             _drawState.DrawIndexed = true;
+            _drawState.DrawUsesEngineState = false;
             engine.ForceStateDirty(IndexBufferCountMethodOffset * 4);
 
             DrawEnd(engine, firstIndex, indexCount, 0, 0);
@@ -407,7 +415,7 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
         /// <param name="instanced">True to increment the current instance value, false otherwise</param>
         private void DrawVertexArrayBeginEndInstance(ThreedClass engine, int argument, bool instanced)
         {
-            DrawBegin(instanced, !instanced, (PrimitiveType)((argument >> 28) & 0xf));
+            DrawBegin(engine, instanced, !instanced, (PrimitiveType)((argument >> 28) & 0xf));
 
             int firstVertex = argument & 0xffff;
             int vertexCount = (argument >> 16) & 0xfff;
@@ -415,6 +423,7 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
             bool oldDrawIndexed = _drawState.DrawIndexed;
 
             _drawState.DrawIndexed = false;
+            _drawState.DrawUsesEngineState = false;
             engine.ForceStateDirty(VertexBufferFirstMethodOffset * 4);
 
             DrawEnd(engine, 0, 0, firstVertex, vertexCount);
@@ -535,18 +544,16 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
             _state.State.FirstInstance = (uint)firstInstance;
 
             _drawState.DrawIndexed = indexed;
+            _drawState.DrawUsesEngineState = true;
             _currentSpecState.SetHasConstantBufferDrawParameters(true);
 
             engine.UpdateState();
 
+            DrawImpl(engine, count, instanceCount, firstIndex, firstVertex, firstInstance, indexed);
+
             if (indexed)
             {
-                _context.Renderer.Pipeline.DrawIndexed(count, instanceCount, firstIndex, firstVertex, firstInstance);
                 _state.State.FirstVertex = 0;
-            }
-            else
-            {
-                _context.Renderer.Pipeline.Draw(count, instanceCount, firstVertex, firstInstance);
             }
 
             _state.State.FirstInstance = 0;
@@ -560,12 +567,73 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
         }
 
         /// <summary>
+        /// Performs a indexed or non-indexed draw.
+        /// </summary>
+        /// <param name="engine">3D engine where this method is being called</param>
+        /// <param name="count">Index count for indexed draws, vertex count for non-indexed draws</param>
+        /// <param name="instanceCount">Instance count</param>
+        /// <param name="firstIndex">First index on the index buffer for indexed draws, ignored for non-indexed draws</param>
+        /// <param name="firstVertex">First vertex on the vertex buffer</param>
+        /// <param name="firstInstance">First instance</param>
+        /// <param name="indexed">True if the draw is indexed, false otherwise</param>
+        private void DrawImpl(
+            ThreedClass engine,
+            int count,
+            int instanceCount,
+            int firstIndex,
+            int firstVertex,
+            int firstInstance,
+            bool indexed)
+        {
+            if (instanceCount > 1)
+            {
+                _channel.BufferManager.SetInstancedDrawVertexCount(count);
+            }
+
+            if (_drawState.VertexAsCompute != null)
+            {
+                _vtgAsCompute.DrawAsCompute(
+                    engine,
+                    _drawState.VertexAsCompute,
+                    _drawState.GeometryAsCompute,
+                    _drawState.VertexPassthrough,
+                    _drawState.Topology,
+                    count,
+                    instanceCount,
+                    firstIndex,
+                    firstVertex,
+                    firstInstance,
+                    indexed);
+
+                if (_drawState.GeometryAsCompute != null)
+                {
+                    // Geometry draws need to change the topology, so we need to set it here again
+                    // if we are going to do a regular draw.
+                    // Would have been better to do that on the callee, but doing it here
+                    // avoids having to pass the draw manager instance.
+                    ForceStateDirty();
+                }
+            }
+            else
+            {
+                if (indexed)
+                {
+                    _context.Renderer.Pipeline.DrawIndexed(count, instanceCount, firstIndex, firstVertex, firstInstance);
+                }
+                else
+                {
+                    _context.Renderer.Pipeline.Draw(count, instanceCount, firstVertex, firstInstance);
+                }
+            }
+        }
+
+        /// <summary>
         /// Performs a indirect draw, with parameters from a GPU buffer.
         /// </summary>
         /// <param name="engine">3D engine where this method is being called</param>
         /// <param name="topology">Primitive topology</param>
-        /// <param name="indirectBufferAddress">Address of the buffer with the draw parameters, such as count, first index, etc</param>
-        /// <param name="parameterBufferAddress">Address of the buffer with the draw count</param>
+        /// <param name="indirectBufferRange">Memory range of the buffer with the draw parameters, such as count, first index, etc</param>
+        /// <param name="parameterBufferRange">Memory range of the buffer with the draw count</param>
         /// <param name="maxDrawCount">Maximum number of draws that can be made</param>
         /// <param name="stride">Distance in bytes between each entry on the data pointed to by <paramref name="indirectBufferAddress"/></param>
         /// <param name="indexCount">Maximum number of indices that the draw can consume</param>
@@ -573,8 +641,8 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
         public void DrawIndirect(
             ThreedClass engine,
             PrimitiveTopology topology,
-            ulong indirectBufferAddress,
-            ulong parameterBufferAddress,
+            MultiRange indirectBufferRange,
+            MultiRange parameterBufferRange,
             int maxDrawCount,
             int stride,
             int indexCount,
@@ -609,14 +677,15 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
 
             _drawState.DrawIndexed = indexed;
             _drawState.DrawIndirect = true;
+            _drawState.DrawUsesEngineState = true;
             _currentSpecState.SetHasConstantBufferDrawParameters(true);
 
             engine.UpdateState();
 
             if (hasCount)
             {
-                var indirectBuffer = memory.BufferCache.GetBufferRange(indirectBufferAddress, (ulong)maxDrawCount * (ulong)stride);
-                var parameterBuffer = memory.BufferCache.GetBufferRange(parameterBufferAddress, 4);
+                var indirectBuffer = memory.BufferCache.GetBufferRange(indirectBufferRange);
+                var parameterBuffer = memory.BufferCache.GetBufferRange(parameterBufferRange);
 
                 if (indexed)
                 {
@@ -629,7 +698,7 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
             }
             else
             {
-                var indirectBuffer = memory.BufferCache.GetBufferRange(indirectBufferAddress, (ulong)stride);
+                var indirectBuffer = memory.BufferCache.GetBufferRange(indirectBufferRange);
 
                 if (indexed)
                 {
@@ -657,39 +726,42 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
         /// Once we detect the last instanced draw, then we perform the host instanced draw,
         /// with the accumulated instance count.
         /// </summary>
-        public void PerformDeferredDraws()
+        /// <param name="engine">3D engine where this method is being called</param>
+        public void PerformDeferredDraws(ThreedClass engine)
         {
             // Perform any pending instanced draw.
             if (_instancedDrawPending)
             {
                 _instancedDrawPending = false;
 
+                int instanceCount = _instanceIndex + 1;
+                int firstInstance = _instancedFirstInstance;
                 bool indexedInline = _instancedIndexedInline;
 
                 if (_instancedIndexed || indexedInline)
                 {
+                    int indexCount = _instancedIndexCount;
+
                     if (indexedInline)
                     {
                         int inlineIndexCount = _drawState.IbStreamer.GetAndResetInlineIndexCount(_context.Renderer);
-                        BufferRange br = new BufferRange(_drawState.IbStreamer.GetInlineIndexBuffer(), 0, inlineIndexCount * 4);
+                        BufferRange br = new(_drawState.IbStreamer.GetInlineIndexBuffer(), 0, inlineIndexCount * 4);
 
                         _channel.BufferManager.SetIndexBuffer(br, IndexType.UInt);
+                        indexCount = inlineIndexCount;
                     }
 
-                    _context.Renderer.Pipeline.DrawIndexed(
-                        _instancedIndexCount,
-                        _instanceIndex + 1,
-                        _instancedFirstIndex,
-                        _instancedFirstVertex,
-                        _instancedFirstInstance);
+                    int firstIndex = _instancedFirstIndex;
+                    int firstVertex = _instancedFirstVertex;
+
+                    DrawImpl(engine, indexCount, instanceCount, firstIndex, firstVertex, firstInstance, indexed: true);
                 }
                 else
                 {
-                    _context.Renderer.Pipeline.Draw(
-                        _instancedDrawStateCount,
-                        _instanceIndex + 1,
-                        _instancedDrawStateFirst,
-                        _instancedFirstInstance);
+                    int vertexCount = _instancedDrawStateCount;
+                    int firstVertex = _instancedDrawStateFirst;
+
+                    DrawImpl(engine, vertexCount, instanceCount, 0, firstVertex, firstInstance, indexed: false);
                 }
             }
         }
@@ -738,25 +810,69 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
                 updateFlags |= RenderTargetUpdateFlags.Layered;
             }
 
-            if (clearDepth || clearStencil)
+            bool clearDS = clearDepth || clearStencil;
+
+            if (clearDS)
             {
                 updateFlags |= RenderTargetUpdateFlags.UpdateDepthStencil;
             }
-
-            engine.UpdateRenderTargetState(updateFlags, singleUse: componentMask != 0 ? index : -1);
 
             // If there is a mismatch on the host clip region and the one explicitly defined by the guest
             // on the screen scissor state, then we need to force only one texture to be bound to avoid
             // host clipping.
             var screenScissorState = _state.State.ScreenScissorState;
 
+            bool clearAffectedByStencilMask = (_state.State.ClearFlags & 1) != 0;
+            bool clearAffectedByScissor = (_state.State.ClearFlags & 0x100) != 0;
+
+            if (clearDS || componentMask == 15)
+            {
+                // A full clear if scissor is disabled, or it matches the screen scissor state.
+
+                bool fullClear = screenScissorState.X == 0 && screenScissorState.Y == 0;
+
+                if (fullClear && clearAffectedByScissor && _state.State.ScissorState[0].Enable)
+                {
+                    ref var scissorState = ref _state.State.ScissorState[0];
+
+                    fullClear = scissorState.X1 == screenScissorState.X &&
+                        scissorState.Y1 == screenScissorState.Y &&
+                        scissorState.X2 >= screenScissorState.X + screenScissorState.Width &&
+                        scissorState.Y2 >= screenScissorState.Y + screenScissorState.Height;
+                }
+
+                if (fullClear && clearDS)
+                {
+                    // Must clear all aspects of the depth-stencil format.
+
+                    FormatInfo dsFormat = _state.State.RtDepthStencilState.Format.Convert();
+
+                    bool hasDepth = dsFormat.Format.HasDepth();
+                    bool hasStencil = dsFormat.Format.HasStencil();
+
+                    if (hasStencil && (!clearStencil || (clearAffectedByStencilMask && _state.State.StencilTestState.FrontMask != 0xff)))
+                    {
+                        fullClear = false;
+                    }
+                    else if (hasDepth && !clearDepth)
+                    {
+                        fullClear = false;
+                    }
+                }
+
+                if (fullClear)
+                {
+                    updateFlags |= RenderTargetUpdateFlags.DiscardClip;
+                }
+            }
+
+            engine.UpdateRenderTargetState(updateFlags, singleUse: componentMask != 0 ? index : -1);
+
             // Must happen after UpdateRenderTargetState to have up-to-date clip region values.
             bool clipMismatch = (screenScissorState.X | screenScissorState.Y) != 0 ||
                                 screenScissorState.Width != _channel.TextureManager.ClipRegionWidth ||
                                 screenScissorState.Height != _channel.TextureManager.ClipRegionHeight;
 
-            bool clearAffectedByStencilMask = (_state.State.ClearFlags & 1) != 0;
-            bool clearAffectedByScissor = (_state.State.ClearFlags & 0x100) != 0;
             bool needsCustomScissor = !clearAffectedByScissor || clipMismatch;
 
             // Scissor and rasterizer discard also affect clears.
@@ -797,7 +913,7 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
 
                 Span<Rectangle<int>> scissors = stackalloc Rectangle<int>[]
                 {
-                    new Rectangle<int>(scissorX, scissorY, scissorW, scissorH)
+                    new Rectangle<int>(scissorX, scissorY, scissorW, scissorH),
                 };
 
                 _context.Renderer.Pipeline.SetScissors(scissors);
@@ -809,7 +925,7 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
             {
                 var clearColor = _state.State.ClearColors;
 
-                ColorF color = new ColorF(clearColor.Red, clearColor.Green, clearColor.Blue, clearColor.Alpha);
+                ColorF color = new(clearColor.Red, clearColor.Green, clearColor.Blue, clearColor.Alpha);
 
                 _context.Renderer.Pipeline.ClearRenderTargetColor(index, layer, layerCount, componentMask, color);
             }
@@ -851,6 +967,20 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
             {
                 _context.Renderer.Pipeline.EndHostConditionalRendering();
             }
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _vtgAsCompute.Dispose();
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
         }
     }
 }

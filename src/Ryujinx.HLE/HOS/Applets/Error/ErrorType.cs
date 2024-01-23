@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.HLE.HOS.Applets.Error
+namespace Ryujinx.HLE.HOS.Applets.Error
 {
     enum ErrorType : byte
     {
@@ -8,6 +8,6 @@
         ErrorEulaArg,
         ErrorPctlArg,
         ErrorRecordArg,
-        SystemUpdateEulaArg = 8
+        SystemUpdateEulaArg = 8,
     }
 }

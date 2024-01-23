@@ -1,7 +1,8 @@
-﻿namespace Ryujinx.HLE.HOS.Services.SurfaceFlinger
+namespace Ryujinx.HLE.HOS.Services.SurfaceFlinger
 {
     enum ColorComponent : uint
     {
+#pragma warning disable IDE0055 // Disable formatting
         X1           = (0x01 << ColorShift.Component) | ColorBytePerPixel.Bpp1,
         X2           = (0x02 << ColorShift.Component) | ColorBytePerPixel.Bpp2,
         X4           = (0x03 << ColorShift.Component) | ColorBytePerPixel.Bpp4,
@@ -38,5 +39,6 @@
         Y12X12       = (0x24 << ColorShift.Component) | ColorBytePerPixel.Bpp32,
         X20Y20Z20    = (0x26 << ColorShift.Component) | ColorBytePerPixel.Bpp64,
         X16Y16Z16W16 = (0x27 << ColorShift.Component) | ColorBytePerPixel.Bpp64,
+#pragma warning restore IDE0055
     }
 }

@@ -1,10 +1,10 @@
-﻿using Ryujinx.Horizon.Common;
+using Ryujinx.Horizon.Common;
 using Ryujinx.Memory;
 using System;
 
 namespace Ryujinx.Horizon
 {
-    static class HorizonStatic
+    public static class HorizonStatic
     {
         [ThreadStatic]
         private static HorizonOptions _options;
@@ -21,24 +21,24 @@ namespace Ryujinx.Horizon
         [ThreadStatic]
         private static int _threadHandle;
 
-        public static HorizonOptions        Options             => _options;
-        public static ISyscallApi           Syscall             => _syscall;
-        public static IVirtualMemoryManager AddressSpace        => _addressSpace;
-        public static IThreadContext        ThreadContext       => _threadContext;
-        public static int                   CurrentThreadHandle => _threadHandle;
+        public static HorizonOptions Options => _options;
+        public static ISyscallApi Syscall => _syscall;
+        public static IVirtualMemoryManager AddressSpace => _addressSpace;
+        public static IThreadContext ThreadContext => _threadContext;
+        public static int CurrentThreadHandle => _threadHandle;
 
         public static void Register(
-            HorizonOptions        options,
-            ISyscallApi           syscallApi,
+            HorizonOptions options,
+            ISyscallApi syscallApi,
             IVirtualMemoryManager addressSpace,
-            IThreadContext        threadContext,
-            int                   threadHandle)
+            IThreadContext threadContext,
+            int threadHandle)
         {
-            _options       = options;
-            _syscall       = syscallApi;
-            _addressSpace  = addressSpace;
+            _options = options;
+            _syscall = syscallApi;
+            _addressSpace = addressSpace;
             _threadContext = threadContext;
-            _threadHandle  = threadHandle;
+            _threadHandle = threadHandle;
         }
     }
 }

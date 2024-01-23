@@ -1,8 +1,8 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Hid
+namespace Ryujinx.HLE.HOS.Services.Hid
 {
     public struct VibrationDeviceValue
     {
-        public VibrationDeviceType     DeviceType;
+        public VibrationDeviceType DeviceType;
         public VibrationDevicePosition Position;
     }
 }

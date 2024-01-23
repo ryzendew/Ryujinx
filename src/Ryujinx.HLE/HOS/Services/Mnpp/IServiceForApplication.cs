@@ -1,4 +1,4 @@
-﻿using Ryujinx.Common;
+using Ryujinx.Common;
 using Ryujinx.Common.Logging;
 using Ryujinx.Cpu;
 using Ryujinx.HLE.HOS.Services.Account.Acc;
@@ -32,7 +32,7 @@ namespace Ryujinx.HLE.HOS.Services.Mnpp
         public ResultCode SendRawTelemetryData(ServiceCtx context)
         {
             ulong titleIdInputPosition = context.Request.SendBuff[0].Position;
-            ulong titleIdInputSize     = context.Request.SendBuff[0].Size;
+            ulong titleIdInputSize = context.Request.SendBuff[0].Size;
 
             UserId userId = context.RequestData.ReadStruct<UserId>();
 

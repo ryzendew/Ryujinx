@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.Graphics.Nvdec.Vp9.Types
+namespace Ryujinx.Graphics.Nvdec.Vp9.Types
 {
     internal enum PartitionType
     {
@@ -7,6 +7,6 @@
         PartitionVert,
         PartitionSplit,
         PartitionTypes,
-        PartitionInvalid = PartitionTypes
+        PartitionInvalid = PartitionTypes,
     }
 }

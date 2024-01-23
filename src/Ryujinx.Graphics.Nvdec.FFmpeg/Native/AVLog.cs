@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.Graphics.Nvdec.FFmpeg.Native
+namespace Ryujinx.Graphics.Nvdec.FFmpeg.Native
 {
     enum AVLog
     {
@@ -10,6 +10,6 @@
         Verbose = 40,
         Debug = 48,
         Trace = 56,
-        MaxOffset = 64
+        MaxOffset = 64,
     }
 }

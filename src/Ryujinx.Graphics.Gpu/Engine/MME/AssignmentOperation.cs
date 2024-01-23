@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.Graphics.Gpu.Engine.MME
+namespace Ryujinx.Graphics.Gpu.Engine.MME
 {
     /// <summary>
     /// GPU Macro assignment operation.
@@ -12,6 +12,6 @@
         MoveAndSend = 4,
         FetchAndSetMaddr = 5,
         MoveAndSetMaddrThenFetchAndSend = 6,
-        MoveAndSetMaddrThenSendHigh = 7
+        MoveAndSetMaddrThenSendHigh = 7,
     }
 }

@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 
 namespace Ryujinx.Graphics.Nvdec.FFmpeg.Native
 {
     struct AVCodec
     {
-#pragma warning disable CS0649
+#pragma warning disable CS0649 // Field is never assigned to
         public unsafe byte* Name;
         public unsafe byte* LongName;
         public int Type;

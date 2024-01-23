@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.HLE.HOS.Kernel.SupervisorCall
+namespace Ryujinx.HLE.HOS.Kernel.SupervisorCall
 {
     enum InfoType : uint
     {
@@ -29,6 +29,6 @@
         IsApplication,
         FreeThreadCount,
         ThreadTickCount,
-        MesosphereCurrentProcess = 65001
+        MesosphereCurrentProcess = 65001,
     }
 }

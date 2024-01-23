@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace Ryujinx.Graphics.Shader.Translation
 {
@@ -12,16 +12,19 @@ namespace Ryujinx.Graphics.Shader.Translation
         None = 0,
 
         // Affected by resolution scaling.
-        IntegerSampling = 1 << 0,
-        FragCoordXY     = 1 << 1,
+        FragCoordXY = 1 << 1,
 
         Bindless = 1 << 2,
         InstanceId = 1 << 3,
         DrawParameters = 1 << 4,
         RtLayer = 1 << 5,
-        CbIndexing = 1 << 6,
-        IaIndexing = 1 << 7,
-        OaIndexing = 1 << 8,
-        FixedFuncAttr = 1 << 9
+        Shuffle = 1 << 6,
+        ViewportIndex = 1 << 7,
+        ViewportMask = 1 << 8,
+        FixedFuncAttr = 1 << 9,
+        LocalMemory = 1 << 10,
+        SharedMemory = 1 << 11,
+        Store = 1 << 12,
+        VtgAsCompute = 1 << 13,
     }
 }

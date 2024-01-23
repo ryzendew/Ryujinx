@@ -1,11 +1,11 @@
-﻿using Ryujinx.Graphics.GAL.Multithreading.Model;
+using Ryujinx.Graphics.GAL.Multithreading.Model;
 using Ryujinx.Graphics.GAL.Multithreading.Resources;
 
 namespace Ryujinx.Graphics.GAL.Multithreading.Commands
 {
     struct TryHostConditionalRenderingFlushCommand : IGALCommand, IGALCommand<TryHostConditionalRenderingFlushCommand>
     {
-        public CommandType CommandType => CommandType.TryHostConditionalRenderingFlush;
+        public readonly CommandType CommandType => CommandType.TryHostConditionalRenderingFlush;
         private TableRef<ThreadedCounterEvent> _value;
         private TableRef<ThreadedCounterEvent> _compare;
         private bool _isEqual;

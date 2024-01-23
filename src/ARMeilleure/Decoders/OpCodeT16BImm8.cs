@@ -1,4 +1,4 @@
-﻿namespace ARMeilleure.Decoders
+namespace ARMeilleure.Decoders
 {
     class OpCodeT16BImm8 : OpCodeT16, IOpCode32BImm
     {
@@ -10,7 +10,7 @@
         {
             Cond = (Condition)((opCode >> 8) & 0xf);
 
-            int imm = (opCode << 24) >> 23; 
+            int imm = (opCode << 24) >> 23;
             Immediate = GetPc() + imm;
         }
     }

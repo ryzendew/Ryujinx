@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.Graphics.Host1x
+namespace Ryujinx.Graphics.Host1x
 {
     enum OpCode
     {
@@ -16,6 +16,6 @@
         NonIncrW,
         GatherW,
         RestartW,
-        Extend
+        Extend,
     }
 }

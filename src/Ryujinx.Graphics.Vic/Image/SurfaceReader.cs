@@ -1,4 +1,4 @@
-﻿using Ryujinx.Common.Logging;
+using Ryujinx.Common.Logging;
 using Ryujinx.Common.Memory;
 using Ryujinx.Graphics.Texture;
 using Ryujinx.Graphics.Vic.Types;
@@ -21,7 +21,8 @@ namespace Ryujinx.Graphics.Vic.Image
         {
             switch (surfaceConfig.SlotPixelFormat)
             {
-                case PixelFormat.Y8___V8U8_N420: return ReadNv12(rm, ref config, ref surfaceConfig, ref offsets);
+                case PixelFormat.Y8___V8U8_N420:
+                    return ReadNv12(rm, ref config, ref surfaceConfig, ref offsets);
             }
 
             Logger.Error?.Print(LogClass.Vic, $"Unsupported pixel format \"{surfaceConfig.SlotPixelFormat}\".");
@@ -46,7 +47,7 @@ namespace Ryujinx.Graphics.Vic.Image
             int yStride = GetPitch(width, 1);
             int uvStride = GetPitch(input.UvWidth, 2);
 
-            Surface output = new Surface(rm.SurfacePool, width, height);
+            Surface output = new(rm.SurfacePool, width, height);
 
             if (Sse41.IsSupported)
             {
@@ -276,7 +277,7 @@ namespace Ryujinx.Graphics.Vic.Image
             int bytesPerPixel,
             int planes)
         {
-            InputSurface surface = new InputSurface();
+            InputSurface surface = new();
 
             surface.Initialize();
 
@@ -416,7 +417,7 @@ namespace Ryujinx.Graphics.Vic.Image
                 0 => offsets.LumaOffset,
                 1 => offsets.ChromaUOffset,
                 2 => offsets.ChromaVOffset,
-                _ => throw new ArgumentOutOfRangeException(nameof(plane))
+                _ => throw new ArgumentOutOfRangeException(nameof(plane)),
             };
         }
 
@@ -453,12 +454,12 @@ namespace Ryujinx.Graphics.Vic.Image
             int srcStride = GetPitch(width, bytesPerPixel);
             int inSize = srcStride * height;
 
-            ReadOnlySpan<byte> src = rm.Gmm.GetSpan(ExtendOffset(offset), inSize);
+            ReadOnlySpan<byte> src = rm.MemoryManager.GetSpan(ExtendOffset(offset), inSize);
 
             int outSize = dstStride * height;
             int bufferIndex = rm.BufferPool.RentMinimum(outSize, out byte[] buffer);
             Span<byte> dst = buffer;
-            dst = dst.Slice(0, outSize);
+            dst = dst[..outSize];
 
             for (int y = 0; y < height; y++)
             {
@@ -480,14 +481,14 @@ namespace Ryujinx.Graphics.Vic.Image
         {
             int inSize = GetBlockLinearSize(width, height, bytesPerPixel, gobBlocksInY);
 
-            ReadOnlySpan<byte> src = rm.Gmm.GetSpan(ExtendOffset(offset), inSize);
+            ReadOnlySpan<byte> src = rm.MemoryManager.GetSpan(ExtendOffset(offset), inSize);
 
             int outSize = dstStride * height;
             int bufferIndex = rm.BufferPool.RentMinimum(outSize, out byte[] buffer);
             Span<byte> dst = buffer;
-            dst = dst.Slice(0, outSize);
+            dst = dst[..outSize];
 
-            LayoutConverter.ConvertBlockLinearToLinear(dst.Slice(dstStart), width, height, dstStride, bytesPerPixel, gobBlocksInY, src);
+            LayoutConverter.ConvertBlockLinearToLinear(dst[dstStart..], width, height, dstStride, bytesPerPixel, gobBlocksInY, src);
 
             return new RentedBuffer(dst, bufferIndex);
         }

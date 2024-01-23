@@ -1,10 +1,10 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Mii.Types
+namespace Ryujinx.HLE.HOS.Services.Mii.Types
 {
     enum Age : uint
     {
         Young,
         Normal,
         Old,
-        All
+        All,
     }
 }

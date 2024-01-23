@@ -1,4 +1,4 @@
-﻿using Ryujinx.Audio.Renderer.Device;
+using Ryujinx.Audio.Renderer.Device;
 using Ryujinx.Audio.Renderer.Parameter;
 using Ryujinx.Audio.Renderer.Server;
 using Ryujinx.HLE.HOS.Kernel.Memory;
@@ -10,8 +10,8 @@ namespace Ryujinx.HLE.HOS.Services.Audio
 {
     class AudioRendererManager : IAudioRendererManager
     {
-        private AudioRendererManagerImpl _impl;
-        private VirtualDeviceSessionRegistry _registry;
+        private readonly AudioRendererManagerImpl _impl;
+        private readonly VirtualDeviceSessionRegistry _registry;
 
         public AudioRendererManager(AudioRendererManagerImpl impl, VirtualDeviceSessionRegistry registry)
         {

@@ -1,10 +1,10 @@
+using Avalonia.Controls;
 using FluentAvalonia.Core;
 using FluentAvalonia.UI.Controls;
 using Ryujinx.Ava.Common.Locale;
 using Ryujinx.Ava.UI.ViewModels;
 using Ryujinx.HLE.FileSystem;
 using System;
-using System.ComponentModel;
 
 namespace Ryujinx.Ava.UI.Windows
 {
@@ -16,7 +16,7 @@ namespace Ryujinx.Ava.UI.Windows
         {
             Title = $"Ryujinx {Program.Version} - {LocaleManager.Instance[LocaleKeys.Settings]}";
 
-            ViewModel   = new SettingsViewModel(virtualFileSystem, contentManager);
+            ViewModel = new SettingsViewModel(virtualFileSystem, contentManager);
             DataContext = ViewModel;
 
             ViewModel.CloseWindow += Close;
@@ -28,7 +28,7 @@ namespace Ryujinx.Ava.UI.Windows
 
         public SettingsWindow()
         {
-            ViewModel   = new SettingsViewModel();
+            ViewModel = new SettingsViewModel();
             DataContext = ViewModel;
 
             InitializeComponent();
@@ -41,7 +41,7 @@ namespace Ryujinx.Ava.UI.Windows
 
             if (Owner is MainWindow window && ViewModel.DirectoryChanged)
             {
-                window.ViewModel.LoadApplications();
+                window.LoadApplications();
             }
         }
 
@@ -93,7 +93,7 @@ namespace Ryujinx.Ava.UI.Windows
             }
         }
 
-        protected override void OnClosing(CancelEventArgs e)
+        protected override void OnClosing(WindowClosingEventArgs e)
         {
             HotkeysPage.Dispose();
             InputPage.Dispose();

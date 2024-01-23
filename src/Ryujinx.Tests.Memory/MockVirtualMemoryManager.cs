@@ -1,4 +1,4 @@
-﻿using Ryujinx.Memory;
+using Ryujinx.Memory;
 using Ryujinx.Memory.Range;
 using System;
 using System.Collections.Generic;
@@ -98,6 +98,11 @@ namespace Ryujinx.Tests.Memory
         }
 
         public void SignalMemoryTracking(ulong va, ulong size, bool write, bool precise = false, int? exemptId = null)
+        {
+            throw new NotImplementedException();
+        }
+
+        public void Reprotect(ulong va, ulong size, MemoryPermission protection)
         {
             throw new NotImplementedException();
         }

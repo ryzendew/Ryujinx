@@ -1,8 +1,8 @@
-﻿namespace Ryujinx.Graphics.GAL.Multithreading.Commands
+namespace Ryujinx.Graphics.GAL.Multithreading.Commands
 {
     struct TextureBarrierTiledCommand : IGALCommand, IGALCommand<TextureBarrierTiledCommand>
     {
-        public CommandType CommandType => CommandType.TextureBarrierTiled;
+        public readonly CommandType CommandType => CommandType.TextureBarrierTiled;
 
         public static void Run(ref TextureBarrierTiledCommand command, ThreadedRenderer threaded, IRenderer renderer)
         {

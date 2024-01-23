@@ -1,10 +1,10 @@
-﻿using Ryujinx.Common.Memory;
+using Ryujinx.Common.Memory;
 
 namespace Ryujinx.Graphics.Host1x
 {
     struct Host1xClassRegisters
     {
-#pragma warning disable CS0649
+#pragma warning disable CS0649 // Field is never assigned to
         public uint IncrSyncpt;
         public uint IncrSyncptCntrl;
         public uint IncrSyncptError;

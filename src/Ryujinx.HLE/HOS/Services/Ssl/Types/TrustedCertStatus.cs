@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Ssl.Types
+namespace Ryujinx.HLE.HOS.Services.Ssl.Types
 {
     enum TrustedCertStatus : uint
     {
@@ -7,6 +7,6 @@
         EnabledNotTrusted,
         Revoked,
 
-        Invalid = uint.MaxValue
+        Invalid = uint.MaxValue,
     }
 }

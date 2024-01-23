@@ -1,4 +1,5 @@
 using Ryujinx.Common;
+using Ryujinx.Graphics.Device;
 using Ryujinx.Graphics.GAL;
 using Ryujinx.Graphics.Gpu.Engine.GPFifo;
 using Ryujinx.Graphics.Gpu.Memory;
@@ -86,6 +87,11 @@ namespace Ryujinx.Graphics.Gpu
         internal ConcurrentDictionary<ulong, PhysicalMemory> PhysicalMemoryRegistry { get; }
 
         /// <summary>
+        /// Support buffer updater.
+        /// </summary>
+        internal SupportBufferUpdater SupportBufferUpdater { get; }
+
+        /// <summary>
         /// Host hardware capabilities.
         /// </summary>
         internal Capabilities Capabilities;
@@ -97,6 +103,11 @@ namespace Ryujinx.Graphics.Gpu
 
         private Thread _gpuThread;
         private bool _pendingSync;
+
+        private long _modifiedSequence;
+        private readonly ulong _firstTimestamp;
+
+        private readonly ManualResetEvent _gpuReadyEvent;
 
         /// <summary>
         /// Creates a new instance of the GPU emulation context.
@@ -113,6 +124,7 @@ namespace Ryujinx.Graphics.Gpu
             Window = new Window(this);
 
             HostInitalized = new ManualResetEvent(false);
+            _gpuReadyEvent = new ManualResetEvent(false);
 
             SyncActions = new List<ISyncActionHandler>();
             SyncpointActions = new List<ISyncActionHandler>();
@@ -121,6 +133,10 @@ namespace Ryujinx.Graphics.Gpu
             DeferredActions = new Queue<Action>();
 
             PhysicalMemoryRegistry = new ConcurrentDictionary<ulong, PhysicalMemory>();
+
+            SupportBufferUpdater = new SupportBufferUpdater(renderer);
+
+            _firstTimestamp = ConvertNanosecondsToTicks((ulong)PerformanceCounter.ElapsedNanoseconds);
         }
 
         /// <summary>
@@ -146,6 +162,22 @@ namespace Ryujinx.Graphics.Gpu
             }
 
             return new MemoryManager(physicalMemory);
+        }
+
+        /// <summary>
+        /// Creates a new device memory manager.
+        /// </summary>
+        /// <param name="pid">ID of the process that owns the memory manager</param>
+        /// <returns>The memory manager</returns>
+        /// <exception cref="ArgumentException">Thrown when <paramref name="pid"/> is invalid</exception>
+        public DeviceMemoryManager CreateDeviceMemoryManager(ulong pid)
+        {
+            if (!PhysicalMemoryRegistry.TryGetValue(pid, out var physicalMemory))
+            {
+                throw new ArgumentException("The PID is invalid or the process was not registered", nameof(pid));
+            }
+
+            return physicalMemory.CreateDeviceMemoryManager();
         }
 
         /// <summary>
@@ -201,12 +233,22 @@ namespace Ryujinx.Graphics.Gpu
         }
 
         /// <summary>
+        /// Gets a sequence number for resource modification ordering. This increments on each call.
+        /// </summary>
+        /// <returns>A sequence number for resource modification ordering</returns>
+        internal long GetModifiedSequence()
+        {
+            return _modifiedSequence++;
+        }
+
+        /// <summary>
         /// Gets the value of the GPU timer.
         /// </summary>
         /// <returns>The current GPU timestamp</returns>
-        public ulong GetTimestamp()
+        internal ulong GetTimestamp()
         {
-            ulong ticks = ConvertNanosecondsToTicks((ulong)PerformanceCounter.ElapsedNanoseconds);
+            // Guest timestamp will start at 0, instead of host value.
+            ulong ticks = ConvertNanosecondsToTicks((ulong)PerformanceCounter.ElapsedNanoseconds) - _firstTimestamp;
 
             if (GraphicsConfig.FastGpuTime)
             {
@@ -240,6 +282,16 @@ namespace Ryujinx.Graphics.Gpu
             {
                 physicalMemory.ShaderCache.Initialize(cancellationToken);
             }
+
+            _gpuReadyEvent.Set();
+        }
+
+        /// <summary>
+        /// Waits until the GPU is ready to receive commands.
+        /// </summary>
+        public void WaitUntilGpuReady()
+        {
+            _gpuReadyEvent.WaitOne();
         }
 
         /// <summary>
@@ -375,9 +427,9 @@ namespace Ryujinx.Graphics.Gpu
         /// </summary>
         public void Dispose()
         {
-            Renderer.Dispose();
             GPFifo.Dispose();
             HostInitalized.Dispose();
+            _gpuReadyEvent.Dispose();
 
             // Has to be disposed before processing deferred actions, as it will produce some.
             foreach (var physicalMemory in PhysicalMemoryRegistry.Values)
@@ -385,9 +437,13 @@ namespace Ryujinx.Graphics.Gpu
                 physicalMemory.Dispose();
             }
 
+            SupportBufferUpdater.Dispose();
+
             PhysicalMemoryRegistry.Clear();
 
             RunDeferredActions();
+
+            Renderer.Dispose();
         }
     }
 }

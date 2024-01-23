@@ -1,8 +1,8 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Nifm.StaticService.GeneralService
+namespace Ryujinx.HLE.HOS.Services.Nifm.StaticService.GeneralService
 {
     class GeneralServiceDetail
     {
-        public int  ClientId;
+        public int ClientId;
         public bool IsAnyInternetRequestAccepted;
     }
 }

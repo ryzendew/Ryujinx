@@ -1,4 +1,4 @@
-﻿using OpenTK.Graphics.OpenGL;
+using OpenTK.Graphics.OpenGL;
 using Ryujinx.Common.Logging;
 using Ryujinx.Graphics.GAL;
 using Ryujinx.Graphics.Shader;
@@ -668,7 +668,7 @@ namespace Ryujinx.Graphics.OpenGL
                 ShaderStage.TessellationEvaluation => ShaderType.TessEvaluationShader,
                 ShaderStage.Geometry => ShaderType.GeometryShader,
                 ShaderStage.Fragment => ShaderType.FragmentShader,
-                _ => ShaderType.VertexShader
+                _ => ShaderType.VertexShader,
             };
         }
     }

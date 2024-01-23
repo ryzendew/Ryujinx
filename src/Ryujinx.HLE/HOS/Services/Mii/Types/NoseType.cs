@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Mii.Types
+namespace Ryujinx.HLE.HOS.Services.Mii.Types
 {
     enum NoseType : byte
     {
@@ -21,7 +21,7 @@
         Droopy,
         ArrowLarge,
 
-        Min = 0,
-        Max = 17
+        Min = Normal,
+        Max = ArrowLarge,
     }
 }

@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
-
 using static Ryujinx.Graphics.Shader.IntermediateRepresentation.OperandHelper;
 
 namespace Ryujinx.Graphics.Shader.Translation
@@ -12,7 +11,10 @@ namespace Ryujinx.Graphics.Shader.Translation
     class EmitterContext
     {
         public DecodedProgram Program { get; }
-        public ShaderConfig Config { get; }
+        public TranslatorContext TranslatorContext { get; }
+        public ResourceManager ResourceManager { get; }
+
+        public bool VertexAsCompute { get; }
 
         public bool IsNonMain { get; }
 
@@ -49,25 +51,110 @@ namespace Ryujinx.Graphics.Shader.Translation
         private readonly List<Operation> _operations;
         private readonly Dictionary<ulong, BlockLabel> _labels;
 
-        public EmitterContext(DecodedProgram program, ShaderConfig config, bool isNonMain)
+        public EmitterContext()
         {
-            Program = program;
-            Config = config;
-            IsNonMain = isNonMain;
             _operations = new List<Operation>();
             _labels = new Dictionary<ulong, BlockLabel>();
+        }
+
+        public EmitterContext(
+            TranslatorContext translatorContext,
+            ResourceManager resourceManager,
+            DecodedProgram program,
+            bool vertexAsCompute,
+            bool isNonMain) : this()
+        {
+            TranslatorContext = translatorContext;
+            ResourceManager = resourceManager;
+            Program = program;
+            VertexAsCompute = vertexAsCompute;
+            IsNonMain = isNonMain;
 
             EmitStart();
         }
 
         private void EmitStart()
         {
-            if (Config.Stage == ShaderStage.Vertex &&
-                Config.Options.TargetApi == TargetApi.Vulkan &&
-                (Config.Options.Flags & TranslationFlags.VertexA) == 0)
+            if (TranslatorContext.Options.Flags.HasFlag(TranslationFlags.VertexA))
+            {
+                return;
+            }
+
+            if (TranslatorContext.Definitions.Stage == ShaderStage.Vertex && TranslatorContext.Options.TargetApi == TargetApi.Vulkan)
             {
                 // Vulkan requires the point size to be always written on the shader if the primitive topology is points.
-                this.Store(StorageKind.Output, IoVariable.PointSize, null, ConstF(Config.GpuAccessor.QueryPointSize()));
+                this.Store(StorageKind.Output, IoVariable.PointSize, null, ConstF(TranslatorContext.Definitions.PointSize));
+            }
+
+            if (VertexAsCompute)
+            {
+                int vertexInfoCbBinding = ResourceManager.Reservations.VertexInfoConstantBufferBinding;
+                int countFieldIndex = TranslatorContext.Stage == ShaderStage.Vertex
+                    ? (int)VertexInfoBufferField.VertexCounts
+                    : (int)VertexInfoBufferField.GeometryCounts;
+
+                Operand outputVertexOffset = this.Load(StorageKind.Input, IoVariable.GlobalId, Const(0));
+                Operand vertexCount = this.Load(StorageKind.ConstantBuffer, vertexInfoCbBinding, Const(countFieldIndex), Const(0));
+                Operand isVertexOob = this.ICompareGreaterOrEqualUnsigned(outputVertexOffset, vertexCount);
+
+                Operand lblVertexInBounds = Label();
+
+                this.BranchIfFalse(lblVertexInBounds, isVertexOob);
+                this.Return();
+                this.MarkLabel(lblVertexInBounds);
+
+                Operand outputInstanceOffset = this.Load(StorageKind.Input, IoVariable.GlobalId, Const(1));
+                Operand instanceCount = this.Load(StorageKind.ConstantBuffer, vertexInfoCbBinding, Const((int)VertexInfoBufferField.VertexCounts), Const(1));
+                Operand firstVertex = this.Load(StorageKind.ConstantBuffer, vertexInfoCbBinding, Const((int)VertexInfoBufferField.VertexCounts), Const(2));
+                Operand firstInstance = this.Load(StorageKind.ConstantBuffer, vertexInfoCbBinding, Const((int)VertexInfoBufferField.VertexCounts), Const(3));
+                Operand ibBaseOffset = this.Load(StorageKind.ConstantBuffer, vertexInfoCbBinding, Const((int)VertexInfoBufferField.GeometryCounts), Const(3));
+                Operand isInstanceOob = this.ICompareGreaterOrEqualUnsigned(outputInstanceOffset, instanceCount);
+
+                Operand lblInstanceInBounds = Label();
+
+                this.BranchIfFalse(lblInstanceInBounds, isInstanceOob);
+                this.Return();
+                this.MarkLabel(lblInstanceInBounds);
+
+                if (TranslatorContext.Stage == ShaderStage.Vertex)
+                {
+                    Operand vertexIndexVr = Local();
+
+                    this.TextureSample(
+                        SamplerType.TextureBuffer,
+                        TextureFlags.IntCoords,
+                        ResourceManager.Reservations.IndexBufferTextureBinding,
+                        1,
+                        new[] { vertexIndexVr },
+                        new[] { this.IAdd(ibBaseOffset, outputVertexOffset) });
+
+                    this.Store(StorageKind.LocalMemory, ResourceManager.LocalVertexIndexVertexRateMemoryId, this.IAdd(firstVertex, vertexIndexVr));
+                    this.Store(StorageKind.LocalMemory, ResourceManager.LocalVertexIndexInstanceRateMemoryId, this.IAdd(firstInstance, outputInstanceOffset));
+                }
+                else if (TranslatorContext.Stage == ShaderStage.Geometry)
+                {
+                    int inputVertices = TranslatorContext.Definitions.InputTopology.ToInputVertices();
+
+                    Operand baseVertex = this.IMultiply(outputVertexOffset, Const(inputVertices));
+
+                    for (int index = 0; index < inputVertices; index++)
+                    {
+                        Operand vertexIndex = Local();
+
+                        this.TextureSample(
+                            SamplerType.TextureBuffer,
+                            TextureFlags.IntCoords,
+                            ResourceManager.Reservations.TopologyRemapBufferTextureBinding,
+                            1,
+                            new[] { vertexIndex },
+                            new[] { this.IAdd(baseVertex, Const(index)) });
+
+                        this.Store(StorageKind.LocalMemory, ResourceManager.LocalTopologyRemapMemoryId, Const(index), vertexIndex);
+                    }
+
+                    this.Store(StorageKind.LocalMemory, ResourceManager.LocalGeometryOutputVertexCountMemoryId, Const(0));
+                    this.Store(StorageKind.LocalMemory, ResourceManager.LocalGeometryOutputIndexCountMemoryId, Const(0));
+                }
             }
         }
 
@@ -80,7 +167,7 @@ namespace Ryujinx.Graphics.Shader.Translation
 
         public Operand Add(Instruction inst, Operand dest = null, params Operand[] sources)
         {
-            Operation operation = new Operation(inst, dest, sources);
+            Operation operation = new(inst, dest, sources);
 
             _operations.Add(operation);
 
@@ -89,7 +176,7 @@ namespace Ryujinx.Graphics.Shader.Translation
 
         public Operand Add(Instruction inst, StorageKind storageKind, Operand dest = null, params Operand[] sources)
         {
-            Operation operation = new Operation(inst, storageKind, dest, sources);
+            Operation operation = new(inst, storageKind, dest, sources);
 
             _operations.Add(operation);
 
@@ -100,7 +187,7 @@ namespace Ryujinx.Graphics.Shader.Translation
         {
             Operand[] dests = new[] { dest.Item1, dest.Item2 };
 
-            Operation operation = new Operation(inst, 0, dests, sources);
+            Operation operation = new(inst, 0, dests, sources);
 
             Add(operation);
 
@@ -110,79 +197,6 @@ namespace Ryujinx.Graphics.Shader.Translation
         public void Add(Operation operation)
         {
             _operations.Add(operation);
-        }
-
-        public TextureOperation CreateTextureOperation(
-            Instruction inst,
-            SamplerType type,
-            TextureFlags flags,
-            int handle,
-            int compIndex,
-            Operand[] dests,
-            params Operand[] sources)
-        {
-            return CreateTextureOperation(inst, type, TextureFormat.Unknown, flags, handle, compIndex, dests, sources);
-        }
-
-        public TextureOperation CreateTextureOperation(
-            Instruction inst,
-            SamplerType type,
-            TextureFormat format,
-            TextureFlags flags,
-            int handle,
-            int compIndex,
-            Operand[] dests,
-            params Operand[] sources)
-        {
-            if (!flags.HasFlag(TextureFlags.Bindless))
-            {
-                Config.SetUsedTexture(inst, type, format, flags, TextureOperation.DefaultCbufSlot, handle);
-            }
-
-            return new TextureOperation(inst, type, format, flags, handle, compIndex, dests, sources);
-        }
-
-        public void FlagAttributeRead(int attribute)
-        {
-            if (Config.Stage == ShaderStage.Vertex && attribute == AttributeConsts.InstanceId)
-            {
-                Config.SetUsedFeature(FeatureFlags.InstanceId);
-            }
-            else if (Config.Stage == ShaderStage.Fragment)
-            {
-                switch (attribute)
-                {
-                    case AttributeConsts.PositionX:
-                    case AttributeConsts.PositionY:
-                        Config.SetUsedFeature(FeatureFlags.FragCoordXY);
-                        break;
-                }
-            }
-        }
-
-        public void FlagAttributeWritten(int attribute)
-        {
-            if (Config.Stage == ShaderStage.Vertex)
-            {
-                switch (attribute)
-                {
-                    case AttributeConsts.ClipDistance0:
-                    case AttributeConsts.ClipDistance1:
-                    case AttributeConsts.ClipDistance2:
-                    case AttributeConsts.ClipDistance3:
-                    case AttributeConsts.ClipDistance4:
-                    case AttributeConsts.ClipDistance5:
-                    case AttributeConsts.ClipDistance6:
-                    case AttributeConsts.ClipDistance7:
-                        Config.SetClipDistanceWritten((attribute - AttributeConsts.ClipDistance0) / 4);
-                        break;
-                }
-            }
-
-            if (Config.Stage != ShaderStage.Fragment && attribute == AttributeConsts.Layer)
-            {
-                Config.SetUsedFeature(FeatureFlags.RtLayer);
-            }
         }
 
         public void MarkLabel(Operand label)
@@ -230,19 +244,65 @@ namespace Ryujinx.Graphics.Shader.Translation
 
         public void PrepareForVertexReturn()
         {
-            if (Config.GpuAccessor.QueryViewportTransformDisable())
+            // TODO: Support transform feedback emulation on stages other than vertex.
+            // Those stages might produce more primitives, so it needs a way to "compact" the output after it is written.
+
+            if (!TranslatorContext.GpuAccessor.QueryHostSupportsTransformFeedback() &&
+                TranslatorContext.GpuAccessor.QueryTransformFeedbackEnabled() &&
+                TranslatorContext.Stage == ShaderStage.Vertex)
+            {
+                Operand vertexCount = this.Load(StorageKind.ConstantBuffer, SupportBuffer.Binding, Const((int)SupportBufferField.TfeVertexCount));
+
+                for (int tfbIndex = 0; tfbIndex < ResourceReservations.TfeBuffersCount; tfbIndex++)
+                {
+                    var locations = TranslatorContext.GpuAccessor.QueryTransformFeedbackVaryingLocations(tfbIndex);
+                    var stride = TranslatorContext.GpuAccessor.QueryTransformFeedbackStride(tfbIndex);
+
+                    Operand baseOffset = this.Load(StorageKind.ConstantBuffer, SupportBuffer.Binding, Const((int)SupportBufferField.TfeOffset), Const(tfbIndex));
+                    Operand baseVertex = this.Load(StorageKind.Input, IoVariable.BaseVertex);
+                    Operand baseInstance = this.Load(StorageKind.Input, IoVariable.BaseInstance);
+                    Operand vertexIndex = this.Load(StorageKind.Input, IoVariable.VertexIndex);
+                    Operand instanceIndex = this.Load(StorageKind.Input, IoVariable.InstanceIndex);
+
+                    Operand outputVertexOffset = this.ISubtract(vertexIndex, baseVertex);
+                    Operand outputInstanceOffset = this.ISubtract(instanceIndex, baseInstance);
+
+                    Operand outputBaseVertex = this.IMultiply(outputInstanceOffset, vertexCount);
+
+                    Operand vertexOffset = this.IMultiply(this.IAdd(outputBaseVertex, outputVertexOffset), Const(stride / 4));
+                    baseOffset = this.IAdd(baseOffset, vertexOffset);
+
+                    for (int j = 0; j < locations.Length; j++)
+                    {
+                        byte location = locations[j];
+                        if (location == 0xff)
+                        {
+                            continue;
+                        }
+
+                        Operand offset = this.IAdd(baseOffset, Const(j));
+                        Operand value = Instructions.AttributeMap.GenerateAttributeLoad(this, null, location * 4, isOutput: true, isPerPatch: false);
+
+                        int binding = ResourceManager.Reservations.GetTfeBufferStorageBufferBinding(tfbIndex);
+
+                        this.Store(StorageKind.StorageBuffer, binding, Const(0), offset, value);
+                    }
+                }
+            }
+
+            if (TranslatorContext.Definitions.ViewportTransformDisable)
             {
                 Operand x = this.Load(StorageKind.Output, IoVariable.Position, null, Const(0));
                 Operand y = this.Load(StorageKind.Output, IoVariable.Position, null, Const(1));
-                Operand xScale = this.Load(StorageKind.Input, IoVariable.SupportBlockViewInverse, null, Const(0));
-                Operand yScale = this.Load(StorageKind.Input, IoVariable.SupportBlockViewInverse, null, Const(1));
+                Operand xScale = this.Load(StorageKind.ConstantBuffer, SupportBuffer.Binding, Const((int)SupportBufferField.ViewportInverse), Const(0));
+                Operand yScale = this.Load(StorageKind.ConstantBuffer, SupportBuffer.Binding, Const((int)SupportBufferField.ViewportInverse), Const(1));
                 Operand negativeOne = ConstF(-1.0f);
 
                 this.Store(StorageKind.Output, IoVariable.Position, null, Const(0), this.FPFusedMultiplyAdd(x, xScale, negativeOne));
                 this.Store(StorageKind.Output, IoVariable.Position, null, Const(1), this.FPFusedMultiplyAdd(y, yScale, negativeOne));
             }
 
-            if (Config.Options.TargetApi == TargetApi.Vulkan && Config.GpuAccessor.QueryTransformDepthMinusOneToOne())
+            if (TranslatorContext.Definitions.DepthMode && !TranslatorContext.GpuAccessor.QueryHostSupportsDepthClipControl())
             {
                 Operand z = this.Load(StorageKind.Output, IoVariable.Position, null, Const(2));
                 Operand w = this.Load(StorageKind.Output, IoVariable.Position, null, Const(3));
@@ -250,23 +310,11 @@ namespace Ryujinx.Graphics.Shader.Translation
 
                 this.Store(StorageKind.Output, IoVariable.Position, null, Const(2), this.FPFusedMultiplyAdd(z, ConstF(0.5f), halfW));
             }
-
-            if (Config.Stage != ShaderStage.Geometry && Config.HasLayerInputAttribute)
-            {
-                Config.SetUsedFeature(FeatureFlags.RtLayer);
-
-                int attrVecIndex = Config.GpLayerInputAttribute >> 2;
-                int attrComponentIndex = Config.GpLayerInputAttribute & 3;
-
-                Operand layer = this.Load(StorageKind.Output, IoVariable.UserDefined, null, Const(attrVecIndex), Const(attrComponentIndex));
-
-                this.Store(StorageKind.Output, IoVariable.Layer, null, layer);
-            }
         }
 
         public void PrepareForVertexReturn(out Operand oldXLocal, out Operand oldYLocal, out Operand oldZLocal)
         {
-            if (Config.GpuAccessor.QueryViewportTransformDisable())
+            if (TranslatorContext.Definitions.ViewportTransformDisable)
             {
                 oldXLocal = Local();
                 this.Copy(oldXLocal, this.Load(StorageKind.Output, IoVariable.Position, null, Const(0)));
@@ -279,7 +327,7 @@ namespace Ryujinx.Graphics.Shader.Translation
                 oldYLocal = null;
             }
 
-            if (Config.Options.TargetApi == TargetApi.Vulkan && Config.GpuAccessor.QueryTransformDepthMinusOneToOne())
+            if (TranslatorContext.Definitions.DepthMode && !TranslatorContext.GpuAccessor.QueryHostSupportsDepthClipControl())
             {
                 oldZLocal = Local();
                 this.Copy(oldZLocal, this.Load(StorageKind.Output, IoVariable.Position, null, Const(2)));
@@ -292,20 +340,20 @@ namespace Ryujinx.Graphics.Shader.Translation
             PrepareForVertexReturn();
         }
 
-        public void PrepareForReturn()
+        public bool PrepareForReturn()
         {
             if (IsNonMain)
             {
-                return;
+                return true;
             }
 
-            if (Config.LastInVertexPipeline &&
-                (Config.Stage == ShaderStage.Vertex || Config.Stage == ShaderStage.TessellationEvaluation) &&
-                (Config.Options.Flags & TranslationFlags.VertexA) == 0)
+            if (TranslatorContext.Definitions.LastInVertexPipeline &&
+                (TranslatorContext.Definitions.Stage == ShaderStage.Vertex || TranslatorContext.Definitions.Stage == ShaderStage.TessellationEvaluation) &&
+                (TranslatorContext.Options.Flags & TranslationFlags.VertexA) == 0)
             {
                 PrepareForVertexReturn();
             }
-            else if (Config.Stage == ShaderStage.Geometry)
+            else if (TranslatorContext.Definitions.Stage == ShaderStage.Geometry)
             {
                 void WritePositionOutput(int primIndex)
                 {
@@ -333,20 +381,40 @@ namespace Ryujinx.Graphics.Shader.Translation
                     this.Store(StorageKind.Output, IoVariable.UserDefined, null, Const(index), Const(3), w);
                 }
 
-                if (Config.GpPassthrough && !Config.GpuAccessor.QueryHostSupportsGeometryShaderPassthrough())
+                if (TranslatorContext.Definitions.GpPassthrough && !TranslatorContext.GpuAccessor.QueryHostSupportsGeometryShaderPassthrough())
                 {
-                    int inputVertices = Config.GpuAccessor.QueryPrimitiveTopology().ToInputVertices();
+                    int inputStart, inputEnd, inputStep;
 
-                    for (int primIndex = 0; primIndex < inputVertices; primIndex++)
+                    InputTopology topology = TranslatorContext.Definitions.InputTopology;
+
+                    if (topology == InputTopology.LinesAdjacency)
+                    {
+                        inputStart = 1;
+                        inputEnd = 3;
+                        inputStep = 1;
+                    }
+                    else if (topology == InputTopology.TrianglesAdjacency)
+                    {
+                        inputStart = 0;
+                        inputEnd = 6;
+                        inputStep = 2;
+                    }
+                    else
+                    {
+                        inputStart = 0;
+                        inputEnd = topology.ToInputVerticesNoAdjacency();
+                        inputStep = 1;
+                    }
+
+                    for (int primIndex = inputStart; primIndex < inputEnd; primIndex += inputStep)
                     {
                         WritePositionOutput(primIndex);
 
-                        int passthroughAttributes = Config.PassthroughAttributes;
+                        int passthroughAttributes = TranslatorContext.AttributeUsage.PassthroughAttributes;
                         while (passthroughAttributes != 0)
                         {
                             int index = BitOperations.TrailingZeroCount(passthroughAttributes);
                             WriteUserDefinedOutput(index, primIndex);
-                            Config.SetOutputUserAttribute(index);
                             passthroughAttributes &= ~(1 << index);
                         }
 
@@ -356,28 +424,28 @@ namespace Ryujinx.Graphics.Shader.Translation
                     this.EndPrimitive();
                 }
             }
-            else if (Config.Stage == ShaderStage.Fragment)
+            else if (TranslatorContext.Definitions.Stage == ShaderStage.Fragment)
             {
                 GenerateAlphaToCoverageDitherDiscard();
 
-                bool supportsBgra = Config.GpuAccessor.QueryHostSupportsBgraFormat();
+                bool supportsBgra = TranslatorContext.GpuAccessor.QueryHostSupportsBgraFormat();
 
-                if (Config.OmapDepth)
+                if (TranslatorContext.Definitions.OmapDepth)
                 {
-                    Operand src = Register(Config.GetDepthRegister(), RegisterType.Gpr);
+                    Operand src = Register(TranslatorContext.GetDepthRegister(), RegisterType.Gpr);
 
                     this.Store(StorageKind.Output, IoVariable.FragmentOutputDepth, null, src);
                 }
 
-                AlphaTestOp alphaTestOp = Config.GpuAccessor.QueryAlphaTestCompare();
+                AlphaTestOp alphaTestOp = TranslatorContext.Definitions.AlphaTestCompare;
 
-                if (alphaTestOp != AlphaTestOp.Always && (Config.OmapTargets & 8) != 0)
+                if (alphaTestOp != AlphaTestOp.Always)
                 {
                     if (alphaTestOp == AlphaTestOp.Never)
                     {
                         this.Discard();
                     }
-                    else
+                    else if ((TranslatorContext.Definitions.OmapTargets & 8) != 0)
                     {
                         Instruction comparator = alphaTestOp switch
                         {
@@ -387,13 +455,13 @@ namespace Ryujinx.Graphics.Shader.Translation
                             AlphaTestOp.Less => Instruction.CompareLess,
                             AlphaTestOp.LessOrEqual => Instruction.CompareLessOrEqual,
                             AlphaTestOp.NotEqual => Instruction.CompareNotEqual,
-                            _ => 0
+                            _ => 0,
                         };
 
                         Debug.Assert(comparator != 0, $"Invalid alpha test operation \"{alphaTestOp}\".");
 
                         Operand alpha = Register(3, RegisterType.Gpr);
-                        Operand alphaRef = ConstF(Config.GpuAccessor.QueryAlphaTestReference());
+                        Operand alphaRef = ConstF(TranslatorContext.Definitions.AlphaTestReference);
                         Operand alphaPass = Add(Instruction.FP32 | comparator, Local(), alpha, alphaRef);
                         Operand alphaPassLabel = Label();
 
@@ -403,13 +471,19 @@ namespace Ryujinx.Graphics.Shader.Translation
                     }
                 }
 
+                // We don't need to output anything if alpha test always fails.
+                if (alphaTestOp == AlphaTestOp.Never)
+                {
+                    return false;
+                }
+
                 int regIndexBase = 0;
 
                 for (int rtIndex = 0; rtIndex < 8; rtIndex++)
                 {
                     for (int component = 0; component < 4; component++)
                     {
-                        bool componentEnabled = (Config.OmapTargets & (1 << (rtIndex * 4 + component))) != 0;
+                        bool componentEnabled = (TranslatorContext.Definitions.OmapTargets & (1 << (rtIndex * 4 + component))) != 0;
                         if (!componentEnabled)
                         {
                             continue;
@@ -420,7 +494,7 @@ namespace Ryujinx.Graphics.Shader.Translation
                         // Perform B <-> R swap if needed, for BGRA formats (not supported on OpenGL).
                         if (!supportsBgra && (component == 0 || component == 2))
                         {
-                            Operand isBgra = this.Load(StorageKind.Input, IoVariable.FragmentOutputIsBgra, null, Const(rtIndex));
+                            Operand isBgra = this.Load(StorageKind.ConstantBuffer, SupportBuffer.Binding, Const((int)SupportBufferField.FragmentIsBgra), Const(rtIndex));
 
                             Operand lblIsBgra = Label();
                             Operand lblEnd = Label();
@@ -442,20 +516,80 @@ namespace Ryujinx.Graphics.Shader.Translation
                         }
                     }
 
-                    bool targetEnabled = (Config.OmapTargets & (0xf << (rtIndex * 4))) != 0;
+                    bool targetEnabled = (TranslatorContext.Definitions.OmapTargets & (0xf << (rtIndex * 4))) != 0;
                     if (targetEnabled)
                     {
-                        Config.SetOutputUserAttribute(rtIndex);
                         regIndexBase += 4;
                     }
                 }
             }
+
+            if (VertexAsCompute)
+            {
+                if (TranslatorContext.Stage == ShaderStage.Vertex)
+                {
+                    int vertexInfoCbBinding = ResourceManager.Reservations.VertexInfoConstantBufferBinding;
+                    int vertexOutputSbBinding = ResourceManager.Reservations.VertexOutputStorageBufferBinding;
+                    int stride = ResourceManager.Reservations.OutputSizePerInvocation;
+
+                    Operand vertexCount = this.Load(StorageKind.ConstantBuffer, vertexInfoCbBinding, Const((int)VertexInfoBufferField.VertexCounts), Const(0));
+
+                    Operand outputVertexOffset = this.Load(StorageKind.Input, IoVariable.GlobalId, Const(0));
+                    Operand outputInstanceOffset = this.Load(StorageKind.Input, IoVariable.GlobalId, Const(1));
+
+                    Operand outputBaseVertex = this.IMultiply(outputInstanceOffset, vertexCount);
+
+                    Operand baseOffset = this.IMultiply(this.IAdd(outputBaseVertex, outputVertexOffset), Const(stride));
+
+                    for (int offset = 0; offset < stride; offset++)
+                    {
+                        Operand vertexOffset = this.IAdd(baseOffset, Const(offset));
+                        Operand value = this.Load(StorageKind.LocalMemory, ResourceManager.LocalVertexDataMemoryId, Const(offset));
+
+                        this.Store(StorageKind.StorageBuffer, vertexOutputSbBinding, Const(0), vertexOffset, value);
+                    }
+                }
+                else if (TranslatorContext.Stage == ShaderStage.Geometry)
+                {
+                    Operand lblLoopHead = Label();
+                    Operand lblExit = Label();
+
+                    this.MarkLabel(lblLoopHead);
+
+                    Operand writtenIndices = this.Load(StorageKind.LocalMemory, ResourceManager.LocalGeometryOutputIndexCountMemoryId);
+
+                    int maxIndicesPerPrimitiveInvocation = TranslatorContext.Definitions.GetGeometryOutputIndexBufferStridePerInstance();
+                    int maxIndicesPerPrimitive = maxIndicesPerPrimitiveInvocation * TranslatorContext.Definitions.ThreadsPerInputPrimitive;
+
+                    this.BranchIfTrue(lblExit, this.ICompareGreaterOrEqualUnsigned(writtenIndices, Const(maxIndicesPerPrimitiveInvocation)));
+
+                    int vertexInfoCbBinding = ResourceManager.Reservations.VertexInfoConstantBufferBinding;
+
+                    Operand primitiveIndex = this.Load(StorageKind.Input, IoVariable.GlobalId, Const(0));
+                    Operand instanceIndex = this.Load(StorageKind.Input, IoVariable.GlobalId, Const(1));
+                    Operand invocationId = this.Load(StorageKind.Input, IoVariable.GlobalId, Const(2));
+                    Operand vertexCount = this.Load(StorageKind.ConstantBuffer, vertexInfoCbBinding, Const((int)VertexInfoBufferField.VertexCounts), Const(0));
+                    Operand primitiveId = this.IAdd(this.IMultiply(instanceIndex, vertexCount), primitiveIndex);
+                    Operand ibOffset = this.IMultiply(primitiveId, Const(maxIndicesPerPrimitive));
+                    ibOffset = this.IAdd(ibOffset, this.IMultiply(invocationId, Const(maxIndicesPerPrimitiveInvocation)));
+                    ibOffset = this.IAdd(ibOffset, writtenIndices);
+
+                    this.Store(StorageKind.StorageBuffer, ResourceManager.Reservations.GeometryIndexOutputStorageBufferBinding, Const(0), ibOffset, Const(-1));
+                    this.Store(StorageKind.LocalMemory, ResourceManager.LocalGeometryOutputIndexCountMemoryId, this.IAdd(writtenIndices, Const(1)));
+
+                    this.Branch(lblLoopHead);
+
+                    this.MarkLabel(lblExit);
+                }
+            }
+
+            return true;
         }
 
         private void GenerateAlphaToCoverageDitherDiscard()
         {
             // If the feature is disabled, or alpha is not written, then we're done.
-            if (!Config.GpuAccessor.QueryAlphaToCoverageDitherEnable() || (Config.OmapTargets & 8) == 0)
+            if (!TranslatorContext.Definitions.AlphaToCoverageDitherEnable || (TranslatorContext.Definitions.OmapTargets & 8) == 0)
             {
                 return;
             }

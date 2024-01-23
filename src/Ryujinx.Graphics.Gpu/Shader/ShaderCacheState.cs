@@ -7,7 +7,9 @@ namespace Ryujinx.Graphics.Gpu.Shader
         Start,
         /// <summary>Shader cache is loading</summary>
         Loading,
+        /// <summary>Shader cache is written to disk</summary>
+        Packaging,
         /// <summary>Shader cache finished loading</summary>
-        Loaded
+        Loaded,
     }
 }

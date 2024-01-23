@@ -1,5 +1,4 @@
 using ARMeilleure.Memory;
-using Ryujinx.Cpu.Tracking;
 using Ryujinx.Memory;
 using Ryujinx.Memory.Range;
 using Ryujinx.Memory.Tracking;
@@ -8,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Threading;
 
 namespace Ryujinx.Cpu.AppleHv
@@ -15,6 +15,7 @@ namespace Ryujinx.Cpu.AppleHv
     /// <summary>
     /// Represents a CPU memory manager which maps guest virtual memory directly onto the Hypervisor page table.
     /// </summary>
+    [SupportedOSPlatform("macos")]
     public class HvMemoryManager : MemoryManagerBase, IMemoryManager, IVirtualMemoryManagerTracked, IWritableBlock
     {
         public const int PageBits = 12;
@@ -33,7 +34,7 @@ namespace Ryujinx.Cpu.AppleHv
 
             MappedReplicated = 0x5555555555555555,
             WriteTrackedReplicated = 0xaaaaaaaaaaaaaaaa,
-            ReadWriteTrackedReplicated = ulong.MaxValue
+            ReadWriteTrackedReplicated = ulong.MaxValue,
         }
 
         private readonly InvalidAccessHandler _invalidAccessHandler;
@@ -124,19 +125,6 @@ namespace Ryujinx.Cpu.AppleHv
             if (!ValidateAddressAndSize(va, size))
             {
                 throw new InvalidMemoryRegionException($"va=0x{va:X16}, size=0x{size:X16}");
-            }
-        }
-
-        /// <summary>
-        /// Ensures the combination of virtual address and size is part of the addressable space and fully mapped.
-        /// </summary>
-        /// <param name="va">Virtual address of the range</param>
-        /// <param name="size">Size of the range in bytes</param>
-        private void AssertMapped(ulong va, ulong size)
-        {
-            if (!ValidateAddressAndSize(va, size) || !IsRangeMappedImpl(va, size))
-            {
-                throw new InvalidMemoryRegionException($"Not mapped: va=0x{va:X16}, size=0x{size:X16}");
             }
         }
 
@@ -307,7 +295,7 @@ namespace Ryujinx.Cpu.AppleHv
 
                         size = Math.Min(data.Length, PageSize - (int)(va & PageMask));
 
-                        data.Slice(0, size).CopyTo(_backingMemory.GetSpan(pa, size));
+                        data[..size].CopyTo(_backingMemory.GetSpan(pa, size));
 
                         offset += size;
                     }
@@ -429,7 +417,7 @@ namespace Ryujinx.Cpu.AppleHv
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void GetPageBlockRange(ulong pageStart, ulong pageEnd, out ulong startMask, out ulong endMask, out int pageIndex, out int pageEndIndex)
+        private static void GetPageBlockRange(ulong pageStart, ulong pageEnd, out ulong startMask, out ulong endMask, out int pageIndex, out int pageEndIndex)
         {
             startMask = ulong.MaxValue << ((int)(pageStart & 31) << 1);
             endMask = ulong.MaxValue >> (64 - ((int)(pageEnd & 31) << 1));
@@ -607,7 +595,7 @@ namespace Ryujinx.Cpu.AppleHv
 
                     size = Math.Min(data.Length, PageSize - (int)(va & PageMask));
 
-                    _backingMemory.GetSpan(pa, size).CopyTo(data.Slice(0, size));
+                    _backingMemory.GetSpan(pa, size).CopyTo(data[..size]);
 
                     offset += size;
                 }
@@ -724,13 +712,19 @@ namespace Ryujinx.Cpu.AppleHv
         /// <param name="startVa">The virtual address of the beginning of the first page</param>
         /// <remarks>This function does not differentiate between allocated and unallocated pages.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private int GetPagesCount(ulong va, ulong size, out ulong startVa)
+        private static int GetPagesCount(ulong va, ulong size, out ulong startVa)
         {
             // WARNING: Always check if ulong does not overflow during the operations.
             startVa = va & ~(ulong)PageMask;
             ulong vaSpan = (va - startVa + size + PageMask) & ~(ulong)PageMask;
 
             return (int)(vaSpan / PageSize);
+        }
+
+        /// <inheritdoc/>
+        public void Reprotect(ulong va, ulong size, MemoryPermission protection)
+        {
+            // TODO
         }
 
         /// <inheritdoc/>
@@ -815,28 +809,28 @@ namespace Ryujinx.Cpu.AppleHv
             {
                 MemoryPermission.None => MemoryPermission.ReadAndWrite,
                 MemoryPermission.Write => MemoryPermission.Read,
-                _ => MemoryPermission.None
+                _ => MemoryPermission.None,
             };
 
             _addressSpace.ReprotectUser(va, size, protection);
         }
 
         /// <inheritdoc/>
-        public CpuRegionHandle BeginTracking(ulong address, ulong size, int id)
+        public RegionHandle BeginTracking(ulong address, ulong size, int id)
         {
-            return new CpuRegionHandle(Tracking.BeginTracking(address, size, id));
+            return Tracking.BeginTracking(address, size, id);
         }
 
         /// <inheritdoc/>
-        public CpuMultiRegionHandle BeginGranularTracking(ulong address, ulong size, IEnumerable<IRegionHandle> handles, ulong granularity, int id)
+        public MultiRegionHandle BeginGranularTracking(ulong address, ulong size, IEnumerable<IRegionHandle> handles, ulong granularity, int id)
         {
-            return new CpuMultiRegionHandle(Tracking.BeginGranularTracking(address, size, handles, granularity, id));
+            return Tracking.BeginGranularTracking(address, size, handles, granularity, id);
         }
 
         /// <inheritdoc/>
-        public CpuSmartMultiRegionHandle BeginSmartGranularTracking(ulong address, ulong size, ulong granularity, int id)
+        public SmartMultiRegionHandle BeginSmartGranularTracking(ulong address, ulong size, ulong granularity, int id)
         {
-            return new CpuSmartMultiRegionHandle(Tracking.BeginSmartGranularTracking(address, size, granularity, id));
+            return Tracking.BeginSmartGranularTracking(address, size, granularity, id);
         }
 
         /// <summary>

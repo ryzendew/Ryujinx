@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Mii.Types
+namespace Ryujinx.HLE.HOS.Services.Mii.Types
 {
     enum MouthType : byte
     {
@@ -39,7 +39,7 @@
         SmileDownLine,
         Kiss,
 
-        Min = 0,
-        Max = 35
+        Min = Neutral,
+        Max = Kiss,
     }
 }

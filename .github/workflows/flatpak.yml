@@ -12,6 +12,7 @@ concurrency: flatpak-release
 
 jobs:
   release:
+    timeout-minutes: ${{ fromJSON(vars.JOB_TIMEOUT) }}
     runs-on: ubuntu-latest
 
     env:
@@ -23,11 +24,11 @@ jobs:
       RYUJINX_VERSION: "${{ inputs.ryujinx_version }}"
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           path: Ryujinx
 
-      - uses: actions/setup-dotnet@v3
+      - uses: actions/setup-dotnet@v4
         with:
           global-json-file: Ryujinx/global.json
 
@@ -37,7 +38,7 @@ jobs:
         run: |
           echo "git_hash=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: flathub/org.ryujinx.Ryujinx
           token: ${{ secrets.RYUJINX_BOT_PAT }}
@@ -48,7 +49,9 @@ jobs:
         run: python -m pip install PyYAML lxml
 
       - name: Restore Nuget packages
-        run: dotnet restore Ryujinx/${{ env.RYUJINX_PROJECT_FILE }}
+        # With .NET 8.0.100, Microsoft.NET.ILLink.Tasks isn't restored by default and only seems to appears when publishing.
+        # So we just publish to grab the dependencies
+        run: dotnet publish -c Release -r linux-x64 Ryujinx/${{ env.RYUJINX_PROJECT_FILE }} --self-contained
 
       - name: Generate nuget_sources.json
         shell: python

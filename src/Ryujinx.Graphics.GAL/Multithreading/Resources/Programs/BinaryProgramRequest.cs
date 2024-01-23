@@ -1,11 +1,11 @@
-﻿namespace Ryujinx.Graphics.GAL.Multithreading.Resources.Programs
+namespace Ryujinx.Graphics.GAL.Multithreading.Resources.Programs
 {
     class BinaryProgramRequest : IProgramRequest
     {
         public ThreadedProgram Threaded { get; set; }
 
-        private byte[] _data;
-        private bool _hasFragmentShader;
+        private readonly byte[] _data;
+        private readonly bool _hasFragmentShader;
         private ShaderInfo _info;
 
         public BinaryProgramRequest(ThreadedProgram program, byte[] data, bool hasFragmentShader, ShaderInfo info)

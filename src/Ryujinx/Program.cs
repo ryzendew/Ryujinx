@@ -3,7 +3,6 @@ using Ryujinx.Common;
 using Ryujinx.Common.Configuration;
 using Ryujinx.Common.GraphicsDriver;
 using Ryujinx.Common.Logging;
-using Ryujinx.Common.SystemInfo;
 using Ryujinx.Common.SystemInterop;
 using Ryujinx.Modules;
 using Ryujinx.SDL2.Common;
@@ -11,6 +10,7 @@ using Ryujinx.Ui;
 using Ryujinx.Ui.Common;
 using Ryujinx.Ui.Common.Configuration;
 using Ryujinx.Ui.Common.Helper;
+using Ryujinx.Ui.Common.SystemInfo;
 using Ryujinx.Ui.Widgets;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using System;
@@ -43,10 +43,7 @@ namespace Ryujinx
         [LibraryImport("libc", SetLastError = true)]
         private static partial int setenv([MarshalAs(UnmanagedType.LPStr)] string name, [MarshalAs(UnmanagedType.LPStr)] string value, int overwrite);
 
-        [LibraryImport("libc")]
-        private static partial IntPtr getenv([MarshalAs(UnmanagedType.LPStr)] string name);
-
-        private const uint MB_ICONWARNING = 0x30;
+        private const uint MbIconWarning = 0x30;
 
         static Program()
         {
@@ -78,16 +75,16 @@ namespace Ryujinx
 
             if (OperatingSystem.IsWindows() && !OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17134))
             {
-                MessageBoxA(IntPtr.Zero, "You are running an outdated version of Windows.\n\nStarting on June 1st 2022, Ryujinx will only support Windows 10 1803 and newer.\n", $"Ryujinx {Version}", MB_ICONWARNING);
+                MessageBoxA(IntPtr.Zero, "You are running an outdated version of Windows.\n\nStarting on June 1st 2022, Ryujinx will only support Windows 10 1803 and newer.\n", $"Ryujinx {Version}", MbIconWarning);
             }
 
             // Parse arguments
             CommandLineState.ParseArguments(args);
 
             // Hook unhandled exception and process exit events.
-            GLib.ExceptionManager.UnhandledException   += (GLib.UnhandledExceptionArgs e)                => ProcessUnhandledException(e.ExceptionObject as Exception, e.IsTerminating);
+            GLib.ExceptionManager.UnhandledException += (GLib.UnhandledExceptionArgs e) => ProcessUnhandledException(e.ExceptionObject as Exception, e.IsTerminating);
             AppDomain.CurrentDomain.UnhandledException += (object sender, UnhandledExceptionEventArgs e) => ProcessUnhandledException(e.ExceptionObject as Exception, e.IsTerminating);
-            AppDomain.CurrentDomain.ProcessExit        += (object sender, EventArgs e)                   => Exit();
+            AppDomain.CurrentDomain.ProcessExit += (object sender, EventArgs e) => Exit();
 
             // Make process DPI aware for proper window sizing on high-res screens.
             ForceDpiAware.Windows();
@@ -102,7 +99,11 @@ namespace Ryujinx
             // This ends up causing race condition and abort of XCB when a context is created by SPB (even if SPB do call XInitThreads).
             if (OperatingSystem.IsLinux())
             {
-                XInitThreads();
+                if (XInitThreads() == 0)
+                {
+                    throw new NotSupportedException("Failed to initialize multi-threading support.");
+                }
+
                 Environment.SetEnvironmentVariable("GDK_BACKEND", "x11");
                 setenv("GDK_BACKEND", "x11", 1);
             }
@@ -121,7 +122,7 @@ namespace Ryujinx
                     resourcesDataDir = baseDirectory;
                 }
 
-                void SetEnvironmentVariableNoCaching(string key, string value)
+                static void SetEnvironmentVariableNoCaching(string key, string value)
                 {
                     int res = setenv(key, value, 1);
                     Debug.Assert(res != -1);
@@ -163,11 +164,11 @@ namespace Ryujinx
             // Sets ImageSharp Jpeg Encoder Quality.
             SixLabors.ImageSharp.Configuration.Default.ImageFormatsManager.SetEncoder(JpegFormat.Instance, new JpegEncoder()
             {
-                Quality = 100
+                Quality = 100,
             });
 
-            string localConfigurationPath   = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config.json");
-            string appDataConfigurationPath = Path.Combine(AppDataManager.BaseDirPath,            "Config.json");
+            string localConfigurationPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config.json");
+            string appDataConfigurationPath = Path.Combine(AppDataManager.BaseDirPath, "Config.json");
 
             // Now load the configuration as the other subsystems are now registered
             ConfigurationPath = File.Exists(localConfigurationPath)
@@ -176,8 +177,6 @@ namespace Ryujinx
                     ? appDataConfigurationPath
                     : null;
 
-            bool showVulkanPrompt = false;
-
             if (ConfigurationPath == null)
             {
                 // No configuration, we load the default values and save it to disk
@@ -185,25 +184,16 @@ namespace Ryujinx
 
                 ConfigurationState.Instance.LoadDefault();
                 ConfigurationState.Instance.ToFileFormat().SaveConfig(ConfigurationPath);
-
-                showVulkanPrompt = true;
             }
             else
             {
                 if (ConfigurationFileFormat.TryLoad(ConfigurationPath, out ConfigurationFileFormat configurationFileFormat))
                 {
-                    ConfigurationLoadResult result = ConfigurationState.Instance.Load(configurationFileFormat, ConfigurationPath);
-
-                    if ((result & ConfigurationLoadResult.MigratedFromPreVulkan) != 0)
-                    {
-                        showVulkanPrompt = true;
-                    }
+                    ConfigurationState.Instance.Load(configurationFileFormat, ConfigurationPath);
                 }
                 else
                 {
                     ConfigurationState.Instance.LoadDefault();
-
-                    showVulkanPrompt = true;
 
                     Logger.Warning?.PrintMsg(LogClass.Application, $"Failed to load config! Loading the default config instead.\nFailed config location {ConfigurationPath}");
                 }
@@ -215,12 +205,10 @@ namespace Ryujinx
                 if (CommandLineState.OverrideGraphicsBackend.ToLower() == "opengl")
                 {
                     ConfigurationState.Instance.Graphics.GraphicsBackend.Value = GraphicsBackend.OpenGl;
-                    showVulkanPrompt = false;
                 }
                 else if (CommandLineState.OverrideGraphicsBackend.ToLower() == "vulkan")
                 {
                     ConfigurationState.Instance.Graphics.GraphicsBackend.Value = GraphicsBackend.Vulkan;
-                    showVulkanPrompt = false;
                 }
             }
 
@@ -232,7 +220,7 @@ namespace Ryujinx
                     "never" => HideCursorMode.Never,
                     "onidle" => HideCursorMode.OnIdle,
                     "always" => HideCursorMode.Always,
-                    _ => ConfigurationState.Instance.HideCursor.Value
+                    _ => ConfigurationState.Instance.HideCursor.Value,
                 };
             }
 
@@ -261,8 +249,73 @@ namespace Ryujinx
             }
 
             // Show the main window UI.
-            MainWindow mainWindow = new MainWindow();
+            MainWindow mainWindow = new();
             mainWindow.Show();
+
+            if (OperatingSystem.IsLinux())
+            {
+                int currentVmMaxMapCount = LinuxHelper.VmMaxMapCount;
+
+                if (LinuxHelper.VmMaxMapCount < LinuxHelper.RecommendedVmMaxMapCount)
+                {
+                    Logger.Warning?.Print(LogClass.Application, $"The value of vm.max_map_count is lower than {LinuxHelper.RecommendedVmMaxMapCount}. ({currentVmMaxMapCount})");
+
+                    if (LinuxHelper.PkExecPath is not null)
+                    {
+                        var buttonTexts = new Dictionary<int, string>()
+                        {
+                            { 0, "Yes, until the next restart" },
+                            { 1, "Yes, permanently" },
+                            { 2, "No" },
+                        };
+
+                        ResponseType response = GtkDialog.CreateCustomDialog(
+                            "Ryujinx - Low limit for memory mappings detected",
+                            $"Would you like to increase the value of vm.max_map_count to {LinuxHelper.RecommendedVmMaxMapCount}?",
+                            "Some games might try to create more memory mappings than currently allowed. " +
+                            "Ryujinx will crash as soon as this limit gets exceeded.",
+                            buttonTexts,
+                            MessageType.Question);
+
+                        int rc;
+
+                        switch ((int)response)
+                        {
+                            case 0:
+                                rc = LinuxHelper.RunPkExec($"echo {LinuxHelper.RecommendedVmMaxMapCount} > {LinuxHelper.VmMaxMapCountPath}");
+                                if (rc == 0)
+                                {
+                                    Logger.Info?.Print(LogClass.Application, $"vm.max_map_count set to {LinuxHelper.VmMaxMapCount} until the next restart.");
+                                }
+                                else
+                                {
+                                    Logger.Error?.Print(LogClass.Application, $"Unable to change vm.max_map_count. Process exited with code: {rc}");
+                                }
+                                break;
+                            case 1:
+                                rc = LinuxHelper.RunPkExec($"echo \"vm.max_map_count = {LinuxHelper.RecommendedVmMaxMapCount}\" > {LinuxHelper.SysCtlConfigPath} && sysctl -p {LinuxHelper.SysCtlConfigPath}");
+                                if (rc == 0)
+                                {
+                                    Logger.Info?.Print(LogClass.Application, $"vm.max_map_count set to {LinuxHelper.VmMaxMapCount}. Written to config: {LinuxHelper.SysCtlConfigPath}");
+                                }
+                                else
+                                {
+                                    Logger.Error?.Print(LogClass.Application, $"Unable to write new value for vm.max_map_count to config. Process exited with code: {rc}");
+                                }
+                                break;
+                        }
+                    }
+                    else
+                    {
+                        GtkDialog.CreateWarningDialog(
+                            "Max amount of memory mappings is lower than recommended.",
+                            $"The current value of vm.max_map_count ({currentVmMaxMapCount}) is lower than {LinuxHelper.RecommendedVmMaxMapCount}." +
+                            "Some games might try to create more memory mappings than currently allowed. " +
+                            "Ryujinx will crash as soon as this limit gets exceeded.\n\n" +
+                            "You might want to either manually increase the limit or install pkexec, which allows Ryujinx to assist with that.");
+                    }
+                }
+            }
 
             if (CommandLineState.LaunchPathArg != null)
             {
@@ -275,35 +328,6 @@ namespace Ryujinx
                 {
                     Logger.Error?.Print(LogClass.Application, $"Updater Error: {task.Exception}");
                 }, TaskContinuationOptions.OnlyOnFaulted);
-            }
-
-            if (showVulkanPrompt)
-            {
-                var buttonTexts = new Dictionary<int, string>()
-                {
-                    { 0, "Yes (Vulkan)" },
-                    { 1, "No (OpenGL)" }
-                };
-
-                ResponseType response = GtkDialog.CreateCustomDialog(
-                    "Ryujinx - Default graphics backend",
-                    "Use Vulkan as default graphics backend?",
-                    "Ryujinx now supports the Vulkan API. " +
-                    "Vulkan greatly improves shader compilation performance, " +
-                    "and fixes some graphical glitches; however, since it is a new feature, " +
-                    "you may experience some issues that did not occur with OpenGL.\n\n" +
-                    "Note that you will also lose any existing shader cache the first time you start a game " +
-                    "on version 1.1.200 onwards, because Vulkan required changes to the shader cache that makes it incompatible with previous versions.\n\n" +
-                    "Would you like to set Vulkan as the default graphics backend? " +
-                    "You can change this at any time on the settings window.",
-                    buttonTexts,
-                    MessageType.Question);
-
-                ConfigurationState.Instance.Graphics.GraphicsBackend.Value = response == 0
-                    ? GraphicsBackend.Vulkan
-                    : GraphicsBackend.OpenGl;
-
-                ConfigurationState.Instance.ToFileFormat().SaveConfig(ConfigurationPath);
             }
 
             Application.Run();

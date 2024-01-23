@@ -1,11 +1,11 @@
-﻿using Ryujinx.Graphics.Gpu.Synchronization;
+using Ryujinx.Graphics.Device;
 using System.Collections.Generic;
 
 namespace Ryujinx.Graphics.Host1x
 {
     class SyncptIncrManager
     {
-        private readonly SynchronizationManager _syncMgr;
+        private readonly ISynchronizationManager _syncMgr;
 
         private readonly struct SyncptIncr
         {
@@ -23,11 +23,11 @@ namespace Ryujinx.Graphics.Host1x
             }
         }
 
-        private readonly List<SyncptIncr> _incrs = new List<SyncptIncr>();
+        private readonly List<SyncptIncr> _incrs = new();
 
         private uint _currentId;
 
-        public SyncptIncrManager(SynchronizationManager syncMgr)
+        public SyncptIncrManager(ISynchronizationManager syncMgr)
         {
             _syncMgr = syncMgr;
         }

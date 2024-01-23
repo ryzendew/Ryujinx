@@ -1,9 +1,9 @@
-﻿namespace Ryujinx.Graphics.Gpu.Image
+namespace Ryujinx.Graphics.Gpu.Image
 {
     enum TextureMatchQuality
     {
         NoMatch,
         FormatAlias,
-        Perfect
+        Perfect,
     }
 }

@@ -2,6 +2,7 @@ using Ryujinx.Graphics.Shader.IntermediateRepresentation;
 using Ryujinx.Graphics.Shader.StructuredIr;
 using Ryujinx.Graphics.Shader.Translation;
 using System;
+using System.Text;
 
 using static Ryujinx.Graphics.Shader.CodeGen.Glsl.Instructions.InstGenBallot;
 using static Ryujinx.Graphics.Shader.CodeGen.Glsl.Instructions.InstGenCall;
@@ -9,6 +10,7 @@ using static Ryujinx.Graphics.Shader.CodeGen.Glsl.Instructions.InstGenFSI;
 using static Ryujinx.Graphics.Shader.CodeGen.Glsl.Instructions.InstGenHelper;
 using static Ryujinx.Graphics.Shader.CodeGen.Glsl.Instructions.InstGenMemory;
 using static Ryujinx.Graphics.Shader.CodeGen.Glsl.Instructions.InstGenPacking;
+using static Ryujinx.Graphics.Shader.CodeGen.Glsl.Instructions.InstGenShuffle;
 using static Ryujinx.Graphics.Shader.CodeGen.Glsl.Instructions.InstGenVector;
 using static Ryujinx.Graphics.Shader.StructuredIr.InstructionInfo;
 
@@ -66,42 +68,37 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Glsl.Instructions
 
                 int arity = (int)(info.Type & InstType.ArityMask);
 
-                string args = string.Empty;
+                StringBuilder builder = new();
 
-                for (int argIndex = 0; argIndex < arity; argIndex++)
+                if (atomic && (operation.StorageKind == StorageKind.StorageBuffer || operation.StorageKind == StorageKind.SharedMemory))
                 {
-                    // For shared memory access, the second argument is unused and should be ignored.
-                    // It is there to make both storage and shared access have the same number of arguments.
-                    // For storage, both inputs are consumed when the argument index is 0, so we should skip it here.
-                    if (argIndex == 1 && (atomic || operation.StorageKind == StorageKind.SharedMemory))
-                    {
-                        continue;
-                    }
+                    builder.Append(GenerateLoadOrStore(context, operation, isStore: false));
 
-                    if (argIndex != 0)
-                    {
-                        args += ", ";
-                    }
+                    AggregateType dstType = operation.Inst == Instruction.AtomicMaxS32 || operation.Inst == Instruction.AtomicMinS32
+                        ? AggregateType.S32
+                        : AggregateType.U32;
 
-                    if (argIndex == 0 && atomic)
+                    for (int argIndex = operation.SourcesCount - arity + 2; argIndex < operation.SourcesCount; argIndex++)
                     {
-                        switch (operation.StorageKind)
+                        builder.Append($", {GetSoureExpr(context, operation.GetSource(argIndex), dstType)}");
+                    }
+                }
+                else
+                {
+                    for (int argIndex = 0; argIndex < arity; argIndex++)
+                    {
+                        if (argIndex != 0)
                         {
-                            case StorageKind.SharedMemory: args += LoadShared(context, operation); break;
-                            case StorageKind.StorageBuffer: args += LoadStorage(context, operation); break;
-
-                            default: throw new InvalidOperationException($"Invalid storage kind \"{operation.StorageKind}\".");
+                            builder.Append(", ");
                         }
-                    }
-                    else
-                    {
+
                         AggregateType dstType = GetSrcVarType(inst, argIndex);
 
-                        args += GetSoureExpr(context, operation.GetSource(argIndex), dstType);
+                        builder.Append(GetSoureExpr(context, operation.GetSource(argIndex), dstType));
                     }
                 }
 
-                return info.OpName + '(' + args + ')';
+                return $"{info.OpName}({builder})";
             }
             else if ((info.Type & InstType.Op) != 0)
             {
@@ -167,18 +164,6 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Glsl.Instructions
                     case Instruction.Load:
                         return Load(context, operation);
 
-                    case Instruction.LoadConstant:
-                        return LoadConstant(context, operation);
-
-                    case Instruction.LoadLocal:
-                        return LoadLocal(context, operation);
-
-                    case Instruction.LoadShared:
-                        return LoadShared(context, operation);
-
-                    case Instruction.LoadStorage:
-                        return LoadStorage(context, operation);
-
                     case Instruction.Lod:
                         return Lod(context, operation);
 
@@ -191,35 +176,20 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Glsl.Instructions
                     case Instruction.PackHalf2x16:
                         return PackHalf2x16(context, operation);
 
+                    case Instruction.Shuffle:
+                        return Shuffle(context, operation);
+
                     case Instruction.Store:
                         return Store(context, operation);
-
-                    case Instruction.StoreLocal:
-                        return StoreLocal(context, operation);
-
-                    case Instruction.StoreShared:
-                        return StoreShared(context, operation);
-
-                    case Instruction.StoreShared16:
-                        return StoreShared16(context, operation);
-
-                    case Instruction.StoreShared8:
-                        return StoreShared8(context, operation);
-
-                    case Instruction.StoreStorage:
-                        return StoreStorage(context, operation);
-
-                    case Instruction.StoreStorage16:
-                        return StoreStorage16(context, operation);
-
-                    case Instruction.StoreStorage8:
-                        return StoreStorage8(context, operation);
 
                     case Instruction.TextureSample:
                         return TextureSample(context, operation);
 
-                    case Instruction.TextureSize:
-                        return TextureSize(context, operation);
+                    case Instruction.TextureQuerySamples:
+                        return TextureQuerySamples(context, operation);
+
+                    case Instruction.TextureQuerySize:
+                        return TextureQuerySize(context, operation);
 
                     case Instruction.UnpackDouble2x32:
                         return UnpackDouble2x32(context, operation);

@@ -7,28 +7,40 @@ namespace Ryujinx.Graphics.Shader.Translation.Optimizations
 {
     static class Optimizer
     {
-        public static void RunPass(BasicBlock[] blocks, ShaderConfig config)
+        public static void RunPass(TransformContext context)
         {
-            RunOptimizationPasses(blocks);
+            RunOptimizationPasses(context.Blocks, context.ResourceManager);
 
-            int sbUseMask = 0;
-            int ubeUseMask = 0;
+            // TODO: Some of those are not optimizations and shouldn't be here.
+
+            GlobalToStorage.RunPass(context.Hfm, context.Blocks, context.ResourceManager, context.GpuAccessor, context.TargetLanguage);
+
+            bool hostSupportsShaderFloat64 = context.GpuAccessor.QueryHostSupportsShaderFloat64();
 
             // Those passes are looking for specific patterns and only needs to run once.
-            for (int blkIndex = 0; blkIndex < blocks.Length; blkIndex++)
+            for (int blkIndex = 0; blkIndex < context.Blocks.Length; blkIndex++)
             {
-                GlobalToStorage.RunPass(blocks[blkIndex], config, ref sbUseMask, ref ubeUseMask);
-                BindlessToIndexed.RunPass(blocks[blkIndex], config);
-                BindlessElimination.RunPass(blocks[blkIndex], config);
+                BindlessToIndexed.RunPass(context.Blocks[blkIndex], context.ResourceManager);
+                BindlessElimination.RunPass(context.Blocks[blkIndex], context.ResourceManager, context.GpuAccessor);
+
+                // FragmentCoord only exists on fragment shaders, so we don't need to check other stages.
+                if (context.Stage == ShaderStage.Fragment)
+                {
+                    EliminateMultiplyByFragmentCoordW(context.Blocks[blkIndex]);
+                }
+
+                // If the host does not support double operations, we need to turn them into float operations.
+                if (!hostSupportsShaderFloat64)
+                {
+                    DoubleToFloat.RunPass(context.Hfm, context.Blocks[blkIndex]);
+                }
             }
 
-            config.SetAccessibleBufferMasks(sbUseMask, ubeUseMask);
-
             // Run optimizations one last time to remove any code that is now optimizable after above passes.
-            RunOptimizationPasses(blocks);
+            RunOptimizationPasses(context.Blocks, context.ResourceManager);
         }
 
-        private static void RunOptimizationPasses(BasicBlock[] blocks)
+        private static void RunOptimizationPasses(BasicBlock[] blocks, ResourceManager resourceManager)
         {
             bool modified;
 
@@ -48,7 +60,7 @@ namespace Ryujinx.Graphics.Shader.Translation.Optimizations
 
                         bool isUnused = IsUnused(node.Value);
 
-                        if (!(node.Value is Operation operation) || isUnused)
+                        if (node.Value is not Operation operation || isUnused)
                         {
                             if (node.Value is PhiNode phi && !isUnused)
                             {
@@ -67,8 +79,7 @@ namespace Ryujinx.Graphics.Shader.Translation.Optimizations
                             continue;
                         }
 
-                        ConstantFolding.RunPass(operation);
-
+                        ConstantFolding.RunPass(resourceManager, operation);
                         Simplification.RunPass(operation);
 
                         if (DestIsLocalVar(operation))
@@ -82,7 +93,7 @@ namespace Ryujinx.Graphics.Shader.Translation.Optimizations
                                 modified = true;
                             }
                             else if ((operation.Inst == Instruction.PackHalf2x16 && PropagatePack(operation)) ||
-                                     (operation.Inst == Instruction.ShuffleXor   && MatchDdxOrDdy(operation)))
+                                     (operation.Inst == Instruction.ShuffleXor && MatchDdxOrDdy(operation)))
                             {
                                 if (DestHasNoUses(operation))
                                 {
@@ -113,7 +124,7 @@ namespace Ryujinx.Graphics.Shader.Translation.Optimizations
             // the destination operand.
 
             Operand dest = copyOp.Dest;
-            Operand src  = copyOp.GetSource(0);
+            Operand src = copyOp.GetSource(0);
 
             INode[] uses = dest.UseOps.ToArray();
 
@@ -188,7 +199,7 @@ namespace Ryujinx.Graphics.Shader.Translation.Optimizations
 
             foreach (INode useNode in uses)
             {
-                if (!(useNode is Operation operation) || operation.Inst != Instruction.UnpackHalf2x16)
+                if (useNode is not Operation operation || operation.Inst != Instruction.UnpackHalf2x16)
                 {
                     continue;
                 }
@@ -237,12 +248,12 @@ namespace Ryujinx.Graphics.Shader.Translation.Optimizations
 
             foreach (INode use in uses)
             {
-                if (!(use is Operation test))
+                if (use is not Operation test)
                 {
                     continue;
                 }
 
-                if (!(use is Operation useOp) || useOp.Inst != Instruction.SwizzleAdd)
+                if (use is not Operation useOp || useOp.Inst != Instruction.SwizzleAdd)
                 {
                     continue;
                 }
@@ -282,13 +293,82 @@ namespace Ryujinx.Graphics.Shader.Translation.Optimizations
             return modified;
         }
 
+        private static void EliminateMultiplyByFragmentCoordW(BasicBlock block)
+        {
+            foreach (INode node in block.Operations)
+            {
+                if (node is Operation operation)
+                {
+                    EliminateMultiplyByFragmentCoordW(operation);
+                }
+            }
+        }
+
+        private static void EliminateMultiplyByFragmentCoordW(Operation operation)
+        {
+            // We're looking for the pattern:
+            //  y = x * gl_FragCoord.w
+            //  v = y * (1.0 / gl_FragCoord.w)
+            // Then we transform it into:
+            //  v = x
+            // This pattern is common on fragment shaders due to the way how perspective correction is done.
+
+            // We are expecting a multiplication by the reciprocal of gl_FragCoord.w.
+            if (operation.Inst != (Instruction.FP32 | Instruction.Multiply))
+            {
+                return;
+            }
+
+            Operand lhs = operation.GetSource(0);
+            Operand rhs = operation.GetSource(1);
+
+            // Check LHS of the the main multiplication operation. We expect an input being multiplied by gl_FragCoord.w.
+            if (lhs.AsgOp is not Operation attrMulOp || attrMulOp.Inst != (Instruction.FP32 | Instruction.Multiply))
+            {
+                return;
+            }
+
+            Operand attrMulLhs = attrMulOp.GetSource(0);
+            Operand attrMulRhs = attrMulOp.GetSource(1);
+
+            // LHS should be any input, RHS should be exactly gl_FragCoord.w.
+            if (!Utils.IsInputLoad(attrMulLhs.AsgOp) || !Utils.IsInputLoad(attrMulRhs.AsgOp, IoVariable.FragmentCoord, 3))
+            {
+                return;
+            }
+
+            // RHS of the main multiplication should be a reciprocal operation (1.0 / x).
+            if (rhs.AsgOp is not Operation reciprocalOp || reciprocalOp.Inst != (Instruction.FP32 | Instruction.Divide))
+            {
+                return;
+            }
+
+            Operand reciprocalLhs = reciprocalOp.GetSource(0);
+            Operand reciprocalRhs = reciprocalOp.GetSource(1);
+
+            // Check if the divisor is a constant equal to 1.0.
+            if (reciprocalLhs.Type != OperandType.Constant || reciprocalLhs.AsFloat() != 1.0f)
+            {
+                return;
+            }
+
+            // Check if the dividend is gl_FragCoord.w.
+            if (!Utils.IsInputLoad(reciprocalRhs.AsgOp, IoVariable.FragmentCoord, 3))
+            {
+                return;
+            }
+
+            // If everything matches, we can replace the operation with the input load result.
+            operation.TurnIntoCopy(attrMulLhs);
+        }
+
         private static void RemoveNode(BasicBlock block, LinkedListNode<INode> llNode)
         {
             // Remove a node from the nodes list, and also remove itself
             // from all the use lists on the operands that this node uses.
             block.Operations.Remove(llNode);
 
-            Queue<INode> nodes = new Queue<INode>();
+            Queue<INode> nodes = new();
 
             nodes.Enqueue(llNode.Value);
 

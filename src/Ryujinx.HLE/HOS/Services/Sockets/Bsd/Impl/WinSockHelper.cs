@@ -1,5 +1,5 @@
 using Ryujinx.HLE.HOS.Services.Sockets.Bsd.Types;
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Net.Sockets;
 
@@ -88,7 +88,7 @@ namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd.Impl
             // WSAEFAULT
             { WsaError.WSAEFAULT,          LinuxError.EFAULT },
             // NOERROR
-            { 0, 0 }
+            { 0, 0 },
         };
 
         private static readonly Dictionary<int, LinuxError> _errorMapMacOs = new()
@@ -136,7 +136,7 @@ namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd.Impl
             { 59, LinuxError.ETOOMANYREFS },
             { 92, LinuxError.EILSEQ },
             { 89, LinuxError.ECANCELED },
-            { 84, LinuxError.EOVERFLOW }
+            { 84, LinuxError.EOVERFLOW },
         };
 
         private static readonly Dictionary<BsdSocketOption, SocketOptionName> _soSocketOptionMap = new()
@@ -157,7 +157,7 @@ namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd.Impl
             { BsdSocketOption.SoSndTimeo,    SocketOptionName.SendTimeout },
             { BsdSocketOption.SoRcvTimeo,    SocketOptionName.ReceiveTimeout },
             { BsdSocketOption.SoError,       SocketOptionName.Error },
-            { BsdSocketOption.SoType,        SocketOptionName.Type }
+            { BsdSocketOption.SoType,        SocketOptionName.Type },
         };
 
         private static readonly Dictionary<BsdSocketOption, SocketOptionName> _ipSocketOptionMap = new()
@@ -172,7 +172,7 @@ namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd.Impl
             { BsdSocketOption.IpDropMembership,       SocketOptionName.DropMembership },
             { BsdSocketOption.IpDontFrag,             SocketOptionName.DontFragment },
             { BsdSocketOption.IpAddSourceMembership,  SocketOptionName.AddSourceMembership },
-            { BsdSocketOption.IpDropSourceMembership, SocketOptionName.DropSourceMembership }
+            { BsdSocketOption.IpDropSourceMembership, SocketOptionName.DropSourceMembership },
         };
 
         private static readonly Dictionary<BsdSocketOption, SocketOptionName> _tcpSocketOptionMap = new()
@@ -180,7 +180,105 @@ namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd.Impl
             { BsdSocketOption.TcpNoDelay,   SocketOptionName.NoDelay },
             { BsdSocketOption.TcpKeepIdle,  SocketOptionName.TcpKeepAliveTime },
             { BsdSocketOption.TcpKeepIntvl, SocketOptionName.TcpKeepAliveInterval },
-            { BsdSocketOption.TcpKeepCnt,   SocketOptionName.TcpKeepAliveRetryCount }
+            { BsdSocketOption.TcpKeepCnt,   SocketOptionName.TcpKeepAliveRetryCount },
+        };
+
+        [Flags]
+        private enum OptionDir
+        {
+            Get = 1 << 0,
+            Set = 1 << 1,
+            GetSet = Get | Set,
+        }
+
+        private static readonly Dictionary<BsdSocketOption, OptionDir> _validSoSocketOptionMap = new()
+        {
+            { BsdSocketOption.SoDebug,         OptionDir.GetSet },
+            { BsdSocketOption.SoAcceptConn,    OptionDir.Get },
+            { BsdSocketOption.SoReuseAddr,     OptionDir.GetSet },
+            { BsdSocketOption.SoKeepAlive,     OptionDir.GetSet },
+            { BsdSocketOption.SoDontRoute,     OptionDir.GetSet },
+            { BsdSocketOption.SoBroadcast,     OptionDir.GetSet },
+            { BsdSocketOption.SoUseLoopBack,   OptionDir.GetSet },
+            { BsdSocketOption.SoLinger,        OptionDir.GetSet },
+            { BsdSocketOption.SoOobInline,     OptionDir.GetSet },
+            { BsdSocketOption.SoReusePort,     OptionDir.GetSet },
+            { BsdSocketOption.SoTimestamp,     OptionDir.GetSet },
+            { BsdSocketOption.SoNoSigpipe,     OptionDir.GetSet },
+            { BsdSocketOption.SoAcceptFilter,  OptionDir.GetSet },
+            { BsdSocketOption.SoSndBuf,        OptionDir.GetSet },
+            { BsdSocketOption.SoRcvBuf,        OptionDir.GetSet },
+            { BsdSocketOption.SoSndLoWat,      OptionDir.GetSet },
+            { BsdSocketOption.SoRcvLoWat,      OptionDir.GetSet },
+            { BsdSocketOption.SoSndTimeo,      OptionDir.GetSet },
+            { BsdSocketOption.SoRcvTimeo,      OptionDir.GetSet },
+            { BsdSocketOption.SoError,         OptionDir.Get },
+            { BsdSocketOption.SoType,          OptionDir.Get },
+            { BsdSocketOption.SoLabel,         OptionDir.Get },
+            { BsdSocketOption.SoPeerLabel,     OptionDir.Get },
+            { BsdSocketOption.SoListenQLimit,  OptionDir.Get },
+            { BsdSocketOption.SoListenQLen,    OptionDir.Get },
+            { BsdSocketOption.SoListenIncQLen, OptionDir.Get },
+            { BsdSocketOption.SoSetFib,        OptionDir.Set },
+            { BsdSocketOption.SoUserCookie,    OptionDir.Set },
+            { BsdSocketOption.SoProtocol,      OptionDir.Get },
+            { BsdSocketOption.SoBinTime,       OptionDir.GetSet },
+            { BsdSocketOption.SoNoOffload,     OptionDir.Set },
+            { BsdSocketOption.SoNoDdp,         OptionDir.Set },
+            { BsdSocketOption.SoReusePortLb,   OptionDir.GetSet },
+        };
+
+        private static readonly Dictionary<BsdSocketOption, OptionDir> _validIpSocketOptionMap = new()
+        {
+            { BsdSocketOption.IpOptions,              OptionDir.GetSet },
+            { BsdSocketOption.IpHdrIncl,              OptionDir.GetSet },
+            { BsdSocketOption.IpTos,                  OptionDir.GetSet },
+            { BsdSocketOption.IpTtl,                  OptionDir.GetSet },
+            { BsdSocketOption.IpRecvOpts,             OptionDir.GetSet },
+            { BsdSocketOption.IpRecvRetOpts,          OptionDir.GetSet },
+            { BsdSocketOption.IpRecvDstAddr,          OptionDir.GetSet },
+            { BsdSocketOption.IpRetOpts,              OptionDir.GetSet },
+            { BsdSocketOption.IpMulticastIf,          OptionDir.GetSet },
+            { BsdSocketOption.IpMulticastTtl,         OptionDir.GetSet },
+            { BsdSocketOption.IpMulticastLoop,        OptionDir.GetSet },
+            { BsdSocketOption.IpAddMembership,        OptionDir.GetSet },
+            { BsdSocketOption.IpDropMembership,       OptionDir.GetSet },
+            { BsdSocketOption.IpMulticastVif,         OptionDir.GetSet },
+            { BsdSocketOption.IpRsvpOn,               OptionDir.GetSet },
+            { BsdSocketOption.IpRsvpOff,              OptionDir.GetSet },
+            { BsdSocketOption.IpRsvpVifOn,            OptionDir.GetSet },
+            { BsdSocketOption.IpRsvpVifOff,           OptionDir.GetSet },
+            { BsdSocketOption.IpPortRange,            OptionDir.GetSet },
+            { BsdSocketOption.IpRecvIf,               OptionDir.GetSet },
+            { BsdSocketOption.IpIpsecPolicy,          OptionDir.GetSet },
+            { BsdSocketOption.IpOnesBcast,            OptionDir.GetSet },
+            { BsdSocketOption.IpBindany,              OptionDir.GetSet },
+            { BsdSocketOption.IpBindMulti,            OptionDir.GetSet },
+            { BsdSocketOption.IpRssListenBucket,      OptionDir.GetSet },
+            { BsdSocketOption.IpOrigDstAddr,          OptionDir.GetSet },
+            { BsdSocketOption.IpRecvTtl,              OptionDir.GetSet },
+            { BsdSocketOption.IpMinTtl,               OptionDir.GetSet },
+            { BsdSocketOption.IpDontFrag,             OptionDir.GetSet },
+            { BsdSocketOption.IpRecvTos,              OptionDir.GetSet },
+            { BsdSocketOption.IpAddSourceMembership,  OptionDir.GetSet },
+            { BsdSocketOption.IpDropSourceMembership, OptionDir.GetSet },
+            { BsdSocketOption.IpBlockSource,          OptionDir.GetSet },
+            { BsdSocketOption.IpUnblockSource,        OptionDir.GetSet },
+        };
+
+        private static readonly Dictionary<BsdSocketOption, OptionDir> _validTcpSocketOptionMap = new()
+        {
+            { BsdSocketOption.TcpNoDelay,    OptionDir.GetSet },
+            { BsdSocketOption.TcpMaxSeg,     OptionDir.GetSet },
+            { BsdSocketOption.TcpNoPush,     OptionDir.GetSet },
+            { BsdSocketOption.TcpNoOpt,      OptionDir.GetSet },
+            { BsdSocketOption.TcpMd5Sig,     OptionDir.GetSet },
+            { BsdSocketOption.TcpInfo,       OptionDir.GetSet },
+            { BsdSocketOption.TcpCongestion, OptionDir.GetSet },
+            { BsdSocketOption.TcpKeepInit,   OptionDir.GetSet },
+            { BsdSocketOption.TcpKeepIdle,   OptionDir.GetSet },
+            { BsdSocketOption.TcpKeepIntvl,  OptionDir.GetSet },
+            { BsdSocketOption.TcpKeepCnt,    OptionDir.GetSet },
         };
 
         public static LinuxError ConvertError(WsaError errorCode)
@@ -210,7 +308,7 @@ namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd.Impl
                 SocketOptionLevel.Socket => _soSocketOptionMap,
                 SocketOptionLevel.IP => _ipSocketOptionMap,
                 SocketOptionLevel.Tcp => _tcpSocketOptionMap,
-                _ => null
+                _ => null,
             };
 
             if (table == null)
@@ -220,6 +318,30 @@ namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd.Impl
             }
 
             return table.TryGetValue(option, out name);
+        }
+
+        public static LinuxError ValidateSocketOption(BsdSocketOption option, SocketOptionLevel level, bool write)
+        {
+            var table = level switch
+            {
+                SocketOptionLevel.Socket => _validSoSocketOptionMap,
+                SocketOptionLevel.IP => _validIpSocketOptionMap,
+                SocketOptionLevel.Tcp => _validTcpSocketOptionMap,
+                _ => null,
+            };
+
+            OptionDir dir = write ? OptionDir.Set : OptionDir.Get;
+
+            if (table == null || !table.TryGetValue(option, out OptionDir validDir))
+            {
+                return LinuxError.ENOPROTOOPT;
+            }
+            else if ((validDir & dir) != dir)
+            {
+                return LinuxError.EOPNOTSUPP;
+            }
+
+            return LinuxError.SUCCESS;
         }
     }
 }

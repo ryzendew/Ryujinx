@@ -10,14 +10,25 @@
     <string>Ryujinx</string>
     <key>CFBundleIconFile</key>
     <string>Ryujinx.icns</string>
-    <key>CFBundleTypeExtensions</key>
-    <array>
-        <string>nca</string>
-        <string>nro</string>
-        <string>nso</string>
-        <string>nsp</string>
-        <string>xci</string>
-    </array>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>nca</string>
+				<string>nro</string>
+				<string>nso</string>
+				<string>nsp</string>
+				<string>xci</string>
+			</array>
+			<key>CFBundleTypeName</key>
+			<string>Nintendo Switch File</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Default</string>
+		</dict>
+	</array>
     <key>CFBundleIdentifier</key>
     <string>org.ryujinx.Ryujinx</string>
     <key>CFBundleInfoDictionaryVersion</key>
@@ -39,10 +50,120 @@
     <key>CSResourcesFileMapped</key>
     <true/>
     <key>NSHumanReadableCopyright</key>
-    <string>Copyright © 2018 - 2022 Ryujinx Team and Contributors.</string>
+    <string>Copyright © 2018 - 2023 Ryujinx Team and Contributors.</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.games</string>
     <key>LSMinimumSystemVersion</key>
-    <string>11.0</string>
+    <string>12.0</string>
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+      <dict>
+        <key>UTTypeDescription</key>
+        <string>Extensible Application Markup Language</string>
+        <key>UTTypeConformsTo</key>
+        <array>
+          <string>public.xml</string>
+        </array>
+        <key>UTTypeIdentifier</key>
+        <string>com.ryujinx.xaml</string>
+        <key>UTTypeTagSpecification</key>
+        <dict>
+          <key>public.filename-extension</key>
+          <array>
+            <string>xaml</string>
+          </array>
+        </dict>
+      </dict>
+      <dict>
+        <key>UTTypeDescription</key>
+        <string>Nintendo Submission Package</string>
+        <key>UTTypeConformsTo</key>
+        <array>
+          <string>public.data</string>
+        </array>
+        <key>UTTypeIdentifier</key>
+        <string>com.ryujinx.nsp</string>
+        <key>UTTypeTagSpecification</key>
+        <dict>
+          <key>public.filename-extension</key>
+          <array>
+            <string>nsp</string>
+          </array>
+        </dict>
+      </dict>
+      <dict>
+        <key>UTTypeDescription</key>
+        <string>Nintendo Switch Cartridge</string>
+        <key>UTTypeConformsTo</key>
+        <array>
+          <string>public.data</string>
+        </array>
+        <key>UTTypeIdentifier</key>
+        <string>com.ryujinx.xci</string>
+        <key>UTTypeTagSpecification</key>
+        <dict>
+          <key>public.filename-extension</key>
+          <array>
+            <string>xci</string>
+          </array>
+        </dict>
+      </dict>
+      <dict>
+        <key>UTTypeDescription</key>
+        <string>Nintendo Content Archive</string>
+        <key>UTTypeConformsTo</key>
+        <array>
+          <string>public.data</string>
+        </array>
+        <key>UTTypeIdentifier</key>
+        <string>com.ryujinx.nca</string>
+        <key>UTTypeTagSpecification</key>
+        <dict>
+          <key>public.filename-extension</key>
+          <array>
+            <string>nca</string>
+          </array>
+        </dict>
+      </dict>
+      <dict>
+        <key>UTTypeDescription</key>
+        <string>Nintendo Relocatable Object</string>
+        <key>UTTypeConformsTo</key>
+        <array>
+          <string>public.data</string>
+        </array>
+        <key>UTTypeIdentifier</key>
+        <string>com.ryujinx.nro</string>
+        <key>UTTypeTagSpecification</key>
+        <dict>
+          <key>public.filename-extension</key>
+          <array>
+            <string>nro</string>
+          </array>
+        </dict>
+      </dict>
+      <dict>
+        <key>UTTypeDescription</key>
+        <string>Nintendo Shared Object</string>
+        <key>UTTypeConformsTo</key>
+        <array>
+          <string>public.data</string>
+        </array>
+        <key>UTTypeIdentifier</key>
+        <string>com.ryujinx.nso</string>
+        <key>UTTypeTagSpecification</key>
+        <dict>
+          <key>public.filename-extension</key>
+          <array>
+            <string>nso</string>
+          </array>
+        </dict>
+      </dict>
+    </array>
+    <key>LSEnvironment</key>
+    <dict>
+        <key>DOTNET_DefaultStackSize</key>
+        <string>200000</string>
+    </dict>
 </dict>
 </plist>

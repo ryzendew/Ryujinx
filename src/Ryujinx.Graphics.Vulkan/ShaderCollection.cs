@@ -1,8 +1,9 @@
-﻿using Ryujinx.Common.Logging;
+using Ryujinx.Common.Logging;
 using Ryujinx.Graphics.GAL;
 using Silk.NET.Vulkan;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -23,7 +24,9 @@ namespace Ryujinx.Graphics.Vulkan
 
         public uint Stages { get; }
 
-        public int[][][] Bindings { get; }
+        public ResourceBindingSegment[][] ClearSegments { get; }
+        public ResourceBindingSegment[][] BindingSegments { get; }
+        public DescriptorSetTemplate[] Templates { get; }
 
         public ProgramLinkStatus LinkStatus { get; private set; }
 
@@ -45,16 +48,22 @@ namespace Ryujinx.Graphics.Vulkan
         private HashTableSlim<PipelineUid, Auto<DisposablePipeline>> _graphicsPipelineCache;
         private HashTableSlim<SpecData, Auto<DisposablePipeline>> _computePipelineCache;
 
-        private VulkanRenderer _gd;
+        private readonly VulkanRenderer _gd;
         private Device _device;
         private bool _initialized;
 
         private ProgramPipelineState _state;
         private DisposableRenderPass _dummyRenderPass;
-        private Task _compileTask;
+        private readonly Task _compileTask;
         private bool _firstBackgroundUse;
 
-        public ShaderCollection(VulkanRenderer gd, Device device, ShaderSource[] shaders, SpecDescription[] specDescription = null, bool isMinimal = false)
+        public ShaderCollection(
+            VulkanRenderer gd,
+            Device device,
+            ShaderSource[] shaders,
+            ResourceLayout resourceLayout,
+            SpecDescription[] specDescription = null,
+            bool isMinimal = false)
         {
             _gd = gd;
             _device = device;
@@ -86,7 +95,7 @@ namespace Ryujinx.Graphics.Vulkan
                     ShaderStageFlags.GeometryBit => 2,
                     ShaderStageFlags.TessellationControlBit => 3,
                     ShaderStageFlags.TessellationEvaluationBit => 4,
-                    _ => 0
+                    _ => 0,
                 };
 
                 if (shader.StageFlags == ShaderStageFlags.ComputeBit)
@@ -99,39 +108,18 @@ namespace Ryujinx.Graphics.Vulkan
 
             _shaders = internalShaders;
 
-            bool usePd = !isMinimal && VulkanConfiguration.UsePushDescriptors && _gd.Capabilities.SupportsPushDescriptors;
+            bool usePushDescriptors = !isMinimal && VulkanConfiguration.UsePushDescriptors && _gd.Capabilities.SupportsPushDescriptors;
 
-            _plce = isMinimal
-                ? gd.PipelineLayoutCache.Create(gd, device, shaders)
-                : gd.PipelineLayoutCache.GetOrCreate(gd, device, stages, usePd);
+            _plce = gd.PipelineLayoutCache.GetOrCreate(gd, device, resourceLayout.Sets, usePushDescriptors);
 
             HasMinimalLayout = isMinimal;
-            UsePushDescriptors = usePd;
+            UsePushDescriptors = usePushDescriptors;
 
             Stages = stages;
 
-            int[][] GrabAll(Func<ShaderBindings, IReadOnlyCollection<int>> selector)
-            {
-                bool hasAny = false;
-                int[][] bindings = new int[internalShaders.Length][];
-
-                for (int i = 0; i < internalShaders.Length; i++)
-                {
-                    var collection = selector(internalShaders[i].Bindings);
-                    hasAny |= collection.Count != 0;
-                    bindings[i] = collection.ToArray();
-                }
-
-                return hasAny ? bindings : Array.Empty<int[]>();
-            }
-
-            Bindings = new[]
-            {
-                GrabAll(x => x.UniformBufferBindings),
-                GrabAll(x => x.StorageBufferBindings),
-                GrabAll(x => x.TextureBindings),
-                GrabAll(x => x.ImageBindings)
-            };
+            ClearSegments = BuildClearSegments(resourceLayout.Sets);
+            BindingSegments = BuildBindingSegments(resourceLayout.SetUsages);
+            Templates = BuildTemplates();
 
             _compileTask = Task.CompletedTask;
             _firstBackgroundUse = false;
@@ -141,8 +129,9 @@ namespace Ryujinx.Graphics.Vulkan
             VulkanRenderer gd,
             Device device,
             ShaderSource[] sources,
+            ResourceLayout resourceLayout,
             ProgramPipelineState state,
-            bool fromCache) : this(gd, device, sources)
+            bool fromCache) : this(gd, device, sources, resourceLayout)
         {
             _state = state;
 
@@ -150,11 +139,132 @@ namespace Ryujinx.Graphics.Vulkan
             _firstBackgroundUse = !fromCache;
         }
 
+        private static ResourceBindingSegment[][] BuildClearSegments(ReadOnlyCollection<ResourceDescriptorCollection> sets)
+        {
+            ResourceBindingSegment[][] segments = new ResourceBindingSegment[sets.Count][];
+
+            for (int setIndex = 0; setIndex < sets.Count; setIndex++)
+            {
+                List<ResourceBindingSegment> currentSegments = new();
+
+                ResourceDescriptor currentDescriptor = default;
+                int currentCount = 0;
+
+                for (int index = 0; index < sets[setIndex].Descriptors.Count; index++)
+                {
+                    ResourceDescriptor descriptor = sets[setIndex].Descriptors[index];
+
+                    if (currentDescriptor.Binding + currentCount != descriptor.Binding ||
+                        currentDescriptor.Type != descriptor.Type ||
+                        currentDescriptor.Stages != descriptor.Stages)
+                    {
+                        if (currentCount != 0)
+                        {
+                            currentSegments.Add(new ResourceBindingSegment(
+                                currentDescriptor.Binding,
+                                currentCount,
+                                currentDescriptor.Type,
+                                currentDescriptor.Stages));
+                        }
+
+                        currentDescriptor = descriptor;
+                        currentCount = descriptor.Count;
+                    }
+                    else
+                    {
+                        currentCount += descriptor.Count;
+                    }
+                }
+
+                if (currentCount != 0)
+                {
+                    currentSegments.Add(new ResourceBindingSegment(
+                        currentDescriptor.Binding,
+                        currentCount,
+                        currentDescriptor.Type,
+                        currentDescriptor.Stages));
+                }
+
+                segments[setIndex] = currentSegments.ToArray();
+            }
+
+            return segments;
+        }
+
+        private static ResourceBindingSegment[][] BuildBindingSegments(ReadOnlyCollection<ResourceUsageCollection> setUsages)
+        {
+            ResourceBindingSegment[][] segments = new ResourceBindingSegment[setUsages.Count][];
+
+            for (int setIndex = 0; setIndex < setUsages.Count; setIndex++)
+            {
+                List<ResourceBindingSegment> currentSegments = new();
+
+                ResourceUsage currentUsage = default;
+                int currentCount = 0;
+
+                for (int index = 0; index < setUsages[setIndex].Usages.Count; index++)
+                {
+                    ResourceUsage usage = setUsages[setIndex].Usages[index];
+
+                    if (currentUsage.Binding + currentCount != usage.Binding ||
+                        currentUsage.Type != usage.Type ||
+                        currentUsage.Stages != usage.Stages)
+                    {
+                        if (currentCount != 0)
+                        {
+                            currentSegments.Add(new ResourceBindingSegment(
+                                currentUsage.Binding,
+                                currentCount,
+                                currentUsage.Type,
+                                currentUsage.Stages));
+                        }
+
+                        currentUsage = usage;
+                        currentCount = 1;
+                    }
+                    else
+                    {
+                        currentCount++;
+                    }
+                }
+
+                if (currentCount != 0)
+                {
+                    currentSegments.Add(new ResourceBindingSegment(
+                        currentUsage.Binding,
+                        currentCount,
+                        currentUsage.Type,
+                        currentUsage.Stages));
+                }
+
+                segments[setIndex] = currentSegments.ToArray();
+            }
+
+            return segments;
+        }
+
+        private DescriptorSetTemplate[] BuildTemplates()
+        {
+            var templates = new DescriptorSetTemplate[BindingSegments.Length];
+
+            for (int setIndex = 0; setIndex < BindingSegments.Length; setIndex++)
+            {
+                ResourceBindingSegment[] segments = BindingSegments[setIndex];
+
+                if (segments != null && segments.Length > 0)
+                {
+                    templates[setIndex] = new DescriptorSetTemplate(_gd, _device, segments, _plce, IsCompute ? PipelineBindPoint.Compute : PipelineBindPoint.Graphics, setIndex);
+                }
+            }
+
+            return templates;
+        }
+
         private async Task BackgroundCompilation()
         {
             await Task.WhenAll(_shaders.Select(shader => shader.CompileTask));
 
-            if (_shaders.Any(shader => shader.CompileStatus == ProgramLinkStatus.Failure))
+            if (Array.Exists(_shaders, shader => shader.CompileStatus == ProgramLinkStatus.Failure))
             {
                 LinkStatus = ProgramLinkStatus.Failure;
 
@@ -217,7 +327,7 @@ namespace Ryujinx.Graphics.Vulkan
             return _infos;
         }
 
-        protected unsafe DisposableRenderPass CreateDummyRenderPass()
+        protected DisposableRenderPass CreateDummyRenderPass()
         {
             if (_dummyRenderPass.Value.Handle != 0)
             {
@@ -229,7 +339,7 @@ namespace Ryujinx.Graphics.Vulkan
 
         public void CreateBackgroundComputePipeline()
         {
-            PipelineState pipeline = new PipelineState();
+            PipelineState pipeline = new();
             pipeline.Initialize();
 
             pipeline.Stages[0] = _shaders[0].GetInfo();
@@ -373,16 +483,17 @@ namespace Ryujinx.Graphics.Vulkan
             return true;
         }
 
-        public Auto<DescriptorSetCollection> GetNewDescriptorSetCollection(
-            VulkanRenderer gd,
-            int commandBufferIndex,
-            int setIndex,
-            out bool isNew)
+        public void UpdateDescriptorCacheCommandBufferIndex(int commandBufferIndex)
         {
-            return _plce.GetNewDescriptorSetCollection(gd, commandBufferIndex, setIndex, out isNew);
+            _plce.UpdateCommandBufferIndex(commandBufferIndex);
         }
 
-        protected virtual unsafe void Dispose(bool disposing)
+        public Auto<DescriptorSetCollection> GetNewDescriptorSetCollection(int setIndex, out bool isNew)
+        {
+            return _plce.GetNewDescriptorSetCollection(setIndex, out isNew);
+        }
+
+        protected virtual void Dispose(bool disposing)
         {
             if (disposing)
             {
@@ -410,6 +521,11 @@ namespace Ryujinx.Graphics.Vulkan
                     {
                         pipeline.Dispose();
                     }
+                }
+
+                for (int i = 0; i < Templates.Length; i++)
+                {
+                    Templates[i]?.Dispose();
                 }
 
                 if (_dummyRenderPass.Value.Handle != 0)

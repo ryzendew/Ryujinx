@@ -1,4 +1,4 @@
-﻿using Ryujinx.Horizon.Common;
+using Ryujinx.Horizon.Common;
 using System;
 using System.Collections.Generic;
 
@@ -12,7 +12,7 @@ namespace Ryujinx.Horizon.Sdk.Sf.Cmif
         public ServiceDispatchTable(string objectName, IReadOnlyDictionary<int, CommandHandler> entries)
         {
             _objectName = objectName;
-            _entries    = entries;
+            _entries = entries;
         }
 
         public override Result ProcessMessage(ref ServiceDispatchContext context, ReadOnlySpan<byte> inRawData)

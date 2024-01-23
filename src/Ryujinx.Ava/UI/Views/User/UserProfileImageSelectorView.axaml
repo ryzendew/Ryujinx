@@ -9,7 +9,6 @@
     Focusable="True"
     mc:Ignorable="d"
     x:Class="Ryujinx.Ava.UI.Views.User.UserProfileImageSelectorView"
-    x:CompileBindings="True"
     x:DataType="viewModles:UserProfileImageSelectorViewModel"
     Width="500"
     d:DesignWidth="500">
@@ -28,7 +27,7 @@
             Grid.Row="0"
             TextWrapping="Wrap"
             HorizontalAlignment="Left"
-            TextAlignment="Left"
+            TextAlignment="Start"
             Text="{locale:Locale ProfileImageSelectionNote}" />
         <StackPanel
             Grid.Row="2"

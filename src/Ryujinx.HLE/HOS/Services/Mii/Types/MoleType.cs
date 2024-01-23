@@ -1,11 +1,11 @@
-﻿namespace Ryujinx.HLE.HOS.Services.Mii.Types
+namespace Ryujinx.HLE.HOS.Services.Mii.Types
 {
     enum MoleType : byte
     {
         None,
         OneDot,
 
-        Min = 0,
-        Max = 1
+        Min = None,
+        Max = OneDot,
     }
 }

@@ -71,13 +71,13 @@ namespace Ryujinx.Audio.Renderer.Dsp.Command
                 return (IntPtr)((float*)_buffersMemoryHandle.Pointer + index * _sampleCount);
             }
 
-            throw new ArgumentOutOfRangeException();
+            throw new ArgumentOutOfRangeException(nameof(index), index, null);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public unsafe void ClearBuffer(int index)
         {
-            Unsafe.InitBlock((void*)GetBufferPointer(index), 0, SampleCount);
+            Unsafe.InitBlock((void*)GetBufferPointer(index), 0, SampleCount * sizeof(float));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -89,7 +89,7 @@ namespace Ryujinx.Audio.Renderer.Dsp.Command
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public unsafe void CopyBuffer(int outputBufferIndex, int inputBufferIndex)
         {
-            Unsafe.CopyBlock((void*)GetBufferPointer(outputBufferIndex), (void*)GetBufferPointer(inputBufferIndex), SampleCount);
+            Unsafe.CopyBlock((void*)GetBufferPointer(outputBufferIndex), (void*)GetBufferPointer(inputBufferIndex), SampleCount * sizeof(float));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -149,6 +149,7 @@ namespace Ryujinx.Audio.Renderer.Dsp.Command
 
         public void Dispose()
         {
+            GC.SuppressFinalize(this);
             _buffersMemoryHandle.Dispose();
         }
     }

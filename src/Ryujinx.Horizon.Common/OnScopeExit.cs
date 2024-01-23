@@ -1,8 +1,8 @@
-﻿using System;
+using System;
 
 namespace Ryujinx.Horizon.Common
 {
-    public struct OnScopeExit : IDisposable
+    public readonly struct OnScopeExit : IDisposable
     {
         private readonly Action _action;
 

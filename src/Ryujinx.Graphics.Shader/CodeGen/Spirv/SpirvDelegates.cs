@@ -1,4 +1,4 @@
-﻿using FuncBinaryInstruction = System.Func<Spv.Generator.Instruction, Spv.Generator.Instruction, Spv.Generator.Instruction, Spv.Generator.Instruction>;
+using FuncBinaryInstruction = System.Func<Spv.Generator.Instruction, Spv.Generator.Instruction, Spv.Generator.Instruction, Spv.Generator.Instruction>;
 using FuncQuaternaryInstruction = System.Func<Spv.Generator.Instruction, Spv.Generator.Instruction, Spv.Generator.Instruction, Spv.Generator.Instruction, Spv.Generator.Instruction, Spv.Generator.Instruction>;
 using FuncTernaryInstruction = System.Func<Spv.Generator.Instruction, Spv.Generator.Instruction, Spv.Generator.Instruction, Spv.Generator.Instruction, Spv.Generator.Instruction>;
 using FuncUnaryInstruction = System.Func<Spv.Generator.Instruction, Spv.Generator.Instruction, Spv.Generator.Instruction>;
@@ -67,6 +67,7 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
         public readonly FuncBinaryInstruction GlslSMax;
         public readonly FuncBinaryInstruction GlslFMin;
         public readonly FuncBinaryInstruction GlslSMin;
+        public readonly FuncBinaryInstruction FMod;
         public readonly FuncBinaryInstruction FMul;
         public readonly FuncBinaryInstruction IMul;
         public readonly FuncBinaryInstruction FSub;
@@ -174,6 +175,7 @@ namespace Ryujinx.Graphics.Shader.CodeGen.Spirv
             GlslSMax = context.GlslSMax;
             GlslFMin = context.GlslFMin;
             GlslSMin = context.GlslSMin;
+            FMod = context.FMod;
             FMul = context.FMul;
             IMul = context.IMul;
             FSub = context.FSub;

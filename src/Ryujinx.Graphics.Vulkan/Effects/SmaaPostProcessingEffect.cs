@@ -5,10 +5,11 @@ using Ryujinx.Graphics.Shader.Translation;
 using Silk.NET.Vulkan;
 using System;
 using Format = Ryujinx.Graphics.GAL.Format;
+using SamplerCreateInfo = Ryujinx.Graphics.GAL.SamplerCreateInfo;
 
 namespace Ryujinx.Graphics.Vulkan.Effects
 {
-    internal partial class SmaaPostProcessingEffect : IPostProcessingEffect
+    internal class SmaaPostProcessingEffect : IPostProcessingEffect
     {
         public const int AreaWidth = 160;
         public const int AreaHeight = 560;
@@ -64,7 +65,7 @@ namespace Ryujinx.Graphics.Vulkan.Effects
             _searchTexture?.Dispose();
         }
 
-        private unsafe void RecreateShaders(int width, int height)
+        private void RecreateShaders(int width, int height)
         {
             _recreatePipelines = false;
 
@@ -77,27 +78,27 @@ namespace Ryujinx.Graphics.Vulkan.Effects
             var blendShader = EmbeddedResources.Read("Ryujinx.Graphics.Vulkan/Effects/Shaders/SmaaBlend.spv");
             var neighbourShader = EmbeddedResources.Read("Ryujinx.Graphics.Vulkan/Effects/Shaders/SmaaNeighbour.spv");
 
-            var edgeBindings = new ShaderBindings(
-                new[] { 2 },
-                Array.Empty<int>(),
-                new[] { 1 },
-                new[] { 0 });
+            var edgeResourceLayout = new ResourceLayoutBuilder()
+                .Add(ResourceStages.Compute, ResourceType.UniformBuffer, 2)
+                .Add(ResourceStages.Compute, ResourceType.TextureAndSampler, 1)
+                .Add(ResourceStages.Compute, ResourceType.Image, 0).Build();
 
-            var blendBindings = new ShaderBindings(
-                new[] { 2 },
-                Array.Empty<int>(),
-                new[] { 1, 3, 4 },
-                new[] { 0 });
+            var blendResourceLayout = new ResourceLayoutBuilder()
+                .Add(ResourceStages.Compute, ResourceType.UniformBuffer, 2)
+                .Add(ResourceStages.Compute, ResourceType.TextureAndSampler, 1)
+                .Add(ResourceStages.Compute, ResourceType.TextureAndSampler, 3)
+                .Add(ResourceStages.Compute, ResourceType.TextureAndSampler, 4)
+                .Add(ResourceStages.Compute, ResourceType.Image, 0).Build();
 
-            var neighbourBindings = new ShaderBindings(
-                new[] { 2 },
-                Array.Empty<int>(),
-                new[] { 1, 3 },
-                new[] { 0 });
+            var neighbourResourceLayout = new ResourceLayoutBuilder()
+                .Add(ResourceStages.Compute, ResourceType.UniformBuffer, 2)
+                .Add(ResourceStages.Compute, ResourceType.TextureAndSampler, 1)
+                .Add(ResourceStages.Compute, ResourceType.TextureAndSampler, 3)
+                .Add(ResourceStages.Compute, ResourceType.Image, 0).Build();
 
-            _samplerLinear = _renderer.CreateSampler(GAL.SamplerCreateInfo.Create(MinFilter.Linear, MagFilter.Linear));
+            _samplerLinear = _renderer.CreateSampler(SamplerCreateInfo.Create(MinFilter.Linear, MagFilter.Linear));
 
-            _specConstants = new SmaaConstants()
+            _specConstants = new SmaaConstants
             {
                 Width = width,
                 Height = height,
@@ -117,18 +118,18 @@ namespace Ryujinx.Graphics.Vulkan.Effects
 
             _edgeProgram = _renderer.CreateProgramWithMinimalLayout(new[]
             {
-                new ShaderSource(edgeShader, edgeBindings, ShaderStage.Compute, TargetLanguage.Spirv)
-            }, new[] { specInfo });
+                new ShaderSource(edgeShader, ShaderStage.Compute, TargetLanguage.Spirv),
+            }, edgeResourceLayout, new[] { specInfo });
 
             _blendProgram = _renderer.CreateProgramWithMinimalLayout(new[]
             {
-                new ShaderSource(blendShader, blendBindings, ShaderStage.Compute, TargetLanguage.Spirv)
-            }, new[] { specInfo });
+                new ShaderSource(blendShader, ShaderStage.Compute, TargetLanguage.Spirv),
+            }, blendResourceLayout, new[] { specInfo });
 
             _neighbourProgram = _renderer.CreateProgramWithMinimalLayout(new[]
             {
-                new ShaderSource(neighbourShader, neighbourBindings, ShaderStage.Compute, TargetLanguage.Spirv)
-            }, new[] { specInfo });
+                new ShaderSource(neighbourShader, ShaderStage.Compute, TargetLanguage.Spirv),
+            }, neighbourResourceLayout, new[] { specInfo });
         }
 
         public void DeletePipelines()
@@ -176,8 +177,8 @@ namespace Ryujinx.Graphics.Vulkan.Effects
             var areaTexture = EmbeddedResources.Read("Ryujinx.Graphics.Vulkan/Effects/Textures/SmaaAreaTexture.bin");
             var searchTexture = EmbeddedResources.Read("Ryujinx.Graphics.Vulkan/Effects/Textures/SmaaSearchTexture.bin");
 
-            _areaTexture = _renderer.CreateTexture(areaInfo, 1) as TextureView;
-            _searchTexture = _renderer.CreateTexture(searchInfo, 1) as TextureView;
+            _areaTexture = _renderer.CreateTexture(areaInfo) as TextureView;
+            _searchTexture = _renderer.CreateTexture(searchInfo) as TextureView;
 
             _areaTexture.SetData(areaTexture);
             _searchTexture.SetData(searchTexture);
@@ -192,30 +193,9 @@ namespace Ryujinx.Graphics.Vulkan.Effects
                 _edgeOutputTexture?.Dispose();
                 _blendOutputTexture?.Dispose();
 
-                var info = view.Info;
-
-                if (view.Info.Format.IsBgr())
-                {
-                    info = new TextureCreateInfo(info.Width,
-                        info.Height,
-                        info.Depth,
-                        info.Levels,
-                        info.Samples,
-                        info.BlockWidth,
-                        info.BlockHeight,
-                        info.BytesPerPixel,
-                        info.Format,
-                        info.DepthStencilMode,
-                        info.Target,
-                        info.SwizzleB,
-                        info.SwizzleG,
-                        info.SwizzleR,
-                        info.SwizzleA);
-                }
-
-                _outputTexture = _renderer.CreateTexture(info, view.ScaleFactor) as TextureView;
-                _edgeOutputTexture = _renderer.CreateTexture(info, view.ScaleFactor) as TextureView;
-                _blendOutputTexture = _renderer.CreateTexture(info, view.ScaleFactor) as TextureView;
+                _outputTexture = _renderer.CreateTexture(view.Info) as TextureView;
+                _edgeOutputTexture = _renderer.CreateTexture(view.Info) as TextureView;
+                _blendOutputTexture = _renderer.CreateTexture(view.Info) as TextureView;
             }
 
             _pipeline.SetCommandBuffer(cbs);
@@ -240,7 +220,7 @@ namespace Ryujinx.Graphics.Vulkan.Effects
             _renderer.BufferManager.SetData(bufferHandle, 0, resolutionBuffer);
             var bufferRanges = new BufferRange(bufferHandle, 0, rangeSize);
             _pipeline.SetUniformBuffers(stackalloc[] { new BufferAssignment(2, bufferRanges) });
-            _pipeline.SetImage(0, _edgeOutputTexture, GAL.Format.R8G8B8A8Unorm);
+            _pipeline.SetImage(0, _edgeOutputTexture, FormatTable.ConvertRgba8SrgbToUnorm(view.Info.Format));
             _pipeline.DispatchCompute(dispatchX, dispatchY, 1);
             _pipeline.ComputeBarrier();
 
@@ -250,7 +230,7 @@ namespace Ryujinx.Graphics.Vulkan.Effects
             _pipeline.SetTextureAndSampler(ShaderStage.Compute, 1, _edgeOutputTexture, _samplerLinear);
             _pipeline.SetTextureAndSampler(ShaderStage.Compute, 3, _areaTexture, _samplerLinear);
             _pipeline.SetTextureAndSampler(ShaderStage.Compute, 4, _searchTexture, _samplerLinear);
-            _pipeline.SetImage(0, _blendOutputTexture, GAL.Format.R8G8B8A8Unorm);
+            _pipeline.SetImage(0, _blendOutputTexture, FormatTable.ConvertRgba8SrgbToUnorm(view.Info.Format));
             _pipeline.DispatchCompute(dispatchX, dispatchY, 1);
             _pipeline.ComputeBarrier();
 
@@ -259,7 +239,7 @@ namespace Ryujinx.Graphics.Vulkan.Effects
             _pipeline.Specialize(_specConstants);
             _pipeline.SetTextureAndSampler(ShaderStage.Compute, 3, _blendOutputTexture, _samplerLinear);
             _pipeline.SetTextureAndSampler(ShaderStage.Compute, 1, view, _samplerLinear);
-            _pipeline.SetImage(0, _outputTexture, GAL.Format.R8G8B8A8Unorm);
+            _pipeline.SetImage(0, _outputTexture, FormatTable.ConvertRgba8SrgbToUnorm(view.Info.Format));
             _pipeline.DispatchCompute(dispatchX, dispatchY, 1);
             _pipeline.ComputeBarrier();
 

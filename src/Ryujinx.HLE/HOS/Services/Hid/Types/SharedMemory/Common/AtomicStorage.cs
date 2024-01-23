@@ -1,8 +1,8 @@
-﻿using System.Threading;
+using System.Threading;
 
 namespace Ryujinx.HLE.HOS.Services.Hid.Types.SharedMemory.Common
 {
-    struct AtomicStorage<T> where T: unmanaged, ISampledDataStruct
+    struct AtomicStorage<T> where T : unmanaged, ISampledDataStruct
     {
         public ulong SamplingNumber;
         public T Object;

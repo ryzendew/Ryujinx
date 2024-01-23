@@ -1,4 +1,4 @@
-﻿namespace Ryujinx.Graphics.Gpu.Engine.MME
+namespace Ryujinx.Graphics.Gpu.Engine.MME
 {
     /// <summary>
     /// GPU Macro Arithmetic and Logic unit binary register-to-register operation.
@@ -13,6 +13,6 @@
         BitwiseOr = 9,
         BitwiseAnd = 10,
         BitwiseAndNot = 11,
-        BitwiseNotAnd = 12
+        BitwiseNotAnd = 12,
     }
 }

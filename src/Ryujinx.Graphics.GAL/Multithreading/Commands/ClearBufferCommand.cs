@@ -1,8 +1,8 @@
-﻿namespace Ryujinx.Graphics.GAL.Multithreading.Commands
+namespace Ryujinx.Graphics.GAL.Multithreading.Commands
 {
     struct ClearBufferCommand : IGALCommand, IGALCommand<ClearBufferCommand>
     {
-        public CommandType CommandType => CommandType.ClearBuffer;
+        public readonly CommandType CommandType => CommandType.ClearBuffer;
         private BufferHandle _destination;
         private int _offset;
         private int _size;

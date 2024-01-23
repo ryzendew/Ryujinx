@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 
 namespace Ryujinx.HLE.HOS.Services.Mii.Types
 {
@@ -6,7 +6,7 @@ namespace Ryujinx.HLE.HOS.Services.Mii.Types
     struct CharInfoElement : IElement
     {
         public CharInfo CharInfo;
-        public Source   Source;
+        public Source Source;
 
         public void SetFromStoreData(StoreData storeData)
         {
