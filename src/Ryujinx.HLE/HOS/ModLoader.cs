@@ -7,6 +7,7 @@ using LibHac.Tools.FsSystem;
 using LibHac.Tools.FsSystem.RomFs;
 using Ryujinx.Common.Configuration;
 using Ryujinx.Common.Logging;
+using Ryujinx.Common.Utilities;
 using Ryujinx.HLE.HOS.Kernel.Process;
 using Ryujinx.HLE.Loaders.Executables;
 using Ryujinx.HLE.Loaders.Mods;
@@ -37,15 +38,19 @@ namespace Ryujinx.HLE.HOS
         private const string AmsNroPatchDir = "nro_patches";
         private const string AmsKipPatchDir = "kip_patches";
 
+        private static readonly ModMetadataJsonSerializerContext _serializerContext = new(JsonHelper.GetDefaultSerializerOptions());
+
         public readonly struct Mod<T> where T : FileSystemInfo
         {
             public readonly string Name;
             public readonly T Path;
+            public readonly bool Enabled;
 
-            public Mod(string name, T path)
+            public Mod(string name, T path, bool enabled)
             {
                 Name = name;
                 Path = path;
+                Enabled = enabled;
             }
         }
 
@@ -156,23 +161,49 @@ namespace Ryujinx.HLE.HOS
         private static DirectoryInfo FindTitleDir(DirectoryInfo contentsDir, string titleId)
             => contentsDir.EnumerateDirectories(titleId, _dirEnumOptions).FirstOrDefault();
 
-        private static void AddModsFromDirectory(ModCache mods, DirectoryInfo dir, string titleId)
+        private static void AddModsFromDirectory(ModCache mods, DirectoryInfo dir, ModMetadata modMetadata)
         {
             System.Text.StringBuilder types = new();
 
             foreach (var modDir in dir.EnumerateDirectories())
             {
                 types.Clear();
-                Mod<DirectoryInfo> mod = new("", null);
+                Mod<DirectoryInfo> mod = new("", null, true);
 
                 if (StrEquals(RomfsDir, modDir.Name))
                 {
-                    mods.RomfsDirs.Add(mod = new Mod<DirectoryInfo>(dir.Name, modDir));
+                    bool enabled;
+
+                    try
+                    {
+                        var modData = modMetadata.Mods.Find(x => modDir.FullName.Contains(x.Path));
+                        enabled = modData.Enabled;
+                    }
+                    catch
+                    {
+                        // Mod is not in the list yet. New mods should be enabled by default.
+                        enabled = true;
+                    }
+
+                    mods.RomfsDirs.Add(mod = new Mod<DirectoryInfo>(dir.Name, modDir, enabled));
                     types.Append('R');
                 }
                 else if (StrEquals(ExefsDir, modDir.Name))
                 {
-                    mods.ExefsDirs.Add(mod = new Mod<DirectoryInfo>(dir.Name, modDir));
+                    bool enabled;
+
+                    try
+                    {
+                        var modData = modMetadata.Mods.Find(x => modDir.FullName.Contains(x.Path));
+                        enabled = modData.Enabled;
+                    }
+                    catch
+                    {
+                        // Mod is not in the list yet. New mods should be enabled by default.
+                        enabled = true;
+                    }
+
+                    mods.ExefsDirs.Add(mod = new Mod<DirectoryInfo>(dir.Name, modDir, enabled));
                     types.Append('E');
                 }
                 else if (StrEquals(CheatDir, modDir.Name))
@@ -181,7 +212,7 @@ namespace Ryujinx.HLE.HOS
                 }
                 else
                 {
-                    AddModsFromDirectory(mods, modDir, titleId);
+                    AddModsFromDirectory(mods, modDir, modMetadata);
                 }
 
                 if (types.Length > 0)
@@ -238,31 +269,69 @@ namespace Ryujinx.HLE.HOS
 
             foreach (var modDir in patchDir.EnumerateDirectories())
             {
-                patches.Add(new Mod<DirectoryInfo>(modDir.Name, modDir));
+                patches.Add(new Mod<DirectoryInfo>(modDir.Name, modDir, true));
                 Logger.Info?.Print(LogClass.ModLoader, $"Found {type} patch '{modDir.Name}'");
             }
         }
 
-        private static void QueryTitleDir(ModCache mods, DirectoryInfo titleDir)
+        private static void QueryTitleDir(ModCache mods, DirectoryInfo titleDir, ulong titleId)
         {
             if (!titleDir.Exists)
             {
                 return;
             }
 
+            string modJsonPath = Path.Combine(AppDataManager.GamesDirPath, titleId.ToString("x16"), "mods.json");
+            ModMetadata modMetadata = new();
+
+            try
+            {
+                modMetadata = JsonHelper.DeserializeFromFile(modJsonPath, _serializerContext.ModMetadata);
+            }
+            catch
+            {
+                Logger.Warning?.Print(LogClass.ModLoader, $"Failed to deserialize mod data for {titleId} at {modJsonPath}");
+            }
+
             var fsFile = new FileInfo(Path.Combine(titleDir.FullName, RomfsContainer));
             if (fsFile.Exists)
             {
-                mods.RomfsContainers.Add(new Mod<FileInfo>($"<{titleDir.Name} RomFs>", fsFile));
+                bool enabled;
+
+                try
+                {
+                    var modData = modMetadata.Mods.Find(x => fsFile.FullName.Contains(x.Path));
+                    enabled = modData.Enabled;
+                }
+                catch
+                {
+                    // Mod is not in the list yet. New mods should be enabled by default.
+                    enabled = true;
+                }
+
+                mods.RomfsContainers.Add(new Mod<FileInfo>($"<{titleDir.Name} RomFs>", fsFile, enabled));
             }
 
             fsFile = new FileInfo(Path.Combine(titleDir.FullName, ExefsContainer));
             if (fsFile.Exists)
             {
-                mods.ExefsContainers.Add(new Mod<FileInfo>($"<{titleDir.Name} ExeFs>", fsFile));
+                bool enabled;
+
+                try
+                {
+                    var modData = modMetadata.Mods.Find(x => fsFile.FullName.Contains(x.Path));
+                    enabled = modData.Enabled;
+                }
+                catch
+                {
+                    // Mod is not in the list yet. New mods should be enabled by default.
+                    enabled = true;
+                }
+
+                mods.ExefsContainers.Add(new Mod<FileInfo>($"<{titleDir.Name} ExeFs>", fsFile, enabled));
             }
 
-            AddModsFromDirectory(mods, titleDir, titleDir.Name);
+            AddModsFromDirectory(mods, titleDir, modMetadata);
         }
 
         public static void QueryContentsDir(ModCache mods, DirectoryInfo contentsDir, ulong titleId)
@@ -278,7 +347,7 @@ namespace Ryujinx.HLE.HOS
 
             if (titleDir != null)
             {
-                QueryTitleDir(mods, titleDir);
+                QueryTitleDir(mods, titleDir, titleId);
             }
         }
 
@@ -410,7 +479,7 @@ namespace Ryujinx.HLE.HOS
                 if (!searchDir.Exists)
                 {
                     Logger.Warning?.Print(LogClass.ModLoader, $"Mod Search Dir '{searchDir.FullName}' doesn't exist");
-                    continue;
+                    return;
                 }
 
                 if (!TryQuery(searchDir, patches, modCaches))
@@ -453,6 +522,11 @@ namespace Ryujinx.HLE.HOS
             // Prioritize loose files first
             foreach (var mod in mods.RomfsDirs)
             {
+                if (!mod.Enabled)
+                {
+                    continue;
+                }
+
                 using (IFileSystem fs = new LocalFileSystem(mod.Path.FullName))
                 {
                     AddFiles(fs, mod.Name, fileSet, builder);
@@ -463,6 +537,11 @@ namespace Ryujinx.HLE.HOS
             // Then files inside images
             foreach (var mod in mods.RomfsContainers)
             {
+                if (!mod.Enabled)
+                {
+                    continue;
+                }
+
                 Logger.Info?.Print(LogClass.ModLoader, $"Found 'romfs.bin' for Title {titleId:X16}");
                 using (IFileSystem fs = new RomFsFileSystem(mod.Path.OpenRead().AsStorage()))
                 {
@@ -571,6 +650,11 @@ namespace Ryujinx.HLE.HOS
 
             foreach (var mod in exeMods)
             {
+                if (!mod.Enabled)
+                {
+                    continue;
+                }
+
                 for (int i = 0; i < ProcessConst.ExeFsPrefixes.Length; ++i)
                 {
                     var nsoName = ProcessConst.ExeFsPrefixes[i];
@@ -724,6 +808,11 @@ namespace Ryujinx.HLE.HOS
             // Collect patches
             foreach (var mod in mods)
             {
+                if (!mod.Enabled)
+                {
+                    continue;
+                }
+
                 var patchDir = mod.Path;
                 foreach (var patchFile in patchDir.EnumerateFiles())
                 {
