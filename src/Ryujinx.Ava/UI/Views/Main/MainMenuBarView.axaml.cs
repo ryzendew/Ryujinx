@@ -15,6 +15,7 @@ using Ryujinx.Ui.Common.Configuration;
 using Ryujinx.Ui.Common.Helper;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 
@@ -170,11 +171,11 @@ namespace Ryujinx.Ava.UI.Views.Main
 
             string name = ViewModel.AppHost.Device.Processes.ActiveApplication.ApplicationControlProperties.Title[(int)ViewModel.AppHost.Device.System.State.DesiredTitleLanguage].NameString.ToString();
 
-            await new CheatWindow(
+            await CheatWindow.Show(
                 Window.VirtualFileSystem,
-                ViewModel.AppHost.Device.Processes.ActiveApplication.ProgramIdText,
+                ulong.Parse(ViewModel.AppHost.Device.Processes.ActiveApplication.ProgramIdText, NumberStyles.HexNumber),
                 name,
-                Window.ViewModel.SelectedApplication.Path).ShowDialog(Window);
+                Window.ViewModel.SelectedApplication.Path);
 
             ViewModel.AppHost.Device.EnableCheats();
         }

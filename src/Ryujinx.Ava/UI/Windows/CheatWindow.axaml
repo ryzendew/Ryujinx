@@ -1,81 +1,66 @@
-﻿<window:StyleableWindow
+﻿<UserControl
     x:Class="Ryujinx.Ava.UI.Windows.CheatWindow"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:locale="clr-namespace:Ryujinx.Ava.Common.Locale"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:model="clr-namespace:Ryujinx.Ava.UI.Models"
-    xmlns:window="clr-namespace:Ryujinx.Ava.UI.Windows"
+    xmlns:viewModels="clr-namespace:Ryujinx.Ava.UI.ViewModels"
     Width="500"
-    Height="500"
-    MinWidth="500"
-    MinHeight="500"
-    x:DataType="window:CheatWindow"
-    WindowStartupLocation="CenterOwner"
+    Height="380"
+    x:DataType="viewModels:CheatWindowViewModel"
     mc:Ignorable="d"
     Focusable="True">
-    <Window.Styles>
-        <Style Selector="TreeViewItem">
-            <Setter Property="IsExpanded" Value="True" />
-        </Style>
-    </Window.Styles>
-    <Grid Name="CheatGrid" Margin="15">
+    <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
-        <TextBlock
-            Grid.Row="1"
-            Grid.Column="0"
-            Grid.ColumnSpan="2"
-            MaxWidth="500"
-            Margin="20,15,20,5"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center"
-            LineHeight="18"
-            Text="{Binding Heading}"
-            TextAlignment="Center"
-            TextWrapping="Wrap" />
-        <TextBlock
-            Grid.Row="2"
-            Grid.Column="0"
-            MaxWidth="500"
-            Margin="140,15,20,5"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center"
-            LineHeight="30"
-            Text="{locale:Locale BuildId}"
-            TextAlignment="Center"
-            TextWrapping="Wrap" />
-        <TextBox
-            Grid.Row="2"
-            Grid.Column="1"
-            Margin="0,5,110,5"
-            MinWidth="160"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center"
-            Text="{Binding BuildId}"
-            IsReadOnly="True" />
+        <Panel
+            Margin="0 0 0 10"
+            Grid.Row="0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel
+                    Orientation="Horizontal"
+                    Grid.Column="0">
+                    <TextBlock
+                        Padding="0 0 10 0"
+                        Text="{locale:Locale BuildId}" />
+                    <Button
+                        Name="CopyButton"
+                        Command="{Binding CopyToClipboard}">
+                        <TextBlock Text="{Binding BuildId}" />
+                    </Button>
+                </StackPanel>
+                <TextBox
+                    Grid.Column="2"
+                    MinHeight="29"
+                    MaxHeight="29"
+                    MinWidth="180"
+                    MaxWidth="180"
+                    HorizontalAlignment="Stretch"
+                    Watermark="{locale:Locale Search}"
+                    Text="" />
+            </Grid>
+        </Panel>
         <Border
-            Grid.Row="3"
-            Grid.Column="0"
-            Grid.ColumnSpan="2"
-            Margin="5"
+            Grid.Row="1"
+            Margin="0 0 0 24"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch"
-            BorderBrush="Gray"
-            BorderThickness="1">
+            BorderBrush="{DynamicResource AppListHoverBackgroundColor}"
+            BorderThickness="1"
+            CornerRadius="5"
+            Padding="2.5">
             <TreeView
                 Name="CheatsView"
-                MinHeight="300"
+                SelectionMode="Multiple, Toggle"
                 HorizontalAlignment="Stretch"
                 VerticalAlignment="Stretch"
                 ItemsSource="{Binding LoadedCheats}">
@@ -98,29 +83,47 @@
                 </TreeView.ItemTemplate>
             </TreeView>
         </Border>
-        <DockPanel
-            Grid.Row="4"
-            Grid.Column="0"
-            Grid.ColumnSpan="2"
-            Margin="0"
+        <Panel
+            Grid.Row="2"
             HorizontalAlignment="Stretch">
-            <DockPanel Margin="0" HorizontalAlignment="Right">
+            <StackPanel
+                Orientation="Horizontal"
+                Spacing="10"
+                HorizontalAlignment="Left">
+                <Button
+                    Name="AddButton"
+                    MinWidth="90"
+                    Margin="5"
+                    Command="{Binding}">
+                    <TextBlock Text="{locale:Locale SettingsTabGeneralAdd}" />
+                </Button>
+                <Button
+                    Name="RemoveAllButton"
+                    MinWidth="90"
+                    Margin="5"
+                    Command="{Binding}">
+                    <TextBlock Text="{locale:Locale DlcManagerRemoveAllButton}" />
+                </Button>
+            </StackPanel>
+            <StackPanel
+                Orientation="Horizontal"
+                Spacing="10"
+                HorizontalAlignment="Right">
                 <Button
                     Name="SaveButton"
                     MinWidth="90"
                     Margin="5"
-                    Command="{Binding Save}"
-                    IsVisible="{Binding !NoCheatsFound}">
+                    Click="SaveAndClose">
                     <TextBlock Text="{locale:Locale SettingsButtonSave}" />
                 </Button>
                 <Button
                     Name="CancelButton"
                     MinWidth="90"
                     Margin="5"
-                    Command="{Binding Close}">
+                    Click="Close">
                     <TextBlock Text="{locale:Locale InputDialogCancel}" />
                 </Button>
-            </DockPanel>
-        </DockPanel>
+            </StackPanel>
+        </Panel>
     </Grid>
-</window:StyleableWindow>
+</UserControl>

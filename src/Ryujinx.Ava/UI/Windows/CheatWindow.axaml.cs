@@ -1,123 +1,61 @@
-using Avalonia.Collections;
+using Avalonia.Controls;
+using Avalonia.Interactivity;
+using Avalonia.Styling;
+using FluentAvalonia.UI.Controls;
 using Ryujinx.Ava.Common.Locale;
-using Ryujinx.Ava.UI.Models;
+using Ryujinx.Ava.UI.Helpers;
+using Ryujinx.Ava.UI.ViewModels;
 using Ryujinx.HLE.FileSystem;
-using Ryujinx.HLE.HOS;
-using Ryujinx.Ui.App.Common;
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.IO;
-using System.Linq;
+using System.Threading.Tasks;
 
 namespace Ryujinx.Ava.UI.Windows
 {
-    public partial class CheatWindow : StyleableWindow
+    public partial class CheatWindow : UserControl
     {
-        private readonly string _enabledCheatsPath;
-        public bool NoCheatsFound { get; }
-
-        public AvaloniaList<CheatNode> LoadedCheats { get; }
-
-        public string Heading { get; }
-        public string BuildId { get; }
+        public CheatWindowViewModel ViewModel;
 
         public CheatWindow()
         {
             DataContext = this;
 
             InitializeComponent();
-
-            Title = $"Ryujinx {Program.Version} - " + LocaleManager.Instance[LocaleKeys.CheatWindowTitle];
         }
 
-        public CheatWindow(VirtualFileSystem virtualFileSystem, string titleId, string titleName, string titlePath)
+        public CheatWindow(VirtualFileSystem virtualFileSystem, ulong titleId, string titleName, string titlePath)
         {
-            LoadedCheats = new AvaloniaList<CheatNode>();
-
-            Heading = LocaleManager.Instance.UpdateAndGetDynamicValue(LocaleKeys.CheatWindowHeading, titleName, titleId.ToUpper());
-            BuildId = ApplicationData.GetApplicationBuildId(virtualFileSystem, titlePath);
+            DataContext = ViewModel = new CheatWindowViewModel(virtualFileSystem, titleId, titlePath);
 
             InitializeComponent();
-
-            string modsBasePath = ModLoader.GetModsBasePath();
-            string titleModsPath = ModLoader.GetTitleDir(modsBasePath, titleId);
-            ulong titleIdValue = ulong.Parse(titleId, NumberStyles.HexNumber);
-
-            _enabledCheatsPath = Path.Combine(titleModsPath, "cheats", "enabled.txt");
-
-            string[] enabled = Array.Empty<string>();
-
-            if (File.Exists(_enabledCheatsPath))
-            {
-                enabled = File.ReadAllLines(_enabledCheatsPath);
-            }
-
-            int cheatAdded = 0;
-
-            var mods = new ModLoader.ModCache();
-
-            ModLoader.QueryContentsDir(mods, new DirectoryInfo(Path.Combine(modsBasePath, "contents")), titleIdValue);
-
-            string currentCheatFile = string.Empty;
-            string buildId = string.Empty;
-
-            CheatNode currentGroup = null;
-
-            foreach (var cheat in mods.Cheats)
-            {
-                if (cheat.Path.FullName != currentCheatFile)
-                {
-                    currentCheatFile = cheat.Path.FullName;
-                    string parentPath = currentCheatFile.Replace(titleModsPath, "");
-
-                    buildId = Path.GetFileNameWithoutExtension(currentCheatFile).ToUpper();
-                    currentGroup = new CheatNode("", buildId, parentPath, true);
-
-                    LoadedCheats.Add(currentGroup);
-                }
-
-                var model = new CheatNode(cheat.Name, buildId, "", false, enabled.Contains($"{buildId}-{cheat.Name}"));
-                currentGroup?.SubNodes.Add(model);
-
-                cheatAdded++;
-            }
-
-            if (cheatAdded == 0)
-            {
-                NoCheatsFound = true;
-            }
-
-            DataContext = this;
-
-            Title = $"Ryujinx {Program.Version} - " + LocaleManager.Instance[LocaleKeys.CheatWindowTitle];
         }
 
-        public void Save()
+        public static async Task Show(VirtualFileSystem virtualFileSystem, ulong titleId, string titleName, string titlePath)
         {
-            if (NoCheatsFound)
+            ContentDialog contentDialog = new()
             {
-                return;
-            }
+                PrimaryButtonText = "",
+                SecondaryButtonText = "",
+                CloseButtonText = "",
+                Content = new CheatWindow(virtualFileSystem, titleId, titleName, titlePath),
+                Title = string.Format(LocaleManager.Instance[LocaleKeys.CheatWindowHeading], titleName, titleId.ToString("X16")),
+            };
 
-            List<string> enabledCheats = new();
+            Style bottomBorder = new(x => x.OfType<Grid>().Name("DialogSpace").Child().OfType<Border>());
+            bottomBorder.Setters.Add(new Setter(IsVisibleProperty, false));
 
-            foreach (var cheats in LoadedCheats)
-            {
-                foreach (var cheat in cheats.SubNodes)
-                {
-                    if (cheat.IsEnabled)
-                    {
-                        enabledCheats.Add(cheat.BuildIdKey);
-                    }
-                }
-            }
+            contentDialog.Styles.Add(bottomBorder);
 
-            Directory.CreateDirectory(Path.GetDirectoryName(_enabledCheatsPath));
+            await ContentDialogHelper.ShowAsync(contentDialog);
+        }
 
-            File.WriteAllLines(_enabledCheatsPath, enabledCheats);
+        private void SaveAndClose(object sender, RoutedEventArgs e)
+        {
+            ViewModel.Save();
+            ((ContentDialog)Parent).Hide();
+        }
 
-            Close();
+        private void Close(object sender, RoutedEventArgs e)
+        {
+            ((ContentDialog)Parent).Hide();
         }
     }
 }
