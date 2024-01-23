@@ -6,6 +6,7 @@ using Ryujinx.Ava.UI.Windows;
 using Ryujinx.Common.Configuration;
 using Ryujinx.Common.Logging;
 using Ryujinx.Ui.Common.Configuration;
+using Silk.NET.Vulkan;
 using System;
 
 namespace Ryujinx.Ava.UI.Views.Main
@@ -31,11 +32,10 @@ namespace Ryujinx.Ava.UI.Views.Main
             DataContext = Window.ViewModel;
         }
 
-        private void VsyncStatus_PointerReleased(object sender, PointerReleasedEventArgs e)
+        private void VSyncMode_PointerReleased(object sender, PointerReleasedEventArgs e)
         {
-            Window.ViewModel.AppHost.Device.EnableDeviceVsync = !Window.ViewModel.AppHost.Device.EnableDeviceVsync;
-
-            Logger.Info?.Print(LogClass.Application, $"VSync toggled to: {Window.ViewModel.AppHost.Device.EnableDeviceVsync}");
+            Window.ViewModel.UpdateVSyncMode();
+            Logger.Info?.Print(LogClass.Application, $"VSync Mode toggled to: {Window.ViewModel.AppHost.Device.VSyncMode}");
         }
 
         private void DockedStatus_PointerReleased(object sender, PointerReleasedEventArgs e)

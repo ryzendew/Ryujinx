@@ -44,6 +44,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using GUI = Gtk.Builder.ObjectAttribute;
 using ShaderCacheLoadingState = Ryujinx.Graphics.Gpu.Shader.ShaderCacheState;
+using VSyncMode = Ryujinx.Common.Configuration.VSyncMode;
 
 namespace Ryujinx.Ui
 {
@@ -655,7 +656,7 @@ namespace Ryujinx.Ui
                 _uiHandler,
                 (SystemLanguage)ConfigurationState.Instance.System.Language.Value,
                 (RegionCode)ConfigurationState.Instance.System.Region.Value,
-                ConfigurationState.Instance.Graphics.EnableVsync,
+                ConfigurationState.Instance.Graphics.EnableVsync ? VSyncMode.Switch : VSyncMode.Unbounded,
                 ConfigurationState.Instance.System.EnableDockedMode,
                 ConfigurationState.Instance.System.EnablePtc,
                 ConfigurationState.Instance.System.EnableInternetAccess,
@@ -669,7 +670,8 @@ namespace Ryujinx.Ui
                 ConfigurationState.Instance.System.AudioVolume,
                 ConfigurationState.Instance.System.UseHypervisor,
                 ConfigurationState.Instance.Multiplayer.LanInterfaceId.Value,
-                ConfigurationState.Instance.Multiplayer.Mode);
+                ConfigurationState.Instance.Multiplayer.Mode,
+                ConfigurationState.Instance.Graphics.CustomVSyncInterval);
 
             _emulationContext = new HLE.Switch(configuration);
         }
@@ -1211,7 +1213,7 @@ namespace Ryujinx.Ui
                 _gpuBackend.Text = args.GpuBackend;
                 _volumeStatus.Text = GetVolumeLabelText(args.Volume);
 
-                if (args.VSyncEnabled)
+                if (args.VSyncMode == VSyncMode.Switch.ToString())
                 {
                     _vSyncStatus.Attributes = new Pango.AttrList();
                     _vSyncStatus.Attributes.Insert(new Pango.AttrForeground(11822, 60138, 51657));
