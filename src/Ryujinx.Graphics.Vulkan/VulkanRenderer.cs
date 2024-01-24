@@ -76,6 +76,10 @@ namespace Ryujinx.Graphics.Vulkan
         private readonly Func<string[]> _getRequiredExtensions;
         private readonly string _preferredGpuId;
 
+        private int[] _pdReservedBindings;
+        private readonly static int[] _pdReservedBindingsNvn = { 3, 18, 21, 36, 30 };
+        private readonly static int[] _pdReservedBindingsOgl = { 17, 18, 34, 35, 36 };
+
         internal Vendor Vendor { get; private set; }
         internal bool IsAmdWindows { get; private set; }
         internal bool IsIntelWindows { get; private set; }
@@ -189,6 +193,19 @@ namespace Ryujinx.Graphics.Vulkan
             {
                 SType = StructureType.PhysicalDevicePortabilitySubsetPropertiesKhr,
             };
+
+            bool supportsPushDescriptors = _physicalDevice.IsDeviceExtensionPresent(KhrPushDescriptor.ExtensionName);
+
+            PhysicalDevicePushDescriptorPropertiesKHR propertiesPushDescriptor = new PhysicalDevicePushDescriptorPropertiesKHR()
+            {
+                SType = StructureType.PhysicalDevicePushDescriptorPropertiesKhr
+            };
+
+            if (supportsPushDescriptors)
+            {
+                propertiesPushDescriptor.PNext = properties2.PNext;
+                properties2.PNext = &propertiesPushDescriptor;
+            }
 
             PhysicalDeviceFeatures2 features2 = new()
             {
@@ -319,7 +336,8 @@ namespace Ryujinx.Graphics.Vulkan
                 _physicalDevice.IsDeviceExtensionPresent(ExtExtendedDynamicState.ExtensionName),
                 features2.Features.MultiViewport && !(IsMoltenVk && Vendor == Vendor.Amd), // Workaround for AMD on MoltenVK issue
                 featuresRobustness2.NullDescriptor || IsMoltenVk,
-                _physicalDevice.IsDeviceExtensionPresent(KhrPushDescriptor.ExtensionName),
+                supportsPushDescriptors,
+                propertiesPushDescriptor.MaxPushDescriptors,
                 featuresPrimitiveTopologyListRestart.PrimitiveTopologyListRestart,
                 featuresPrimitiveTopologyListRestart.PrimitiveTopologyPatchListRestart,
                 supportsTransformFeedback,
@@ -397,6 +415,25 @@ namespace Ryujinx.Graphics.Vulkan
             _window = new Window(this, _surface, _physicalDevice.PhysicalDevice, _device);
 
             _initialized = true;
+        }
+
+        public int[] GetPushDescriptorReservedBindings(bool isOgl)
+        {
+            // The first call of this method determines what push descriptor layout is used for all shaders on this renderer.
+            // This is chosen to minimize shaders that can't fit on 32 entry push descriptor sets.
+            if (_pdReservedBindings == null)
+            {
+                if (Capabilities.MaxPushDescriptors == 32)
+                {
+                    _pdReservedBindings = isOgl ? _pdReservedBindingsOgl : _pdReservedBindingsNvn;
+                }
+                else
+                {
+                    _pdReservedBindings = Array.Empty<int>();
+                }
+            }
+
+            return _pdReservedBindings;
         }
 
         public BufferHandle CreateBuffer(int size, BufferAccess access)
