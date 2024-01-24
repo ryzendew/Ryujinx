@@ -384,7 +384,7 @@ namespace Ryujinx.Graphics.Vulkan
             var baseData = new Span<byte>((void*)(_map + offset), size);
             var modData = _pendingData.AsSpan(offset, size);
 
-            StagingBufferReserved? newMirror = _gd.BufferManager.StagingBuffer.TryReserveData(cbs, size, (int)_gd.Capabilities.MinResourceAlignment);
+            StagingBufferReserved? newMirror = _gd.BufferManager.StagingBuffer.TryReserveData(cbs, size);
 
             if (newMirror != null)
             {

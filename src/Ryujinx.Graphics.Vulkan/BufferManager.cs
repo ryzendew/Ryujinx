@@ -9,6 +9,34 @@ using VkFormat = Silk.NET.Vulkan.Format;
 
 namespace Ryujinx.Graphics.Vulkan
 {
+    readonly struct ScopedTemporaryBuffer : IDisposable
+    {
+        private readonly BufferManager _bufferManager;
+        private readonly bool _isReserved;
+
+        public readonly BufferRange Range;
+
+        public BufferHandle Handle => Range.Handle;
+        public int Offset => Range.Offset;
+
+        public ScopedTemporaryBuffer(BufferManager bufferManager, BufferHandle handle, int offset, int size, bool isReserved)
+        {
+            _bufferManager = bufferManager;
+
+            Range = new BufferRange(handle, offset, size);
+
+            _isReserved = isReserved;
+        }
+
+        public void Dispose()
+        {
+            if (!_isReserved)
+            {
+                _bufferManager.Delete(Range.Handle);
+            }
+        }
+    }
+
     class BufferManager : IDisposable
     {
         public const MemoryPropertyFlags DefaultBufferMemoryFlags =
@@ -236,6 +264,29 @@ namespace Ryujinx.Graphics.Vulkan
             ulong handle64 = (uint)_buffers.Add(holder);
 
             return Unsafe.As<ulong, BufferHandle>(ref handle64);
+        }
+
+        public ScopedTemporaryBuffer ReserveOrCreate(VulkanRenderer gd, CommandBufferScoped cbs, int size, out BufferHolder holder)
+        {
+            StagingBufferReserved? result = StagingBuffer.TryReserveData(cbs, size);
+
+            if (result.HasValue)
+            {
+                holder = result.Value.Buffer;
+                return new ScopedTemporaryBuffer(this, StagingBuffer.Handle, result.Value.Offset, result.Value.Size, true);
+            }
+            else
+            {
+                // Create a temporary buffer.
+                BufferHandle handle = CreateWithHandle(gd, size, out holder);
+
+                return new ScopedTemporaryBuffer(this, handle, 0, size, false);
+            }
+        }
+
+        public ScopedTemporaryBuffer ReserveOrCreate(VulkanRenderer gd, CommandBufferScoped cbs, int size)
+        {
+            return ReserveOrCreate(gd, cbs, size, out _);
         }
 
         public unsafe MemoryRequirements GetHostImportedUsageRequirements(VulkanRenderer gd)
@@ -635,13 +686,14 @@ namespace Ryujinx.Graphics.Vulkan
         {
             if (disposing)
             {
+                StagingBuffer.Dispose();
+
                 foreach (BufferHolder buffer in _buffers)
                 {
                     buffer.Dispose();
                 }
 
                 _buffers.Clear();
-                StagingBuffer.Dispose();
             }
         }
 
