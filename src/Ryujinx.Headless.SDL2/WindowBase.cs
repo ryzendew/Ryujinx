@@ -7,7 +7,7 @@ using Ryujinx.Graphics.Gpu;
 using Ryujinx.Graphics.OpenGL;
 using Ryujinx.HLE.HOS.Applets;
 using Ryujinx.HLE.HOS.Services.Am.AppletOE.ApplicationProxyService.ApplicationProxy.Types;
-using Ryujinx.HLE.Ui;
+using Ryujinx.HLE.UI;
 using Ryujinx.Input;
 using Ryujinx.Input.HLE;
 using Ryujinx.SDL2.Common;
@@ -25,7 +25,7 @@ using Switch = Ryujinx.HLE.Switch;
 
 namespace Ryujinx.Headless.SDL2
 {
-    abstract partial class WindowBase : IHostUiHandler, IDisposable
+    abstract partial class WindowBase : IHostUIHandler, IDisposable
     {
         protected const int DefaultWidth = 1280;
         protected const int DefaultHeight = 720;
@@ -53,7 +53,7 @@ namespace Ryujinx.Headless.SDL2
 
         protected IntPtr WindowHandle { get; set; }
 
-        public IHostUiTheme HostUiTheme { get; }
+        public IHostUITheme HostUITheme { get; }
         public int Width { get; private set; }
         public int Height { get; private set; }
         public int DisplayId { get; set; }
@@ -80,7 +80,7 @@ namespace Ryujinx.Headless.SDL2
         private bool _isStopped;
         private uint _windowId;
 
-        private string _gpuVendorName;
+        private string _gpuDriverName;
 
         private readonly AspectRatio _aspectRatio;
         private readonly bool _enableMouse;
@@ -106,7 +106,7 @@ namespace Ryujinx.Headless.SDL2
             _gpuDoneEvent = new ManualResetEvent(false);
             _aspectRatio = aspectRatio;
             _enableMouse = enableMouse;
-            HostUiTheme = new HeadlessHostUiTheme();
+            HostUITheme = new HeadlessHostUiTheme();
 
             SDL2Driver.Instance.Initialize();
         }
@@ -241,9 +241,9 @@ namespace Ryujinx.Headless.SDL2
 
         public abstract SDL_WindowFlags GetWindowFlags();
 
-        private string GetGpuVendorName()
+        private string GetGpuDriverName()
         {
-            return Renderer.GetHardwareInfo().GpuVendor;
+            return Renderer.GetHardwareInfo().GpuDriver;
         }
 
         private void SetAntiAliasing()
@@ -269,7 +269,7 @@ namespace Ryujinx.Headless.SDL2
 
             SetScalingFilter();
 
-            _gpuVendorName = GetGpuVendorName();
+            _gpuDriverName = GetGpuDriverName();
 
             Device.Gpu.Renderer.RunLoop(() =>
             {
@@ -314,7 +314,7 @@ namespace Ryujinx.Headless.SDL2
                             Device.Configuration.AspectRatio.ToText(),
                             $"Game: {Device.Statistics.GetGameFrameRate():00.00} FPS ({Device.Statistics.GetGameFrameTime():00.00} ms)",
                             $"FIFO: {Device.Statistics.GetFifoPercent():0.00} %",
-                            $"GPU: {_gpuVendorName}"));
+                            $"GPU: {_gpuDriverName}"));
 
                         _ticks = Math.Min(_ticks - _ticksPerFrame, _ticksPerFrame);
                     }
@@ -465,7 +465,7 @@ namespace Ryujinx.Headless.SDL2
             Exit();
         }
 
-        public bool DisplayInputDialog(SoftwareKeyboardUiArgs args, out string userText)
+        public bool DisplayInputDialog(SoftwareKeyboardUIArgs args, out string userText)
         {
             // SDL2 doesn't support input dialogs
             userText = "Ryujinx";
@@ -480,7 +480,7 @@ namespace Ryujinx.Headless.SDL2
             return true;
         }
 
-        public bool DisplayMessageDialog(ControllerAppletUiArgs args)
+        public bool DisplayMessageDialog(ControllerAppletUIArgs args)
         {
             string playerCount = args.PlayerCountMin == args.PlayerCountMax ? $"exactly {args.PlayerCountMin}" : $"{args.PlayerCountMin}-{args.PlayerCountMax}";
 

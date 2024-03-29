@@ -7,7 +7,7 @@ using Ryujinx.HLE.HOS;
 using Ryujinx.HLE.HOS.Services.Apm;
 using Ryujinx.HLE.HOS.Services.Hid;
 using Ryujinx.HLE.Loaders.Processes;
-using Ryujinx.HLE.Ui;
+using Ryujinx.HLE.UI;
 using Ryujinx.Memory;
 using System;
 
@@ -25,7 +25,7 @@ namespace Ryujinx.HLE
         public PerformanceStatistics Statistics { get; }
         public Hid Hid { get; }
         public TamperMachine TamperMachine { get; }
-        public IHostUiHandler UiHandler { get; }
+        public IHostUIHandler UIHandler { get; }
 
         public bool EnableDeviceVsync { get; set; } = true;
 
@@ -39,7 +39,7 @@ namespace Ryujinx.HLE
 
             Configuration = configuration;
             FileSystem = Configuration.VirtualFileSystem;
-            UiHandler = Configuration.HostUiHandler;
+            UIHandler = Configuration.HostUIHandler;
 
             MemoryAllocationFlags memoryAllocationFlags = configuration.MemoryManagerMode == MemoryManagerMode.SoftwarePageTable
                 ? MemoryAllocationFlags.Reserve
@@ -55,6 +55,7 @@ namespace Ryujinx.HLE
             Processes         = new ProcessLoader(this);
             TamperMachine     = new TamperMachine();
 
+            System.InitializeServices();
             System.State.SetLanguage(Configuration.SystemLanguage);
             System.State.SetRegion(Configuration.Region);
 
@@ -116,12 +117,12 @@ namespace Ryujinx.HLE
 
         public void SetVolume(float volume)
         {
-            System.SetVolume(Math.Clamp(volume, 0, 1));
+            AudioDeviceDriver.Volume = Math.Clamp(volume, 0f, 1f);
         }
 
         public float GetVolume()
         {
-            return System.GetVolume();
+            return AudioDeviceDriver.Volume;
         }
 
         public void EnableCheats()
@@ -131,7 +132,7 @@ namespace Ryujinx.HLE
 
         public bool IsAudioMuted()
         {
-            return System.GetVolume() == 0;
+            return AudioDeviceDriver.Volume == 0;
         }
 
         public void DisposeGpu()

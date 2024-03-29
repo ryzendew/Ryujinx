@@ -121,7 +121,7 @@ namespace Ryujinx.Graphics.OpenGL
 
         public HardwareInfo GetHardwareInfo()
         {
-            return new HardwareInfo(GpuVendor, GpuRenderer);
+            return new HardwareInfo(GpuVendor, GpuRenderer, GpuVendor); // OpenGL does not provide a driver name, vendor name is closest analogue.
         }
 
         public PinnedSpan<byte> GetBufferData(BufferHandle buffer, int offset, int size)
@@ -248,7 +248,7 @@ namespace Ryujinx.Graphics.OpenGL
         {
             // alwaysBackground is ignored, since we cannot switch from the current context.
 
-            if (IOpenGLContext.HasContext())
+            if (_window.BackgroundContext.HasContext())
             {
                 action(); // We have a context already - use that (assuming it is the main one).
             }

@@ -26,6 +26,9 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
         public const int PrimitiveRestartStateIndex = 12;
         public const int RenderTargetStateIndex = 27;
 
+        // Vertex buffers larger than this size will be clamped to the mapped size.
+        private const ulong VertexBufferSizeToMappedSizeThreshold = 256 * 1024 * 1024; // 256 MB
+
         private readonly GpuContext _context;
         private readonly GpuChannel _channel;
         private readonly DeviceStateWithShadow<ThreedClassState> _state;
@@ -340,11 +343,22 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
 
             bool unalignedChanged = _currentSpecState.SetHasUnalignedStorageBuffer(_channel.BufferManager.HasUnalignedStorageBuffers);
 
-            if (!_channel.TextureManager.CommitGraphicsBindings(_shaderSpecState) || unalignedChanged)
+            bool scaleMismatch;
+            do
             {
-                // Shader must be reloaded. _vtgWritesRtLayer should not change.
-                UpdateShaderState();
+                if (!_channel.TextureManager.CommitGraphicsBindings(_shaderSpecState, out scaleMismatch) || unalignedChanged)
+                {
+                    // Shader must be reloaded. _vtgWritesRtLayer should not change.
+                    UpdateShaderState();
+                }
+
+                if (scaleMismatch)
+                {
+                    // Binding textures changed scale of the bound render targets, correct the render target scale and rebind.
+                    UpdateRenderTargetState();
+                }
             }
+            while (scaleMismatch);
 
             _channel.BufferManager.CommitGraphicsBindings(_drawState.DrawIndexed);
         }
@@ -1143,6 +1157,14 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
                         maxVertexBufferSize *= (uint)stride;
 
                         size = Math.Min(size, maxVertexBufferSize);
+                    }
+                    else if (size > VertexBufferSizeToMappedSizeThreshold)
+                    {
+                        // Make sure we have a sane vertex buffer size, since in some cases applications
+                        // might set the "end address" of the vertex buffer to the end of the GPU address space,
+                        // which would result in a several GBs large buffer.
+
+                        size = _channel.MemoryManager.GetMappedSize(address, size);
                     }
                 }
                 else

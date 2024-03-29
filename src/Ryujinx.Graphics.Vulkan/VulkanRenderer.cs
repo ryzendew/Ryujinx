@@ -68,6 +68,8 @@ namespace Ryujinx.Graphics.Vulkan
         internal HelperShader HelperShader { get; private set; }
         internal PipelineFull PipelineInternal => _pipeline;
 
+        internal BarrierBatch Barriers { get; private set; }
+
         public IPipeline Pipeline => _pipeline;
 
         public IWindow Window => _window;
@@ -76,14 +78,21 @@ namespace Ryujinx.Graphics.Vulkan
         private readonly Func<string[]> _getRequiredExtensions;
         private readonly string _preferredGpuId;
 
+        private int[] _pdReservedBindings;
+        private readonly static int[] _pdReservedBindingsNvn = { 3, 18, 21, 36, 30 };
+        private readonly static int[] _pdReservedBindingsOgl = { 17, 18, 34, 35, 36 };
+
         internal Vendor Vendor { get; private set; }
         internal bool IsAmdWindows { get; private set; }
         internal bool IsIntelWindows { get; private set; }
         internal bool IsAmdGcn { get; private set; }
+        internal bool IsNvidiaPreTuring { get; private set; }
+        internal bool IsIntelArc { get; private set; }
         internal bool IsMoltenVk { get; private set; }
         internal bool IsTBDR { get; private set; }
         internal bool IsSharedMemory { get; private set; }
         public string GpuVendor { get; private set; }
+        public string GpuDriver { get; private set; }
         public string GpuRenderer { get; private set; }
         public string GpuVersion { get; private set; }
 
@@ -190,6 +199,19 @@ namespace Ryujinx.Graphics.Vulkan
                 SType = StructureType.PhysicalDevicePortabilitySubsetPropertiesKhr,
             };
 
+            bool supportsPushDescriptors = _physicalDevice.IsDeviceExtensionPresent(KhrPushDescriptor.ExtensionName);
+
+            PhysicalDevicePushDescriptorPropertiesKHR propertiesPushDescriptor = new PhysicalDevicePushDescriptorPropertiesKHR()
+            {
+                SType = StructureType.PhysicalDevicePushDescriptorPropertiesKhr
+            };
+
+            if (supportsPushDescriptors)
+            {
+                propertiesPushDescriptor.PNext = properties2.PNext;
+                properties2.PNext = &propertiesPushDescriptor;
+            }
+
             PhysicalDeviceFeatures2 features2 = new()
             {
                 SType = StructureType.PhysicalDeviceFeatures2,
@@ -289,6 +311,50 @@ namespace Ryujinx.Graphics.Vulkan
 
             ref var properties = ref properties2.Properties;
 
+            var hasDriverProperties = _physicalDevice.TryGetPhysicalDeviceDriverPropertiesKHR(Api, out var driverProperties);
+
+            Vendor = VendorUtils.FromId(properties.VendorID);
+
+            IsAmdWindows = Vendor == Vendor.Amd && OperatingSystem.IsWindows();
+            IsIntelWindows = Vendor == Vendor.Intel && OperatingSystem.IsWindows();
+            IsTBDR =
+                Vendor == Vendor.Apple ||
+                Vendor == Vendor.Qualcomm ||
+                Vendor == Vendor.ARM ||
+                Vendor == Vendor.Broadcom ||
+                Vendor == Vendor.ImgTec;
+
+            GpuVendor = VendorUtils.GetNameFromId(properties.VendorID);
+            GpuDriver = hasDriverProperties && !OperatingSystem.IsMacOS() ?
+                VendorUtils.GetFriendlyDriverName(driverProperties.DriverID) : GpuVendor; // Fallback to vendor name if driver is unavailable or on MacOS where vendor is preferred.
+
+            fixed (byte* deviceName = properties.DeviceName)
+            {
+                GpuRenderer = Marshal.PtrToStringAnsi((IntPtr)deviceName);
+            }
+
+            GpuVersion = $"Vulkan v{ParseStandardVulkanVersion(properties.ApiVersion)}, Driver v{ParseDriverVersion(ref properties)}";
+
+            IsAmdGcn = !IsMoltenVk && Vendor == Vendor.Amd && VendorUtils.AmdGcnRegex().IsMatch(GpuRenderer);
+
+            if (Vendor == Vendor.Nvidia)
+            {
+                var match = VendorUtils.NvidiaConsumerClassRegex().Match(GpuRenderer);
+
+                if (match != null && int.TryParse(match.Groups[2].Value, out int gpuNumber))
+                {
+                    IsNvidiaPreTuring = gpuNumber < 2000;
+                }
+                else if (GpuDriver.Contains("TITAN") && !GpuDriver.Contains("RTX"))
+                {
+                    IsNvidiaPreTuring = true;
+                }
+            }
+            else if (Vendor == Vendor.Intel)
+            {
+                IsIntelArc = GpuRenderer.StartsWith("Intel(R) Arc(TM)");
+            }
+
             ulong minResourceAlignment = Math.Max(
                 Math.Max(
                     properties.Limits.MinStorageBufferOffsetAlignment,
@@ -319,7 +385,8 @@ namespace Ryujinx.Graphics.Vulkan
                 _physicalDevice.IsDeviceExtensionPresent(ExtExtendedDynamicState.ExtensionName),
                 features2.Features.MultiViewport && !(IsMoltenVk && Vendor == Vendor.Amd), // Workaround for AMD on MoltenVK issue
                 featuresRobustness2.NullDescriptor || IsMoltenVk,
-                _physicalDevice.IsDeviceExtensionPresent(KhrPushDescriptor.ExtensionName),
+                supportsPushDescriptors && !IsMoltenVk,
+                propertiesPushDescriptor.MaxPushDescriptors,
                 featuresPrimitiveTopologyListRestart.PrimitiveTopologyListRestart,
                 featuresPrimitiveTopologyListRestart.PrimitiveTopologyPatchListRestart,
                 supportsTransformFeedback,
@@ -361,6 +428,8 @@ namespace Ryujinx.Graphics.Vulkan
 
             HelperShader = new HelperShader(this, _device);
 
+            Barriers = new BarrierBatch(this);
+
             _counters = new Counters(this, _device, _pipeline);
         }
 
@@ -397,6 +466,25 @@ namespace Ryujinx.Graphics.Vulkan
             _window = new Window(this, _surface, _physicalDevice.PhysicalDevice, _device);
 
             _initialized = true;
+        }
+
+        internal int[] GetPushDescriptorReservedBindings(bool isOgl)
+        {
+            // The first call of this method determines what push descriptor layout is used for all shaders on this renderer.
+            // This is chosen to minimize shaders that can't fit their uniforms on the device's max number of push descriptors.
+            if (_pdReservedBindings == null)
+            {
+                if (Capabilities.MaxPushDescriptors <= Constants.MaxUniformBuffersPerStage * 2)
+                {
+                    _pdReservedBindings = isOgl ? _pdReservedBindingsOgl : _pdReservedBindingsNvn;
+                }
+                else
+                {
+                    _pdReservedBindings = Array.Empty<int>();
+                }
+            }
+
+            return _pdReservedBindings;
         }
 
         public BufferHandle CreateBuffer(int size, BufferAccess access)
@@ -636,7 +724,7 @@ namespace Ryujinx.Graphics.Vulkan
 
         public HardwareInfo GetHardwareInfo()
         {
-            return new HardwareInfo(GpuVendor, GpuRenderer);
+            return new HardwareInfo(GpuVendor, GpuRenderer, GpuDriver);
         }
 
         /// <summary>
@@ -689,39 +777,15 @@ namespace Ryujinx.Graphics.Vulkan
             return ParseStandardVulkanVersion(driverVersionRaw);
         }
 
-        private unsafe void PrintGpuInformation()
-        {
-            var properties = _physicalDevice.PhysicalDeviceProperties;
-
-            string vendorName = VendorUtils.GetNameFromId(properties.VendorID);
-
-            Vendor = VendorUtils.FromId(properties.VendorID);
-
-            IsAmdWindows = Vendor == Vendor.Amd && OperatingSystem.IsWindows();
-            IsIntelWindows = Vendor == Vendor.Intel && OperatingSystem.IsWindows();
-            IsTBDR =
-                Vendor == Vendor.Apple ||
-                Vendor == Vendor.Qualcomm ||
-                Vendor == Vendor.ARM ||
-                Vendor == Vendor.Broadcom ||
-                Vendor == Vendor.ImgTec;
-
-            GpuVendor = vendorName;
-            GpuRenderer = Marshal.PtrToStringAnsi((IntPtr)properties.DeviceName);
-            GpuVersion = $"Vulkan v{ParseStandardVulkanVersion(properties.ApiVersion)}, Driver v{ParseDriverVersion(ref properties)}";
-
-            IsAmdGcn = !IsMoltenVk && Vendor == Vendor.Amd && VendorUtils.AmdGcnRegex().IsMatch(GpuRenderer);
-
-            Logger.Notice.Print(LogClass.Gpu, $"{GpuVendor} {GpuRenderer} ({GpuVersion})");
-        }
-
         internal PrimitiveTopology TopologyRemap(PrimitiveTopology topology)
         {
             return topology switch
             {
                 PrimitiveTopology.Quads => PrimitiveTopology.Triangles,
                 PrimitiveTopology.QuadStrip => PrimitiveTopology.TriangleStrip,
-                PrimitiveTopology.TriangleFan => Capabilities.PortabilitySubset.HasFlag(PortabilitySubsetFlags.NoTriangleFans) ? PrimitiveTopology.Triangles : topology,
+                PrimitiveTopology.TriangleFan or PrimitiveTopology.Polygon => Capabilities.PortabilitySubset.HasFlag(PortabilitySubsetFlags.NoTriangleFans)
+                    ? PrimitiveTopology.Triangles
+                    : topology,
                 _ => topology,
             };
         }
@@ -731,9 +795,14 @@ namespace Ryujinx.Graphics.Vulkan
             return topology switch
             {
                 PrimitiveTopology.Quads => true,
-                PrimitiveTopology.TriangleFan => Capabilities.PortabilitySubset.HasFlag(PortabilitySubsetFlags.NoTriangleFans),
+                PrimitiveTopology.TriangleFan or PrimitiveTopology.Polygon => Capabilities.PortabilitySubset.HasFlag(PortabilitySubsetFlags.NoTriangleFans),
                 _ => false,
             };
+        }
+
+        private void PrintGpuInformation()
+        {
+            Logger.Notice.Print(LogClass.Gpu, $"{GpuVendor} {GpuRenderer} ({GpuVersion})");
         }
 
         public void Initialize(GraphicsDebugLevel logLevel)
@@ -858,6 +927,7 @@ namespace Ryujinx.Graphics.Vulkan
             BufferManager.Dispose();
             DescriptorSetManager.Dispose();
             PipelineLayoutCache.Dispose();
+            Barriers.Dispose();
 
             MemoryAllocator.Dispose();
 

@@ -136,7 +136,7 @@ namespace Ryujinx.Graphics.Vulkan
         {
             instance.EnumeratePhysicalDevices(out var physicalDevices).ThrowOnError();
 
-            // First we try to pick the the user preferred GPU.
+            // First we try to pick the user preferred GPU.
             for (int i = 0; i < physicalDevices.Length; i++)
             {
                 if (IsPreferredAndSuitableDevice(api, physicalDevices[i], surface, preferredGpuId))
@@ -484,20 +484,6 @@ namespace Ryujinx.Graphics.Vulkan
                 };
 
                 pExtendedFeatures = &featuresFragmentShaderInterlock;
-            }
-
-            PhysicalDeviceSubgroupSizeControlFeaturesEXT featuresSubgroupSizeControl;
-
-            if (physicalDevice.IsDeviceExtensionPresent("VK_EXT_subgroup_size_control"))
-            {
-                featuresSubgroupSizeControl = new PhysicalDeviceSubgroupSizeControlFeaturesEXT
-                {
-                    SType = StructureType.PhysicalDeviceSubgroupSizeControlFeaturesExt,
-                    PNext = pExtendedFeatures,
-                    SubgroupSizeControl = true,
-                };
-
-                pExtendedFeatures = &featuresSubgroupSizeControl;
             }
 
             PhysicalDeviceCustomBorderColorFeaturesEXT featuresCustomBorderColor;
